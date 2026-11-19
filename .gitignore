@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+*.pt
+*.npz
+results/
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.pdf
+.DS_Store
