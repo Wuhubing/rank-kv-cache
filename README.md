@@ -15,7 +15,7 @@ Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Jimmy Yu
 2. Select **Runtime → Change runtime type → GPU** and **Runtime → Run all**. The notebook includes the replay functions and downloads pinned public model and data revisions. It uses BF16 on supported GPUs and FP16 otherwise.
 3. Download the ZIP from the final cell. It contains `trace.jsonl`, `manifest.json`, `comparison.csv` and `comparison.png`. The same files remain under `results/` while the session is alive.
 
-The pilot takes the first GovReport document long enough for a 4,096-token prefix-based summarization prompt. Dense prefill produces token 1. Subsequent tokens come from greedy sparse decoding with the full KV store on device. With a 64-token cap, at most 63 sparse steps are logged. A step selects 64 completed 16-token historical pages per layer and also attends to the pinned page containing the current query token. Each request uses one unpadded sequence. The manifest records the exact source document, tokenizer/model revision, token-ID hash, GPU, precision and generated IDs. Reserve this pilot source for development.
+The pilot takes the first GovReport document long enough for a 4,096-token prefix-based summarization prompt. Dense prefill produces token 1. Subsequent tokens come from greedy sparse decoding with the full KV store on device. With a 128-token cap, at most 127 sparse steps are logged. A step selects 64 completed 16-token historical pages per layer and also attends to the pinned page containing the current query token. Each request uses one unpadded sequence. The manifest records the exact source document, tokenizer/model revision, token-ID hash, GPU, precision and generated IDs. Reserve this pilot source for development.
 
 ## Trace format (v1)
 
