@@ -22,6 +22,9 @@ The notebook collects the eight `dev_collection` prompts of the frozen split (se
 - Dense prefill produces token 1. Subsequent tokens come from greedy sparse decoding with the full KV store on device. With a 128-token cap, at most 127 sparse steps are logged per document.
 - A step selects 64 completed 16-token historical pages per layer and also attends to the pinned page containing the current query token.
 - Each document's manifest records the source row, tokenizer and model revisions, prompt template, token-ID hash, GPU, precision and generated IDs.
+- With `RECORD_SCORES = True` (the current default), Trace v2 also writes
+  `ranked_page_scores`, aligned with `ranked_page_ids`, and records schema version 2 in
+  the manifest. Existing v1 replay ignores this optional field.
 
 The first pilot (commit `0f35894` and earlier) used a single GovReport document cropped to a 4,096-token prompt. That document is in dev.
 
@@ -179,6 +182,28 @@ changed victims are reused within 1, 8, 16 or 32 steps. These one-step
 counterfactuals explain the mechanism; they are not a replacement for the full-policy
 miss counts in the matched-beta table. Outputs are `decision_audit.csv` and
 `decision_audit_by_doc.csv`.
+
+## Trace v2: score magnitude
+
+The next exploratory question is whether ordinal rank discards useful score magnitude.
+`first_trace.ipynb` now defaults to `RECORD_SCORES = True`; use
+`SUBSET = "dev_collection"` for the first eight-document run and leave dense reference
+generation disabled. The new field contains raw float32 Quest-style upper-bound scores
+for the selected pages only.
+
+`score_validation.py` converts each selected page's score to a cutoff-normalized margin,
+`(score - Kth score) / (best score - Kth score)`, remembers that value until the page is
+selected again, and adds `gamma * last_margin` to its effective recency. It compares each
+positive gamma with gamma zero at the same beta and reports paired document-bootstrap
+intervals:
+
+```bash
+python3 score_validation.py path/to/v2-trace.jsonl --budgets 128 \
+  --gammas 0 1 2 4 8 16 --betas 0 1 2 4 8 --out results/score_validation
+```
+
+This is an exploratory dev-only experiment. A new confirmation set is required before
+making a confirmatory claim about a score-margin policy.
 
 ## Truncating repeated answers
 
