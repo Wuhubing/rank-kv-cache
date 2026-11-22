@@ -189,7 +189,9 @@ The next exploratory question is whether ordinal rank discards useful score magn
 `first_trace.ipynb` now defaults to `RECORD_SCORES = True`; use
 `SUBSET = "dev_collection"` for the first eight-document run and leave dense reference
 generation disabled. The new field contains raw float32 Quest-style upper-bound scores
-for the selected pages only.
+for the selected pages only. `PREFILL_CHUNK = 512` performs the same causal prefill in
+bounded query chunks so the longest 8--16K prompts fit on a 16-GiB T4; the chosen chunk
+size is recorded in the manifest.
 
 `score_validation.py` converts each selected page's score to a cutoff-normalized margin,
 `(score - Kth score) / (best score - Kth score)`, remembers that value until the page is
