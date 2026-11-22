@@ -84,30 +84,41 @@ The left panel divides total misses by all selected historical page accesses. Th
 ## Rank predictiveness (H1)
 
 ```bash
-python3 analysis.py path/to/trace.jsonl --by task layer-group --out results/h1
+python3 analysis.py path/to/trace.jsonl --samples selected candidate lru --lru-budget 128 \
+  --by task layer-group --out results/h1
 ```
 
-The script records one observation per selected page at decode step t:
-- its rank at t (its most recent rank);
-- recency, the number of steps since its previous selection, or `new` for a first selection;
+`--samples` chooses which pages are observed at decode step t. The default is `selected candidate`.
+
+| Sample | Pages observed at step t | Role |
+| --- | --- | --- |
+| `selected` (H1-selected) | Pages selected at t | Contrast only. These pages are protected anyway, so they never face eviction. |
+| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. These are the pages any replacement policy chooses among, and the set does not depend on the policy. |
+| `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU really chooses among. |
+
+Each observation records:
+- its last rank, the rank at its most recent selection τ (τ = t for `selected`);
+- the selection width n at τ;
+- recency, t − τ (`new` for a first selection);
 - frequency, its selections in steps t−8 to t−1;
 - whether it is selected again within 1, 2, 4 and 8 steps.
 
 Only steps followed by `max(--horizons)` observed steps are used, so every horizon is measured on the same observations. Short traces print a message and need smaller `--horizons`.
 
-The effect compares the top quartile (rank ≤ ⌈n/4⌉) with the bottom quartile (rank > n − ⌈n/4⌉) of each step's n selected pages:
-- It is computed within strata of frequency × recency bin (`new`, 1, 2, 3–4, 5–8, >8).
+The effect compares the top quartile (last rank ≤ ⌈n/4⌉) with the bottom quartile (last rank > n − ⌈n/4⌉):
+- It is computed within strata of frequency × recency bin (`new`, 1, 2, 3–4, 5–8, 9–16, 17–32, 33–64, >64).
 - Strata are weighted by size, and only strata containing both quartiles count.
+- The output also gives the raw difference and the effect stratified by recency alone, which shows how much of the raw gap recency and frequency explain.
 - The 95% interval is a percentile bootstrap (`--bootstrap 1000`, `--seed 0`) that resamples whole requests, meaning source documents.
-- With a single request, the interval is reported as n/a. `--cluster stream` resamples (request, layer) pairs instead, which is useful for a pilot but ignores correlation across layers.
+- With a single request, the interval is reported as n/a. `--cluster stream` resamples (request, layer) pairs instead, which is useful for a pilot but ignores correlation across layers. Intervals over sparse strata, such as small layer groups, can be lopsided.
 
 Outputs in `--out`:
-- `h1_effects.csv` has one row per group and horizon. Its columns are `group` (`all`, `task <request_id prefix>` or `layers a-b`), `horizon`, `observations`, `clusters`, `strata_used`, `effect` (stratified top minus bottom reuse probability), `ci_low`, `ci_high`, and the unadjusted `raw_top` and `raw_bottom` rates.
-- `rank_curve.csv` gives `horizon`, `rank_decile` (1 is best), `observations` and `reuse_rate`.
-- `features.csv` is written with `--features`. It has one row per observation: `request_id`, `task`, `layer_id`, `decode_step`, `page_id`, `rank`, `n_selected`, `quartile`, `recency`, `recency_bin`, `frequency` and `reuse_h`.
-- `h1.png` plots reuse by rank decile and the stratified effect against horizon.
+- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <request_id prefix>` or `layers a-b`), `horizon`, `observations`, `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
+- `rank_curve.csv` gives `sample`, `horizon`, `rank_decile` (1 is best), `observations` and `reuse_rate`.
+- `features.csv` is written with `--features`. It has one row per observation: `sample`, `request_id`, `task`, `layer_id`, `decode_step`, `page_id`, `rank`, `n_selected`, `quartile`, `recency`, `recency_bin`, `frequency` and `reuse_h`.
+- `h1.png` plots, for each sample, reuse by last-rank decile and the raw, recency-only and frequency × recency effects against horizon.
 
-**Caveat:** rank is relative within a step. Because every step selects exactly K pages, a page outranked by frequent competitors can show lower reuse through competition alone, even when its own propensity depends only on frequency. The synthetic tests in `tests/test_analysis.py` show this effect with a small page pool.
+**Caveat:** rank is relative within a step. Because every step selects exactly K pages, a page outranked by frequent competitors can show lower reuse through competition alone, even when its own propensity depends only on frequency. The synthetic tests in `tests/test_analysis.py` show this effect with a small page pool. They also show that a strong H1-selected signal need not carry over to candidates.
 
 ## Related work
 
