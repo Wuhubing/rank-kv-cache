@@ -130,6 +130,26 @@ Outputs in `--out`:
 
 **Caveat:** rank is relative within a step. Because every step selects exactly K pages, a page outranked by frequent competitors can show lower reuse through competition alone, even when its own propensity depends only on frequency. The synthetic tests in `tests/test_analysis.py` show this effect with a small page pool. They also show that a strong H1-selected signal need not carry over to candidates.
 
+## Preregistered evaluation
+
+The held-out evaluation follows [docs/preregistration.md](docs/preregistration.md). Its machine-readable configuration is [splits/preregistration.json](splits/preregistration.json): policies, tuned δ and β, frozen logistic-regression coefficients, budgets, metrics, success criteria and H1 settings.
+
+```bash
+python3 preregister.py results/dev_full --tuning-csv results/dev_full/tuning.csv   # dev only
+python3 evaluate.py results/heldout --out results/heldout/eval
+python3 truncate_trace.py results/heldout
+python3 evaluate.py results/heldout --trace trace_truncated.jsonl --out results/heldout/eval_truncated
+python3 longbench_score.py results/heldout --out results/heldout/longbench
+```
+
+`evaluate.py` writes the following to `--out`:
+- `policies.csv`: per budget and policy, repeat and total misses, G and the repeat-miss reduction against LRU (each with a document-bootstrap CI), and H2D MiB per generated token at 64 KiB per page per layer;
+- `policies_by_group.csv` (task, band) and `policies_by_doc.csv`;
+- `success.json` with S1 and S2;
+- the H1 outputs of `analysis.py`.
+
+`longbench_score.py` scores the sparse reference generations and the dense generations in the manifests with LongBench's own metrics. The notebook collects dense generations when `DENSE_REFERENCE = True`. Results are summarized in [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §4.7.
+
 ## Truncating repeated answers
 
 MultiFieldQA answers often finish within a line and then repeat "Answer: …" until the 128-token cap. That repetition inflates page reuse. `truncate_trace.py` cuts each MultiFieldQA request after the decode steps that produce its first answer, i.e. up to the first generated token containing a newline. GovReport requests are copied unchanged. It reads the per-document manifests and needs `transformers` for the tokenizer.

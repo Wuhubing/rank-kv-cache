@@ -1,0 +1,8 @@
+Grid misses at B=128 (rows delta, columns beta):
+  delta=0: 187866  187733  187689  187672  187951
+  delta=1: 187787  187662  187616  187605  187890
+  delta=2: 187778  187659  187611  187606  187893
+  delta=4: 187729  187634  187600  187593  187879
+  delta=8: 187739  187622  187568  187573  187856
+full (8, 2), R+F beta=4, R+rank delta=4
+Wrote splits/preregistration.json

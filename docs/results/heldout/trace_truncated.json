@@ -1,0 +1,28 @@
+{
+  "stop": "\n",
+  "tasks": [
+    "multifieldqa_en"
+  ],
+  "kept_steps": {
+    "multifieldqa_en/4-8k/048c12357868d908dfb979ef3c5c6cf7f6d85053acf1cac4": 32,
+    "multifieldqa_en/4-8k/1f3b1e37c3d2ead7ab4fe7dd9d5cddd55b2c76d28e6bfc86": 17,
+    "multifieldqa_en/4-8k/33bfe67a3d40e71a5e5351ea5db4ea55df61a018d071074b": 12,
+    "multifieldqa_en/4-8k/60c66572f28b071899547f0aa0b4a271969c3b153e96406b": 9,
+    "multifieldqa_en/4-8k/8fbf0a6531d9250e6bcda0c7ba456441f6d4073bf08de826": 31,
+    "multifieldqa_en/4-8k/ac42a5a54b029a05be6e6e13d9001a81761d7b40ad1edfe2": 20,
+    "multifieldqa_en/4-8k/aeb34faf1b5507b32d6d5b49474ea5c71d4ec2aa84a82d93": 28,
+    "multifieldqa_en/4-8k/b619fa683cbbeb8db3d575fc2e261940701a530452b14eef": 7,
+    "multifieldqa_en/4-8k/dee63735510f6958f4c5bf318421c9b9fac0bc8b3e341a4a": 1,
+    "multifieldqa_en/4-8k/dffb383ee06d8413ac40e2c1ec7bde5548ef07fc8f35ad2f": 4,
+    "multifieldqa_en/8-16k/1d46294ee8fcc0a64828778b04198fcbe4f75841775e1205": 12,
+    "multifieldqa_en/8-16k/34f9b2c3d79ced580687f9653a6908215f79b1405a918cd0": 9,
+    "multifieldqa_en/8-16k/4214e20df9d299bae4fb9ba8d1b4792d516812e86960009c": 14,
+    "multifieldqa_en/8-16k/a8da0d2585bb54d571a2ab4a539b61eef56b5e271692be42": 7,
+    "multifieldqa_en/8-16k/ae5a3edc1bc76fee6fa1aa6557e83bc3cfea0c190763ecce": 19,
+    "multifieldqa_en/8-16k/c39f97567cff21a8591f02117632ea71e7b566f65d2d62ab": 27,
+    "multifieldqa_en/8-16k/c677827fc67e60c6396dceb5c4194aaba925aa1c61ad7115": 12,
+    "multifieldqa_en/8-16k/d2a588e420083f151239e660bd47ec0cad9732ec308ab9bc": 8,
+    "multifieldqa_en/8-16k/f3374a1971e3cfb4f241e04b82d5016d892e9e32a4aa2b53": 35,
+    "multifieldqa_en/8-16k/f9e0095ae38b9c36aac766c4b82f41be5b7560ce8e544675": 3
+  }
+}

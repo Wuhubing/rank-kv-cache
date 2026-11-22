@@ -1,0 +1,62 @@
+[
+  {
+    "task": "gov_report",
+    "band": "all",
+    "documents": 20,
+    "sparse": 17.42428469858922,
+    "dense": 18.701949322611295,
+    "sparse_minus_dense": -1.2776646240220757,
+    "ci_low": -2.3084591418458893,
+    "ci_high": -0.18180827141614192
+  },
+  {
+    "task": "gov_report",
+    "band": "4-8k",
+    "documents": 10,
+    "sparse": 16.055236510856936,
+    "dense": 17.774346819957934,
+    "sparse_minus_dense": -1.7191103091009978,
+    "ci_low": -3.2884237598782144,
+    "ci_high": -0.06772779481520086
+  },
+  {
+    "task": "gov_report",
+    "band": "8-16k",
+    "documents": 10,
+    "sparse": 18.7933328863215,
+    "dense": 19.62955182526466,
+    "sparse_minus_dense": -0.8362189389431537,
+    "ci_low": -2.1109095034552037,
+    "ci_high": 0.45519330048297846
+  },
+  {
+    "task": "multifieldqa_en",
+    "band": "all",
+    "documents": 20,
+    "sparse": 11.646053094089762,
+    "dense": 12.42066990142078,
+    "sparse_minus_dense": -0.7746168073310172,
+    "ci_low": -1.8870542389651497,
+    "ci_high": 0.29691521799397685
+  },
+  {
+    "task": "multifieldqa_en",
+    "band": "4-8k",
+    "documents": 10,
+    "sparse": 12.776642177641623,
+    "dense": 13.383604139406225,
+    "sparse_minus_dense": -0.6069619617646017,
+    "ci_low": -1.826076918430243,
+    "ci_high": 0.5129498043752718
+  },
+  {
+    "task": "multifieldqa_en",
+    "band": "8-16k",
+    "documents": 10,
+    "sparse": 10.515464010537901,
+    "dense": 11.457735663435335,
+    "sparse_minus_dense": -0.9422716528974326,
+    "ci_low": -2.5833806394513434,
+    "ci_high": 0.7985447835522798
+  }
+]

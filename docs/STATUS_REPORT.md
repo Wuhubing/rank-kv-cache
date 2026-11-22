@@ -1,6 +1,6 @@
 # 项目近况报告：Selection Rank 能否改进 KV Cache 替换？
 
-**截至 2026-11-22 · 分支 `stage1-2` · 只用了 dev 数据，held-out 未触碰**
+**截至 2026-11-22 · 分支 `stage1-2` · 已完成 proposal 规定的正式检验：20 篇 dev 调参并预注册（`2f6a9bd`），40 篇 held-out 采集一次、评估一次**
 
 本文汇总从 proposal 到现在做过的全部工作：每一步做了什么、用什么实现、得到什么数据，以及每条结论是怎么推出来的。所有数字都能在 [`docs/results/`](results/) 下的 CSV/TXT 中找到原始输出，文末给出复现命令。
 
@@ -8,15 +8,16 @@
 
 ## 0. 一页摘要
 
-**当前结论（基于 8 篇 dev 文档，方向性）：selection rank 不能改进 KV cache 替换。**
+**正式结论（40 篇 held-out，按预注册执行一次）：selection rank 不能实质改进 KV cache 替换。proposal 的主成功标准（S1）不满足。**
 
-1. **缓存确实有改进空间。** B=128 时 LRU 的 miss rate 是 4.34%，Bélády 是 3.09%，绝对差 1.25 pp、相对差 28.8%。只看 repeat miss，Bélády 比 LRU 少 66%。LRU 的驱逐中有 68% 是"坏驱逐"（被踢掉的 page 比某个留下的 page 更早被再次用到）。
-2. **但 rank 补不上这段差距。**
-   - 按 proposal 原口径（被选中的 page），H1 效应很强（+28 pp），但这批 page 本来就受保护，和驱逐决策无关。
-   - 改成驱逐候选口径后，rank 的增量效应只有 +2.5 到 +11.6 pp，而且驱逐候选里 top 四分位只占 0.8%，几乎没有机会改变决策。
-   - 完整 rank 策略只比 LRU 少 0.45% 的 repeat miss，填上差距的 0.7%；δ 从 1 扫到 32，结果基本不变。
-3. **其他简单特征也只能填上一小部分。** 用 recency、frequency、rank、位置等特征训练的逻辑回归（按文档留一交叉验证）最多填上差距的 11.7%（截断 MFQA 重复后是 7.3%），去掉 rank 后结果不变（差 +0.04 pp，CI [−0.6, +0.8]）。最有用的特征是"近 32 步被选次数"，属于经典缓存策略（LRU-K/LRFU/ARC）的范畴。
-4. **对照蓝图的决策关口：** Gate A 通过（问题没有被前人回答过）；Gate B 勉强通过（信号存在但弱且罕见）；**Gate C 不通过**（策略没有超过强 baseline）。建议转向蓝图预设的负面结论加现象刻画，**需要团队决定**。
+1. **缓存确实有改进空间。** held-out 上 B=128 时 LRU 的 miss rate 是 4.05%，Bélády 是 2.97%，绝对差 1.08 pp、相对差 26.7%；Bélády 比 LRU 少 65% 的 repeat miss。dev 上是 4.13% 对 3.01%，几乎一样。
+2. **两条成功标准（B=128，held-out）：**
+   - **S1 不满足**：完整策略（dev 调出 δ=8、β=2）只比 LRU 少 **0.39%** 的 repeat miss，CI [0.20%, 0.57%]，目标是 10%。
+   - **S2 在统计上满足，但效应极小**：完整策略比 R+F 少 330 次 repeat miss，配对 CI [83, 600] 整体大于 0，只占 R+F repeat miss 的 0.22%。rank 项确实有作用，只是小到没有实际意义。
+3. **H1：rank 对驱逐候选有真实但很小的增量信号。** 控制 frequency × recency 后，驱逐候选上 top 与 bottom 四分位的复用率差为 +3.1 pp（1 步内）到 +10.8 pp（8 步内），40 个文档 cluster 的 CI 都在 0 以上。但候选中 top 四分位只占 0.73%，所以 rank 加分几乎改变不了驱逐决策。
+4. **非 rank 特征能挽回的也有限。** 在 dev 上训练、系数固定的逻辑回归在 held-out 上 G = **11.9%** [6.7%, 17.2%]，repeat miss 少 7.8%。收益几乎全部来自 MultiFieldQA（G 26%，GovReport 只有 2.4% 且 CI 跨 0）；截断 MFQA 的重复回答后，G 降到 2.4% [−1.2%, 6.0%]。
+5. **LongBench sanity check：** 稀疏参考运行比 dense 略差（GovReport ROUGE-L 17.4 对 18.7；MFQA F1 11.6 对 12.4），说明稀疏 trace 是 dense 解码的合理近似。
+6. **对照蓝图的决策关口：** Gate A 通过；Gate B 通过（信号真实，但弱且罕见）；**Gate C 不通过**。结论应按蓝图预设的负面结论加现象刻画来写。
 
 ---
 
@@ -43,8 +44,12 @@
 | 14:07 | 按任务、长度段分组报告，加入 top 四分位占比 | `1af9d98` |
 | 14:15 | 发现 MFQA 答完后反复输出答案，加入截断工具 | `1daecbd` |
 | 14:31 | **差距分析**：坏驱逐、特征画像、可学习策略的上界 | `b926dd5` |
+| 14:55 | notebook 改为从固定 commit 读取划分文件、按 `SUBSET` 选文档；manifest 记录标准答案和 dense 生成 | `a19ada8` |
+| ~15:06 | **采集全部 20 篇 dev**（L4）；发现 A100 与 L4 的选择结果不同（见 §4.7） | 结果在 [`results/dev_full/`](results/dev_full/) |
+| 15:20 | **在 20 篇 dev 上调参并预注册**：完整策略 δ=8、β=2，R+F β=4，R+rank δ=4，逻辑回归系数固定；评估脚本随预注册一起提交 | `2f6a9bd` [`preregistration.md`](preregistration.md) |
+| ~15:24 | **采集 40 篇 held-out**（L4，sparse trace + dense 生成），随后按预注册**只评估一次** | 结果在 [`results/heldout/`](results/heldout/) |
 
-所有 GPU 运行：NVIDIA A100-SXM4-40GB，bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
+GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`dev_full`）和 40 篇 held-out 都用 NVIDIA L4。其余设置相同：bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
 
 ---
 
@@ -58,7 +63,10 @@
 | [`split.py`](../split.py) | 确定性抽样（seed 6594010）：每个任务 × 长度段 15 篇，其中 5 dev / 10 held-out；pilot 文档在 dev 里。 |
 | [`truncate_trace.py`](../truncate_trace.py) | 在 MFQA 的第一个换行处截断 trace，去掉重复的答案尾部。 |
 | [`gap_analysis.py`](../gap_analysis.py) | 差距分析：在 LRU 的每个驱逐决策上标出坏驱逐；计算候选特征及其 AUC；按文档留一交叉验证训练逻辑回归、深度 3 决策树和启发式规则，并把它们当作驱逐策略回放。 |
-| `tests/` | 35 个单元测试：回放的 tie 规则、Bélády 与穷举最优一致、δ=β=0 与 LRU 逐步一致、H1 样本定义、合成信号能被检出、划分确定性、截断位置、notebook 与 `replay.py` 代码同步等。 |
+| [`preregister.py`](../preregister.py) | 在 20 篇 dev 上按 proposal 规则调 δ、β，训练并固定逻辑回归，写出 [`splits/preregistration.json`](../splits/preregistration.json)。 |
+| [`evaluate.py`](../evaluate.py) | 严格按预注册配置评估一个运行目录：各策略、各 budget 的 repeat/total miss、G、H2D 字节/token，两条成功标准，按任务和长度段分组，H1 三种口径；CI 都是按文档的 bootstrap。 |
+| [`longbench_score.py`](../longbench_score.py) | LongBench 官方指标（MFQA 用 `qa_f1_score`，GovReport 用 ROUGE-L F）给稀疏参考生成和 dense 生成打分，并做配对 bootstrap。 |
+| `tests/` | 41 个单元测试（系统 Python 下跳过 2 个需要 numpy 的）：回放的 tie 规则、Bélády 与穷举最优一致、δ=β=0 与 LRU 逐步一致、H1 样本定义、合成信号能被检出、划分确定性、notebook 配置与划分文件一致且不含 held-out ID、截断位置、成功标准计算、LongBench F1、逻辑回归系数的导出与读入等。 |
 
 ---
 
@@ -207,30 +215,148 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 - 这部分几乎全部来自 frequency 和 recency，rank 的贡献为 0。
 - frequency + recency 正是 LRU-K、LRFU、ARC 这类经典策略，把研究问题换成"frequency"没有新意。
 
+### 4.7 正式检验：20 篇 dev 调参，预注册，40 篇 held-out 只评估一次
+
+**流程**
+1. **补齐 dev。** 在 L4 上用同一协议（MAX_NEW=128，不截断，选择器不变）采集全部 20 篇 dev。
+2. **调参并预注册。** 按 proposal 在 B=128 上以 dev miss rate 选参，平局取较小值。之后写 [`preregistration.md`](preregistration.md) 和 [`splits/preregistration.json`](../splits/preregistration.json)，连同 `evaluate.py`、`longbench_score.py` 先在 dev 上试运行，再一起 commit（`2f6a9bd`）。
+3. **采集 held-out。** 预注册之后，在同一型号的 GPU（L4）上采集 40 篇 held-out 的稀疏 trace 和 dense 生成。Colab 里只导出，不做回放、不打印生成文本。
+4. **只评估一次。** 按预注册里的四条命令各运行一次。没有偏离预注册的地方（见文末"偏离"）。
+
+**一个意外发现：Quest 式选择依赖 GPU 型号。** 同一篇 prompt，A100 与 L4 的选择从第 0 步就不同：生成 token 完全相同的 5 篇文档里，只有 32%–75% 的（层，步）选出同一组 page，排序完全相同的不到 5%。同一块 L4 上重跑则逐行一致（[`gpu_consistency.txt`](results/dev_full/gpu_consistency.txt)）。原因是 bf16 下 page 分数存在大量近似平局，不同 GPU 的数值舍入会翻转排名。所以预注册要求 held-out 与 dev 使用同一型号 GPU，实际也确实都是 L4；之前 A100 上的 8 篇 dev pilot 不参与调参和评估。
+
+**dev 调参结果**（B=128 的 miss 数，行是 δ，列是 β）
+
+| δ \ β | 0 | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|---|
+| 0 | 187,866 | 187,733 | 187,689 | 187,672 | 187,951 |
+| 4 | 187,729 | 187,634 | 187,600 | 187,593 | 187,879 |
+| 8 | 187,739 | 187,622 | **187,568** | 187,573 | 187,856 |
+
+（完整 5×5 表见 [`tuning.csv`](results/dev_full/tuning.csv)。）
+
+- 选出的参数：完整策略 δ=8、β=2；R+F 的 β=4；R+rank 的 δ=4。
+- 最好的组合也只比 δ=β=0（即 LRU）少 0.16% 的 miss。
+- 逻辑回归在 20 篇 dev 的 LRU 驱逐候选上训练，系数固定；权重最大的是 freq32（+0.53）和 recency（−0.41）。
+
+**held-out 主结果**（40 篇，127 步 × 28 层，共 9,103,360 次历史 page 访问；G 和"相对 LRU"都按 repeat miss 计算）
+
+| B | 策略 | miss rate | repeat miss | 相对 LRU | G [95% CI] | H2D MiB/token |
+|---|---|---|---|---|---|---|
+| 128 | FIFO | 5.51% | 284,460 | +87.8% | −134.9% [−147.4, −125.6] | 6.17 |
+| 128 | rank-only | 5.80% | 310,599 | +105.0% | −161.4% [−177.2, −147.1] | 6.50 |
+| 128 | **LRU** | 4.05% | 151,478 | — | 0 | 4.54 |
+| 128 | R+F（β=4） | 4.05% | 151,223 | −0.17% | 0.26% [−0.24, 0.73] | 4.54 |
+| 128 | R+rank（δ=4） | 4.05% | 151,213 | −0.17% | 0.27% [0.18, 0.35] | 4.54 |
+| 128 | **完整策略（δ=8，β=2）** | 4.05% | 150,893 | **−0.39%** | 0.59% [0.30, 0.88] | 4.53 |
+| 128 | 逻辑回归（系数固定） | 3.92% | 139,712 | −7.8% | **11.9%** [6.7, 17.2] | 4.39 |
+| 128 | Bélády | 2.97% | 52,915 | −65.1% | 100% | 3.33 |
+| 256 | FIFO | 2.57% | 16,843 | +216% | −225.8% | 2.88 |
+| 256 | rank-only | 2.53% | 12,623 | +137% | −143.1% | 2.83 |
+| 256 | LRU | 2.45% | 5,323 | — | 0 | 2.74 |
+| 256 | R+F | 2.45% | 5,323 | 0 | 0 | 2.74 |
+| 256 | R+rank | 2.45% | 5,316 | −0.13% | 0.14% [−0.08, 0.33] | 2.74 |
+| 256 | 完整策略 | 2.45% | 5,316 | −0.13% | 0.14% [−0.15, 0.35] | 2.74 |
+| 256 | 逻辑回归 | 2.44% | 5,096 | −4.3% | 4.5% [2.1, 7.1] | 2.74 |
+| 256 | Bélády | 2.39% | 221 | −95.8% | 100% | 2.68 |
+
+- compulsory miss 占全部访问的 2.39%，占 B=128 时 LRU miss 的 58.9%。B=256 时 LRU 的 miss 有 97.6% 是 compulsory，几乎没有可挽回的空间。
+- H2D 按每层每个 page 64 KiB（16 token × 8 KV head × 128 维 × K、V × bf16）计算。B=128 时 LRU 每生成一个 token 搬 4.54 MiB，Bélády 是 3.33 MiB，完整策略只省 0.01 MiB。
+
+**成功标准**（[`success.json`](results/heldout/eval/success.json)）
+
+| 标准 | 结果 | 是否满足 |
+|---|---|---|
+| S1：完整策略比 LRU 少 ≥10% repeat miss | 少 **0.39%**，CI [0.20%, 0.57%] | **不满足** |
+| S2：完整策略相对 R+F 节省的 repeat miss，配对 95% CI 整体大于 0 | 节省 330 次，CI [83, 600]，占 R+F 的 0.22% | **满足**（但效应极小） |
+
+**H1**（控制 frequency × recency 后的 top 减 bottom 复用率差，单位 pp；按文档聚类，40 个 cluster）
+
+| 口径 | 1 步内 | 2 步内 | 4 步内 | 8 步内 | top 四分位占比 |
+|---|---|---|---|---|---|
+| selected | +28.1 [27.2, 28.9] | +18.6 | +11.9 | +7.6 [7.1, 8.1] | 25% |
+| candidate | +3.1 [2.5, 3.9] | +5.0 [4.1, 6.3] | +7.7 [6.3, 9.5] | +10.8 [9.1, 13.0] | **0.73%** |
+| LRU-candidate | +4.5 [3.5, 6.2] | +7.0 [5.2, 10.2] | +9.9 [7.4, 13.7] | +13.0 [10.2, 18.7] | 0.74% |
+
+按组看，驱逐候选口径 8 步内的效应：GovReport +8.7 [7.3, 10.5]，MFQA +16.3 [13.4, 19.5]，4–8K +12.7 [10.0, 16.0]，8–16K +10.4 [8.3, 13.3]。各组 top 四分位占比在 0.51%–0.91% 之间。
+
+**分组结果**（B=128，[`policies_by_group.csv`](results/heldout/eval/policies_by_group.csv)）
+
+| 分组 | 文档数 | LRU | Bélády | 完整策略 G | 逻辑回归 G |
+|---|---|---|---|---|---|
+| GovReport | 20 | 4.72% | 3.42% | 0.5% [0.1, 0.9] | 2.4% [−1.4, 6.0] |
+| MultiFieldQA-en | 20 | 3.38% | 2.52% | 0.8% [0.4, 1.2] | 26.3% [21.4, 30.2] |
+| 4–8K | 20 | 3.34% | 2.54% | 0.5% [0.1, 0.8] | 14.5% [6.9, 22.2] |
+| 8–16K | 20 | 4.76% | 3.40% | 0.6% [0.3, 1.1] | 10.4% [3.6, 17.6] |
+
+长文档的绝对差距更大（8–16K 为 1.36 pp，4–8K 为 0.80 pp）。逻辑回归的收益集中在 MFQA。
+
+**次要分析：截断 MFQA 的重复回答**（20 篇 MFQA 都在第一个换行处截断，保留 79,716 行）
+
+| B=128 | LRU | Bélády | 完整策略 | 逻辑回归 |
+|---|---|---|---|---|
+| miss rate | 5.47% | 4.29% | 5.46% | 5.44% |
+| G | 0 | 100% | 0.50% [0.09, 0.91] | 2.4% [−1.2, 6.0] |
+
+截断后 S1 仍不满足（只少 0.31%，CI [0.06%, 0.58%]）；S2 仍满足（节省 281 次，CI [66, 551]）。逻辑回归的优势基本消失，说明它在 MFQA 上的收益主要来自重复输出的周期性。
+
+**LongBench sanity check**（官方指标，×100；[`longbench_summary.json`](results/heldout/longbench/longbench_summary.json)）
+
+| 任务 | 稀疏参考 | dense | 稀疏 − dense [95% CI] |
+|---|---|---|---|
+| GovReport（ROUGE-L） | 17.42 | 18.70 | −1.28 [−2.31, −0.18] |
+| MultiFieldQA-en（F1） | 11.65 | 12.42 | −0.77 [−1.89, +0.30] |
+
+- 两者差距很小，稀疏参考运行可以看作 dense 解码的合理近似。GovReport 上稀疏略差且显著；MFQA 上不显著。
+- 绝对分数偏低的原因：MFQA 生成了 128 token，重复回答会拉低 F1（LongBench 官方的 MFQA 上限是 64 token）；GovReport 的摘要只有 128 token（官方上限 512）。
+
+**dev 与 held-out 对比**（B=128；dev 上的逻辑回归是样本内结果）
+
+| 指标 | dev（20 篇） | held-out（40 篇） |
+|---|---|---|
+| LRU / Bélády miss rate | 4.13% / 3.01% | 4.05% / 2.97% |
+| 相对差距 | 27.0% | 26.7% |
+| 完整策略相对 LRU（S1） | −0.38% [0.26, 0.49] | −0.39% [0.20, 0.57] |
+| S2：完整策略相对 R+F 节省 | 104 [−33, 268]，不显著 | 330 [83, 600]，显著 |
+| 完整策略 G | 0.59% | 0.59% |
+| 逻辑回归 G | 9.8%（样本内） | 11.9%（样本外） |
+| H1-candidate，8 步内 | +9.5 [7.1, 12.6] | +10.8 [9.1, 13.0] |
+| 候选中 top 四分位占比 | 0.76% | 0.73% |
+
+dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著，主要是因为 held-out 的文档数是 dev 的两倍，CI 更窄；效应本身同样极小。
+
+**偏离预注册：无。** 策略、参数、系数、budget、指标、bootstrap 设置和 MFQA 规则都没有改；held-out 只采集一次、评估一次；GPU 型号与 dev 相同。唯一的操作差异是 Colab 里 held-out 的结果单元格不做回放（预注册中已写明）。
+
 ---
 
 ## 5. 总结论与依据
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| 问题 | 结论（held-out，40 篇） | 依据 |
+|---|---|---|
 | Gate A：问题有没有被回答过 | **通过**（问题需收窄为增量问题） | §4.1：ArkVale 只用当前分数，HiSparse 只用 LRU |
-| 缓存有没有改进空间 | **有**：相对差距 22–29%，Bélády 能消掉约三分之二的 repeat miss | §4.4、§4.5 |
-| Gate B：rank 在驱逐候选上有没有增量信号 | **有，但弱且罕见**：+2.5 到 +11.6 pp，top 四分位只占 0.8% | §4.3、§4.4 |
-| Gate C：rank 策略能否超过强 baseline | **不能**：完整策略 −0.45%，δ 扫描平坦，学习模型中 rank 贡献为 0 | §4.4、§4.6 |
-| 差距能被简单特征挽回多少 | **约 7–12%**，主要靠近 32 步被选次数和 recency | §4.6 |
+| 缓存有没有改进空间 | **有**：B=128 相对差距 26.7%（绝对 1.08 pp），Bélády 消掉 65% 的 repeat miss；B=256 时几乎没有空间 | §4.7 |
+| H1 / Gate B：rank 在驱逐候选上有没有增量信号 | **有，但弱且罕见**：+3.1 到 +10.8 pp（40 个 cluster，CI 都大于 0），top 四分位只占候选的 0.73% | §4.7 |
+| S1：完整策略比 LRU 少 ≥10% repeat miss | **不满足**：少 0.39% [0.20, 0.57] | §4.7 |
+| S2：完整策略相对 R+F 的节省 CI > 0 | **满足但可忽略**：330 次 [83, 600]，占 0.22% | §4.7 |
+| Gate C：rank 策略能否超过强 baseline | **不能（实际意义上）**：完整策略 G = 0.59%，H2D 只省 0.2% | §4.7 |
+| 差距能被简单特征挽回多少 | 固定系数的逻辑回归 G = 11.9%（主要是 MFQA）；截断 MFQA 重复后只有 2.4% 且 CI 跨 0 | §4.6、§4.7 |
+| 稀疏参考运行是否可信 | **基本可信**：相对 dense，ROUGE-L 低 1.3 分，F1 低 0.8 分 | §4.7 |
 
-**拟定的对外说法**（蓝图的负面结论版本）：
+**拟定的对外说法**（蓝图的负面结论版本，已由预注册的 held-out 检验支持）：
 
-> 在固定 Quest 式选择、Qwen3-0.6B、page 级可召回缓存的设定下，LRU 与 Bélády 之间有约 22–29% 的相对差距，但 sparse-attention selection rank 几乎无法帮助挽回这段差距：高排名 page 很少成为驱逐候选，加入 rank 的策略和学习模型都没有超过 recency/frequency baseline。简单特征最多挽回约 10% 的差距。
+> 在固定 Quest 式选择、Qwen3-0.6B、page 级可召回缓存的设定下，B=2K 时 LRU 与 Bélády 之间有约 27% 的相对差距。sparse-attention selection rank 对驱逐候选的复用有统计上显著的增量预测力，但高排名 page 很少成为驱逐候选（0.7%），因此把 rank 加进 recency+frequency 策略只能减少 0.4% 的 repeat miss（预注册目标 10%）。在 dev 上训练的简单特征模型能挽回约 12% 的差距，但主要来自贪心解码下的重复输出；去掉重复后只剩约 2%。
 
 ---
 
 ## 6. 局限
 
-- **样本量小**：只有 8 篇 dev 文档，每个任务×长度段只有 2 篇，这一级的 CI 没有意义；所有结论都是方向性的。按文档聚类的 bootstrap 只有 8 个 cluster，CI 可能偏窄。
+- **样本量**：正式检验用 20 篇 dev 和 40 篇 held-out，按文档聚类的 bootstrap 分别有 20 和 40 个 cluster。每个任务 × 长度段的 held-out 只有 10 篇，这一级的 CI 仍然较宽。§4.2–4.6 的 pilot 和 8 篇 dev 结果只是方向性的。
 - **只有一个模型和一种选择器**：Qwen3-0.6B + Quest 式上界，K=64、16-token page。不能外推到 HiSparse 的 GLM-5.1 token 级设置。
+- **trace 依赖 GPU 型号**：同一 prompt 在 A100 与 L4 上的选择差别很大（§4.7）。正式检验全部在 L4 上进行；结论是否适用于其他 GPU 没有验证，但 A100 上 8 篇 dev pilot 的结论方向与 L4 一致。
 - **trace 是固定的**：回放没有在线反馈，不影响生成；没有测延迟。
-- **MFQA 重复**：贪心解码下的重复输出会夸大复用；停止规则会影响结果。
+- **MFQA 重复**：贪心解码下的重复输出会夸大复用；停止规则会影响结果。按预注册，主分析用原样 trace，截断版作为次要分析，两者对 rank 策略的结论一致，但逻辑回归的收益在截断后基本消失。
 - **文献**：Scissorhands、InfLLM 没有读；部分细节标为"未核实"（见 [`related_work_matrix.md`](related_work_matrix.md)）。
 - **ArkVale 式 baseline 缺失**：按"当前分数最低"驱逐需要记录未选中 page 的当前分数，trace v1 没有这个字段。
 
@@ -238,17 +364,39 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 
 ## 7. 待团队决定
 
-1. **是否转向负面结论加现象刻画**。如果转向，layer-level GPU benchmark 可以缩减为可选，或直接不做。
-2. **MFQA 的停止规则**：遇到换行就停，还是固定生成 128 token。必须在 held-out 采集之前定下。
-3. **held-out 上要比较的策略**：建议预先固定为 LRU、FIFO、完整策略、逻辑回归（只在 dev 上训练）、Bélády，然后只跑一次 40 篇 held-out。
-4. **是否在 trace 中记录未选中 page 的分数**，以便加入 ArkVale 式 baseline。
+已在本轮解决：MFQA 停止规则（主分析按 proposal 生成 128 token 或 EOS，截断版作为次要分析）；held-out 上比较的策略（见预注册）。
+
+1. **按负面结论加现象刻画来写最终报告和 poster**。正式检验支持这个方向：S1 不满足，S2 显著但只有 0.22%。
+2. **layer-level GPU benchmark 是否还做**。完整策略每 token 只省 0.01 MiB 的 H2D（约 0.2%），benchmark 预期测不出可见差异，建议降为可选或不做。
+3. **是否把"选择对 GPU 型号敏感"写进报告**，作为附带发现。
+4. **是否在 trace 中记录未选中 page 的分数**，以便加入 ArkVale 式 baseline。这需要新采集，而 held-out 已经用过一次，只能在 dev 上做探索性分析。
 5. **成员名单**：proposal 写 Xihang Yu，README 写 Jimmy Yu。
 
 ---
 
 ## 8. 复现
 
-结果摘要（不含原始 trace）放在 [`docs/results/`](results/)：`pilot/` 是单篇 4K pilot，`dev_pilot/` 是 8 篇 dev。原始 trace（pilot 1.2 MB、dev 10 MB）没有放进仓库，可用 notebook 重新采集，manifest 中记录了 trace 的 sha256。
+结果摘要（不含原始 trace）放在 [`docs/results/`](results/)：
+- `pilot/`：单篇 4K pilot；
+- `dev_pilot/`：A100 上的 8 篇 dev；
+- `dev_full/`：L4 上的 20 篇 dev，含调参表、试运行评估和跨 GPU 对比；
+- `heldout/`：40 篇 held-out 的正式评估。
+
+原始 trace（pilot 1.2 MB、dev_pilot 10 MB、dev_full 27 MB、heldout 54 MB）没有放进仓库，可用 notebook 重新采集（`SUBSET` 选 `dev` 或 `heldout`，需 L4）。manifest 中记录了 trace 的 sha256：dev_full 是 `a96cb40d…eb5f`，heldout 是 `f5f7d812…63ae`。
+
+正式检验（预注册之后的四条命令，各运行一次）：
+
+```bash
+python3 preregister.py results/dev_full --tuning-csv results/dev_full/tuning.csv
+python3 evaluate.py results/heldout --out results/heldout/eval
+python3 truncate_trace.py results/heldout
+python3 evaluate.py results/heldout --trace trace_truncated.jsonl --out results/heldout/eval_truncated
+python3 longbench_score.py results/heldout --out results/heldout/longbench
+```
+
+第一条是调参（在预注册之前运行）。`evaluate.py`、`gap_analysis.py` 和 `preregister.py` 需要 numpy；`truncate_trace.py`、`split.py` 和 `longbench_score.py` 需要 transformers（只用 tokenizer），后者还需要 `rouge==1.0.1`。
+
+探索阶段的命令：
 
 ```bash
 python3 -m unittest discover -s tests -v
