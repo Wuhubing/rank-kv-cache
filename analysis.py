@@ -24,7 +24,7 @@ from bisect import bisect_right
 from collections import defaultdict
 from pathlib import Path
 
-from replay import iter_replay, read_trace
+from replay import iter_replay, read_trace, request_group
 
 HORIZONS = (1, 2, 4, 8)
 FREQ_WINDOW = 8
@@ -191,18 +191,21 @@ def analyze(streams, horizons=HORIZONS, *, samples=("selected",), budget=128, by
     num_layers = max(layer for _, layer in streams) + 1
     tables = defaultdict(new_table)
     sizes = defaultdict(int)
+    quartiles = defaultdict(lambda: defaultdict(int))
     curve = defaultdict(lambda: [0, 0])
     for sample in samples:
         for row in observations(streams, horizons, sample=sample, budget=budget):
             if on_row:
                 on_row(row)
             groups = ["all"]
-            if "task" in by:
-                groups.append(f"task {row['task']}")
+            for kind in ("task", "band", "cell"):
+                if kind in by:
+                    groups.append(f"{kind} {request_group(row['request_id'], kind)}")
             if "layer-group" in by:
                 groups.append(layer_group(row["layer_id"], num_layers, layer_groups))
             for group in groups:
                 sizes[sample, group] += 1
+                quartiles[sample, group][row["quartile"]] += 1
                 for h in horizons:
                     add(tables[sample, group, h], row, h, cluster)
             decile = min(9, (row["rank"] - 1) * 10 // row["n_selected"])
@@ -219,6 +222,8 @@ def analyze(streams, horizons=HORIZONS, *, samples=("selected",), budget=128, by
             low, high = bootstrap_interval(counts, replicates, seed)
             effects.append(dict(
                 sample=sample, group=group, horizon=h, observations=size,
+                top_share=quartiles[sample, group]["top"] / size,
+                bottom_share=quartiles[sample, group]["bottom"] / size,
                 clusters=len(counts), strata_used=used, effect=effect, ci_low=low, ci_high=high,
                 effect_recency_only=by_recency, raw_top=top, raw_bottom=bottom,
                 raw_difference=None if top is None or bottom is None else top - bottom))
@@ -287,8 +292,10 @@ def main():
     parser.add_argument("--lru-budget", type=int, default=128,
                         help="cache slots for the lru sample")
     parser.add_argument("--horizons", type=int, nargs="+", default=list(HORIZONS))
-    parser.add_argument("--by", nargs="*", default=[], choices=["task", "layer-group"],
-                        help="also report each task (request_id prefix before /) or layer group")
+    parser.add_argument("--by", nargs="*", default=[],
+                        choices=["task", "band", "cell", "layer-group"],
+                        help="also report each task (request_id prefix), length band (middle of "
+                             "task/band/_id), task/band cell or layer group")
     parser.add_argument("--layer-groups", type=int, default=3)
     parser.add_argument("--cluster", choices=["request", "stream"], default="request",
                         help="bootstrap unit; stream (request, layer) ignores layer correlation")
@@ -329,7 +336,8 @@ def main():
     for r in effects:
         interval = ("CI n/a (needs 2+ clusters)" if r["ci_low"] is None
                     else f"CI [{pct(r['ci_low'])}, {pct(r['ci_high'])}]")
-        print(f"{r['sample']:<9} {r['group']:<14} h={r['horizon']}  raw {pct(r['raw_difference'])}"
+        print(f"{r['sample']:<9} {r['group']:<22} h={r['horizon']}  top {100 * r['top_share']:4.1f}%"
+              f"  raw {pct(r['raw_difference'])}"
               f"  recency {pct(r['effect_recency_only'])}  freq x recency {pct(r['effect'])}"
               f"  {interval}  clusters {r['clusters']}")
 

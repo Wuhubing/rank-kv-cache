@@ -9,13 +9,19 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Jimmy Yu
 
-## First pilot
+## Collecting traces
 
 1. In [Google Colab](https://colab.research.google.com/), select **File → Upload notebook** and choose [first_trace.ipynb](notebooks/first_trace.ipynb).
 2. Select **Runtime → Change runtime type → GPU** and **Runtime → Run all**. The notebook includes the replay functions and downloads pinned public model and data revisions. It uses BF16 on supported GPUs and FP16 otherwise.
-3. Download the ZIP from the final cell. It contains `trace.jsonl`, `manifest.json`, `comparison.csv` and `comparison.png`. The same files remain under `results/` while the session is alive.
+3. Download the ZIP from the final cell. It contains `trace.jsonl`, a shared `manifest.json`, one manifest per document under `manifests/`, `comparison.csv` and `comparison.png`. The same files remain under `results/` while the session is alive.
 
-The pilot takes the first GovReport document long enough for a 4,096-token prefix-based summarization prompt. Dense prefill produces token 1. Subsequent tokens come from greedy sparse decoding with the full KV store on device. With a 128-token cap, at most 127 sparse steps are logged. A step selects 64 completed 16-token historical pages per layer and also attends to the pinned page containing the current query token. Each request uses one unpadded sequence. The manifest records the exact source document, tokenizer/model revision, token-ID hash, GPU, precision and generated IDs. Reserve this pilot source for development.
+The notebook collects the eight `dev_collection` prompts of the frozen split (see below), uncropped, one unpadded request at a time:
+- Request IDs have the form `task/band/_id`.
+- Dense prefill produces token 1. Subsequent tokens come from greedy sparse decoding with the full KV store on device. With a 128-token cap, at most 127 sparse steps are logged per document.
+- A step selects 64 completed 16-token historical pages per layer and also attends to the pinned page containing the current query token.
+- Each document's manifest records the source row, tokenizer and model revisions, prompt template, token-ID hash, GPU, precision and generated IDs.
+
+The first pilot (commit `0f35894` and earlier) used a single GovReport document cropped to a 4,096-token prompt. That document is in dev.
 
 ## Trace format (v1)
 
@@ -78,7 +84,9 @@ python3 replay.py path/to/trace.jsonl --budgets 128 256 \
 
 The left panel divides total misses by all selected historical page accesses. The right divides repeat misses by repeat accesses. A first selection is always compulsory within its request/layer stream. An undefined rate has an empty CSV field. Counts are pooled across streams before division.
 
-`comparison.csv` has one row per budget and policy. Its columns are `budget`, `policy`, `delta`, `beta` (empty for policies without weights), `top_k`, `accesses`, `misses`, `compulsory_misses`, `repeat_misses`, `repeat_accesses`, `miss_rate` and `repeat_miss_rate`. At the primary budget of 128, subtract the oracle miss rate from the LRU miss rate to measure the available headroom in percentage points. Store the raw file to replay future rank policies on identical selections.
+`--by task band cell` also replays each task, length band and task/band cell separately and writes every group to `comparison_by_group.csv`; the plot and `comparison.csv` keep the pooled `all` group. Bands come from request IDs of the form `task/band/_id`.
+
+`comparison.csv` has one row per budget and policy. Its columns are `group`, `budget`, `policy`, `delta`, `beta` (empty for policies without weights), `top_k`, `accesses`, `misses`, `compulsory_misses`, `repeat_misses`, `repeat_accesses`, `miss_rate` and `repeat_miss_rate`. At the primary budget of 128, subtract the oracle miss rate from the LRU miss rate to measure the available headroom in percentage points. Store the raw file to replay future rank policies on identical selections.
 **Handwritten check.** The eight accesses select four distinct pages. At budgets 2, 3 and 4, LRU has 5, 5 and 4 total misses. Bélády has 5, 4 and 4. The unit suite also checks protected selections, tie behavior, stream isolation, an independently enumerated optimum, step-by-step agreement of the zero-weight score with LRU, and the oracle as a lower bound for every policy.
 
 ## Rank predictiveness (H1)
@@ -113,12 +121,23 @@ The effect compares the top quartile (last rank ≤ ⌈n/4⌉) with the bottom q
 - With a single request, the interval is reported as n/a. `--cluster stream` resamples (request, layer) pairs instead, which is useful for a pilot but ignores correlation across layers. Intervals over sparse strata, such as small layer groups, can be lopsided.
 
 Outputs in `--out`:
-- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <request_id prefix>` or `layers a-b`), `horizon`, `observations`, `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
+- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <prefix>`, `band <band>`, `cell <task/band>` or `layers a-b`), `horizon`, `observations`, `top_share` and `bottom_share` (fractions of observations whose last rank is in the top or bottom quartile; for `candidate` this is how often a top-quartile rank bonus could apply), `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
 - `rank_curve.csv` gives `sample`, `horizon`, `rank_decile` (1 is best), `observations` and `reuse_rate`.
 - `features.csv` is written with `--features`. It has one row per observation: `sample`, `request_id`, `task`, `layer_id`, `decode_step`, `page_id`, `rank`, `n_selected`, `quartile`, `recency`, `recency_bin`, `frequency` and `reuse_h`.
 - `h1.png` plots, for each sample, reuse by last-rank decile and the raw, recency-only and frequency × recency effects against horizon.
 
 **Caveat:** rank is relative within a step. Because every step selects exactly K pages, a page outranked by frequent competitors can show lower reuse through competition alone, even when its own propensity depends only on frequency. The synthetic tests in `tests/test_analysis.py` show this effect with a small page pool. They also show that a strong H1-selected signal need not carry over to candidates.
+
+## Frozen LongBench split
+
+`splits/longbench_v1.json` freezes the evaluation sample. It was produced once by `split.py`, which needs `transformers` and `huggingface_hub` for the tokenizer only.
+- It holds 60 prompts: 15 per cell of task (MultiFieldQA-en, GovReport) × length band (4–8K, 8–16K Qwen tokens of the full, uncropped prompt).
+- Each cell is split 5 dev and 10 held-out by source document. A document contributes at most one prompt, so no document is in both splits.
+- The pilot GovReport document is in dev.
+- `dev_collection` lists the eight dev prompts (two per cell) that the notebook collects.
+- MultiFieldQA-en uses LongBench's own prompt template. GovReport keeps the pilot's summary prompt.
+
+Tune only on dev. Do not collect or inspect held-out prompts until the final evaluation. `tests/test_split.py` checks the file against `split.py` and the notebook's configuration cell.
 
 ## Related work
 

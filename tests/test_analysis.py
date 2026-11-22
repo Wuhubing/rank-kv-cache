@@ -172,6 +172,21 @@ class AnalysisTests(unittest.TestCase):
         self.assertGreater(row["ci_low"], 0.05)
         self.assertEqual(row["clusters"], 30)
 
+    def test_band_groups_and_top_share(self):
+        # Pages 1-8 drop out of the qa stream after t=2 and stay candidates; ranks 1-2 are
+        # the top quartile of eight. The sum stream never drops a page.
+        streams = {("qa/4-8k/1", 0): [tuple(range(1, 9))] * 3 + [tuple(range(9, 17))] * 12,
+                   ("sum/8-16k/2", 1): [tuple(range(8, 0, -1))] * 15}
+        effects, _, sizes = analyze(streams, (1,), samples=("selected", "candidate"),
+                                    by=("band", "cell"), replicates=10)
+        rows = {(r["sample"], r["group"]): r for r in effects}
+        self.assertEqual(sizes, {"selected": 224, "candidate": 88})
+        self.assertEqual(rows["candidate", "band 4-8k"]["observations"], 88)
+        self.assertEqual(rows["candidate", "cell qa/4-8k"]["top_share"], 0.25)
+        self.assertEqual(rows["candidate", "all"]["bottom_share"], 0.25)
+        self.assertNotIn(("candidate", "band 8-16k"), rows)
+        self.assertEqual(rows["selected", "band 8-16k"]["observations"], 112)
+
     def test_groups_and_single_cluster(self):
         streams = {("qa/1", 0): [(1, 2, 3, 4)] * 10, ("sum/2", 3): [(4, 3, 2, 1)] * 10}
         effects, curve, sizes = analyze(streams, (1, 8), by=("task", "layer-group"),

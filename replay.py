@@ -216,6 +216,18 @@ def save_comparison(rows, out_dir, title):
     plt.close(fig)
 
 
+def request_group(request_id, kind):
+    """task is the request_id prefix; band is its middle part in task/band/_id IDs."""
+    parts = request_id.split("/")
+    if kind == "task":
+        return parts[0]
+    if kind == "band":
+        return parts[1] if len(parts) >= 3 else "n/a"
+    if kind == "cell":
+        return "/".join(parts[:2]) if len(parts) >= 3 else parts[0]
+    raise ValueError(f"unknown grouping {kind!r}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("trace", type=Path)
@@ -227,19 +239,38 @@ def main():
     parser.add_argument("--beta", type=float, default=0,
                         help="decode steps per recent selection, capped at 4 (rf, full)")
     parser.add_argument("--top-k", type=int, help="selection width K; default is the widest step")
+    parser.add_argument("--by", nargs="*", default=[], choices=["task", "band", "cell"],
+                        help="also replay each task, length band or task/band cell separately")
     parser.add_argument("--out", type=Path, default=Path("results/replay"))
     parser.add_argument("--no-save", action="store_true", help="print counts only")
     args = parser.parse_args()
     weights = [int(w) if float(w).is_integer() else w for w in (args.delta, args.beta)]
     try:
-        rows = compare(read_trace(args.trace), args.budgets, args.policies,
-                       delta=weights[0], beta=weights[1], top_k=args.top_k)
+        streams = read_trace(args.trace)
+        top_k = infer_top_k(streams) if args.top_k is None else args.top_k
+        groups = {"all": streams}
+        for kind in args.by:
+            for (request, layer), steps in streams.items():
+                label = f"{kind} {request_group(request, kind)}"
+                groups.setdefault(label, {})[request, layer] = steps
+        rows = []
+        for label, subset in groups.items():
+            rows += [dict(group=label, **row) for row in compare(
+                subset, args.budgets, args.policies, delta=weights[0], beta=weights[1],
+                top_k=top_k)]
     except ValueError as error:
         parser.error(str(error))
     if not args.no_save:
-        save_comparison(rows, args.out, args.trace.stem)
+        save_comparison([r for r in rows if r["group"] == "all"], args.out, args.trace.stem)
+        if args.by:
+            with (args.out / "comparison_by_group.csv").open("w", newline="",
+                                                          encoding="utf-8") as output:
+                writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+                writer.writeheader()
+                writer.writerows(rows)
     for row in rows:
-        print(f"B={row['budget']:>3}  {row['policy']:<8}  misses {row['misses']}/{row['accesses']}"
+        prefix = "" if not args.by else f"{row['group']:<24}"
+        print(f"{prefix}B={row['budget']:>3}  {row['policy']:<8}  misses {row['misses']}/{row['accesses']}"
               f"  first {row['compulsory_misses']}  repeat {row['repeat_misses']}/{row['repeat_accesses']}")
 
 
