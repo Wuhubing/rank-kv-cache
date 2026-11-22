@@ -302,6 +302,19 @@ class Logistic:
         Z = (X[:, self.columns] - self.mean) / self.std
         return 1 / (1 + np.exp(-np.clip(self.w[0] + Z @ self.w[1:], -30, 30)))
 
+    def to_dict(self):
+        return dict(features=[FEATURES[j] for j in self.columns], mean=self.mean.tolist(),
+                    std=self.std.tolist(), intercept=float(self.w[0]),
+                    weights=self.w[1:].tolist(), l2=self.l2)
+
+    @classmethod
+    def from_dict(cls, params):
+        import numpy as np
+        model = cls([FEATURES.index(f) for f in params["features"]], l2=params.get("l2", 1e-3))
+        model.mean, model.std = np.asarray(params["mean"]), np.asarray(params["std"])
+        model.w = np.r_[params["intercept"], params["weights"]]
+        return model
+
 
 class Tree:
     """CART on Gini impurity with quantile thresholds, depth <= max_depth."""

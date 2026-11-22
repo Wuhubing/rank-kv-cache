@@ -1,0 +1,238 @@
+{
+ "description": "Preregistered held-out evaluation; see docs/preregistration.md",
+ "split_file": "splits/longbench_v1.json",
+ "split_sha256": "b8252589bb44958abc74cf1c4d606922f70cf259d97d94d843c3e5d45d97d99f",
+ "dev": {
+  "trace_sha256": "a96cb40d8a4f66e24d234fbea9bf4718a1c2ddfb276ba9594e3eed97cc6ceb5f",
+  "documents": 20,
+  "gpu": "NVIDIA L4",
+  "dtype": "torch.bfloat16",
+  "torch": "2.14.1+cu130",
+  "transformers": "4.53.3"
+ },
+ "collection": {
+  "max_new_tokens": 128,
+  "stop": "EOS or 128 generated tokens",
+  "page_size": 16,
+  "top_k": 64,
+  "gpu_required": "NVIDIA L4",
+  "note": "Quest selections differ across GPU models, so held-out must be collected on the same GPU model as dev."
+ },
+ "tuning": {
+  "grid": [
+   0,
+   1,
+   2,
+   4,
+   8
+  ],
+  "budget": 128,
+  "criterion": "dev miss rate",
+  "tie_break": "smaller delta, then smaller beta",
+  "misses": {
+   "0,0": 187866,
+   "0,1": 187733,
+   "0,2": 187689,
+   "0,4": 187672,
+   "0,8": 187951,
+   "1,0": 187787,
+   "1,1": 187662,
+   "1,2": 187616,
+   "1,4": 187605,
+   "1,8": 187890,
+   "2,0": 187778,
+   "2,1": 187659,
+   "2,2": 187611,
+   "2,4": 187606,
+   "2,8": 187893,
+   "4,0": 187729,
+   "4,1": 187634,
+   "4,2": 187600,
+   "4,4": 187593,
+   "4,8": 187879,
+   "8,0": 187739,
+   "8,1": 187622,
+   "8,2": 187568,
+   "8,4": 187573,
+   "8,8": 187856
+  }
+ },
+ "budgets": [
+  128,
+  256
+ ],
+ "primary_budget": 128,
+ "top_k": 64,
+ "page_bytes": 65536,
+ "policies": [
+  {
+   "name": "fifo",
+   "policy": "fifo"
+  },
+  {
+   "name": "lru",
+   "policy": "lru"
+  },
+  {
+   "name": "rank_only",
+   "policy": "rank"
+  },
+  {
+   "name": "rf",
+   "policy": "score",
+   "delta": 0,
+   "beta": 4
+  },
+  {
+   "name": "rrank",
+   "policy": "score",
+   "delta": 4,
+   "beta": 0
+  },
+  {
+   "name": "full",
+   "policy": "score",
+   "delta": 8,
+   "beta": 2
+  },
+  {
+   "name": "logistic",
+   "policy": "logistic",
+   "label_horizon": 16,
+   "trained_on": "20 dev documents, LRU eviction candidates at B=128",
+   "sample_rows": 300000,
+   "seed": 0,
+   "model": {
+    "features": [
+     "recency",
+     "freq8",
+     "freq32",
+     "total",
+     "last_rank",
+     "last_rank_frac",
+     "last_gap",
+     "has_gap",
+     "mean_gap",
+     "drop_interval",
+     "has_drop",
+     "rel_pos",
+     "sink",
+     "from_end",
+     "near_end",
+     "layer"
+    ],
+    "mean": [
+     6.596776666666667,
+     2.225093333333333,
+     8.591343333333333,
+     19.477796666666666,
+     50.55638,
+     0.7899434375,
+     5.1942466666666665,
+     0.92048,
+     4.529711424666339,
+     10.550596666666667,
+     0.8612366666666667,
+     0.5303540811675027,
+     0.010753333333333333,
+     259.08089,
+     0.01257,
+     15.988933333333334
+    ],
+    "std": [
+     7.869476536542599,
+     2.1616875342223407,
+     7.478174225286893,
+     20.136422896141752,
+     11.506825567981249,
+     0.179794150484082,
+     10.664409106328913,
+     0.27054864653347893,
+     7.119756334774345,
+     13.53269423794541,
+     0.3456993944845064,
+     0.31167647787156266,
+     0.10313922319774375,
+     204.14442856439373,
+     0.1114091348266302,
+     7.221049153458542
+    ],
+    "intercept": 0.4836177624214539,
+    "weights": [
+     -0.41212052813037914,
+     0.10704913480189249,
+     0.5267445802881884,
+     -0.015453470858165364,
+     -0.038509680372156574,
+     -0.03850968007372863,
+     0.08039826424373622,
+     0.06744377831190346,
+     -0.1725328571479676,
+     -0.1305678124641925,
+     0.1845991251959378,
+     -0.04372718144171621,
+     -0.019937554105165785,
+     -0.12332541708404217,
+     0.0784548070233139,
+     -0.022302350951271394
+    ],
+    "l2": 0.001
+   }
+  },
+  {
+   "name": "belady",
+   "policy": "belady"
+  }
+ ],
+ "metrics": [
+  "repeat_misses",
+  "misses",
+  "G",
+  "h2d_bytes_per_token"
+ ],
+ "success": {
+  "s1": "full has at least 10% fewer repeat misses than LRU at B=128 (pooled point estimate); a document-bootstrap 95% CI is reported alongside",
+  "s2": "paired document-bootstrap 95% CI of repeat misses saved by full relative to rf at B=128 lies entirely above zero"
+ },
+ "bootstrap": {
+  "replicates": 2000,
+  "seed": 0,
+  "unit": "document (request)"
+ },
+ "h1": {
+  "samples": [
+   "selected",
+   "candidate",
+   "lru"
+  ],
+  "lru_budget": 128,
+  "horizons": [
+   1,
+   2,
+   4,
+   8
+  ],
+  "by": [
+   "task",
+   "band"
+  ],
+  "cluster": "request",
+  "replicates": 1000,
+  "seed": 0
+ },
+ "groups": [
+  "task",
+  "band"
+ ],
+ "mfqa": {
+  "primary": "as collected: 128 generated tokens or EOS",
+  "secondary": "truncate_trace.py: MultiFieldQA cut at the first generated newline, same policies and fixed coefficients"
+ },
+ "sanity": {
+  "metric": {
+   "multifieldqa_en": "qa_f1_score",
+   "gov_report": "rouge_score (ROUGE-L F)"
+  },
+  "compare": "sparse reference generation vs dense-attention greedy generation, 128 tokens, LongBench official metrics"
+ }
+}
