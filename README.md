@@ -128,6 +128,17 @@ Outputs in `--out`:
 
 **Caveat:** rank is relative within a step. Because every step selects exactly K pages, a page outranked by frequent competitors can show lower reuse through competition alone, even when its own propensity depends only on frequency. The synthetic tests in `tests/test_analysis.py` show this effect with a small page pool. They also show that a strong H1-selected signal need not carry over to candidates.
 
+## Truncating repeated answers
+
+MultiFieldQA answers often finish within a line and then repeat "Answer: …" until the 128-token cap. That repetition inflates page reuse. `truncate_trace.py` cuts each MultiFieldQA request after the decode steps that produce its first answer, i.e. up to the first generated token containing a newline. GovReport requests are copied unchanged. It reads the per-document manifests and needs `transformers` for the tokenizer.
+
+```bash
+python3 truncate_trace.py results/dev_pilot
+python3 analysis.py results/dev_pilot/trace_truncated.jsonl --samples selected candidate lru --by task band
+```
+
+It writes `trace_truncated.jsonl` and, next to it, `trace_truncated.json` with the number of steps kept per request. Short answers leave few steps with a complete 8-step window, so MultiFieldQA contributes far fewer H1 observations after truncation.
+
 ## Frozen LongBench split
 
 `splits/longbench_v1.json` freezes the evaluation sample. It was produced once by `split.py`, which needs `transformers` and `huggingface_hub` for the tokenizer only.
