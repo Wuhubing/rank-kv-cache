@@ -103,7 +103,7 @@ python3 analysis.py path/to/trace.jsonl --samples selected candidate lru --lru-b
 | Sample | Pages observed at step t | Role |
 | --- | --- | --- |
 | `selected` (H1-selected) | Pages selected at t | Contrast only. These pages are protected anyway, so they never face eviction. |
-| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. These are the pages any replacement policy chooses among, and the set does not depend on the policy. |
+| `candidate` (H1-candidate) | Pages selected before t but not at t | Policy-independent universe of possible historical candidates; pages already evicted by a finite cache remain in this sample. |
 | `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU really chooses among. |
 
 Each observation records:
@@ -117,6 +117,9 @@ Only steps followed by `max(--horizons)` observed steps are used, so every horiz
 
 The effect compares the top quartile (last rank ≤ ⌈n/4⌉) with the bottom quartile (last rank > n − ⌈n/4⌉):
 - It is computed within strata of frequency × recency bin (`new`, 1, 2, 3–4, 5–8, 9–16, 17–32, 33–64, >64).
+- `--recency-strata exact` is a post-hoc robustness option that replaces those bins with
+  exact recency values. It is stricter but can discard many strata that do not contain
+  both rank quartiles.
 - Strata are weighted by size, and only strata containing both quartiles count.
 - The output also gives the raw difference and the effect stratified by recency alone, which shows how much of the raw gap recency and frequency explain.
 - The 95% interval is a percentile bootstrap (`--bootstrap 1000`, `--seed 0`) that resamples whole requests, meaning source documents.
@@ -149,6 +152,33 @@ python3 longbench_score.py results/heldout --out results/heldout/longbench
 - the H1 outputs of `analysis.py`.
 
 `longbench_score.py` scores the sparse reference generations and the dense generations in the manifests with LongBench's own metrics. The notebook collects dense generations when `DENSE_REFERENCE = True`. Results are summarized in [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §4.7.
+
+## Post-hoc rank validation
+
+`rank_validation.py` is deliberately separate from the preregistered evaluation. It
+tests the negative result without changing the frozen success criteria. The currently
+recoverable matched-beta evidence is summarized in
+[docs/POSTHOC_VALIDATION.md](docs/POSTHOC_VALIDATION.md).
+
+```bash
+python3 rank_validation.py path/to/trace.jsonl --budgets 128 \
+  --deltas 0 1 2 4 8 --betas 0 1 2 4 8 --out results/rank_validation
+python3 analysis.py path/to/trace.jsonl --samples lru --lru-budget 128 \
+  --recency-strata exact --out results/h1_exact
+```
+
+The matched-beta analysis compares every positive rank weight against `delta=0` at
+the same frequency weight, avoiding the confound between the preregistered R+F
+(`beta=4`) and full (`beta=2`) policies. It writes pooled bootstrap intervals and
+per-document counts to `matched_beta.csv` and `matched_beta_by_doc.csv`.
+
+The decision audit follows the `delta=0` cache trajectory for each beta. At every
+eviction it holds the cache state and candidate set fixed, recomputes the victims with
+each positive delta, and records how often rank changes a victim and whether the
+changed victims are reused within 1, 8, 16 or 32 steps. These one-step
+counterfactuals explain the mechanism; they are not a replacement for the full-policy
+miss counts in the matched-beta table. Outputs are `decision_audit.csv` and
+`decision_audit_by_doc.csv`.
 
 ## Truncating repeated answers
 

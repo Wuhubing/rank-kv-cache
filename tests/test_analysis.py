@@ -77,6 +77,21 @@ class AnalysisTests(unittest.TestCase):
         self.assertAlmostEqual(effect, 4 * 0.5 / 12)
         self.assertEqual((used, top, bottom), (2, 9 / 11, 3 / 6))
 
+    def test_exact_recency_removes_within_bin_confound(self):
+        rows = []
+        # At recency 3 every page reuses; at recency 4 none does. Top pages are
+        # concentrated at 3 and bottom pages at 4, creating a binned-recency effect.
+        for recency, top_n, bottom_n, reused in ((3, 9, 1, True), (4, 1, 9, False)):
+            for quartile, n in (("top", top_n), ("bottom", bottom_n)):
+                for _ in range(n):
+                    rows.append(dict(request_id="r", layer_id=0, frequency=1,
+                                     recency=recency, recency_bin="3-4", quartile=quartile,
+                                     reuse_1=reused))
+        binned = stratified_effect(tally(rows, 1).values())[0]
+        exact = stratified_effect(tally(rows, 1, recency_strata="exact").values())[0]
+        self.assertAlmostEqual(binned, 0.8)
+        self.assertAlmostEqual(exact, 0)
+
     def test_detects_injected_rank_signal(self):
         streams = synthetic(3, lambda rank, c: 0.8 if rank <= 2 else 0.3)
         row = pooled(streams)

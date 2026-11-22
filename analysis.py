@@ -109,21 +109,24 @@ def new_table():
     return defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0]))
 
 
-def add(table, row, horizon, cluster="request"):
+def add(table, row, horizon, cluster="request", recency_strata="binned"):
     """Count (top n, top reused, bottom n, bottom reused) per cluster and stratum."""
     if row["quartile"] not in ("top", "bottom"):
         return
+    if recency_strata not in ("binned", "exact"):
+        raise ValueError("recency_strata must be binned or exact")
     unit = row["request_id"] if cluster == "request" else (row["request_id"], row["layer_id"])
-    cell = table[unit][row["frequency"], row["recency_bin"]]
+    recency = row["recency_bin"] if recency_strata == "binned" else row["recency"]
+    cell = table[unit][row["frequency"], recency]
     offset = 0 if row["quartile"] == "top" else 2
     cell[offset] += 1
     cell[offset + 1] += row[f"reuse_{horizon}"]
 
 
-def tally(rows, horizon, cluster="request"):
+def tally(rows, horizon, cluster="request", recency_strata="binned"):
     table = new_table()
     for row in rows:
-        add(table, row, horizon, cluster)
+        add(table, row, horizon, cluster, recency_strata)
     return table
 
 
@@ -184,10 +187,13 @@ def layer_group(layer, num_layers, groups):
 
 
 def analyze(streams, horizons=HORIZONS, *, samples=("selected",), budget=128, by=(),
-            layer_groups=3, cluster="request", replicates=1000, seed=0, on_row=None):
+            layer_groups=3, cluster="request", recency_strata="binned", replicates=1000,
+            seed=0, on_row=None):
     """Return (effect rows, rank-curve rows, observations per sample) in one pass."""
     if cluster not in ("request", "stream"):
         raise ValueError("cluster must be request or stream")
+    if recency_strata not in ("binned", "exact"):
+        raise ValueError("recency_strata must be binned or exact")
     num_layers = max(layer for _, layer in streams) + 1
     tables = defaultdict(new_table)
     sizes = defaultdict(int)
@@ -207,7 +213,7 @@ def analyze(streams, horizons=HORIZONS, *, samples=("selected",), budget=128, by
                 sizes[sample, group] += 1
                 quartiles[sample, group][row["quartile"]] += 1
                 for h in horizons:
-                    add(tables[sample, group, h], row, h, cluster)
+                    add(tables[sample, group, h], row, h, cluster, recency_strata)
             decile = min(9, (row["rank"] - 1) * 10 // row["n_selected"])
             for h in horizons:
                 cell = curve[sample, h, decile]
@@ -299,6 +305,8 @@ def main():
     parser.add_argument("--layer-groups", type=int, default=3)
     parser.add_argument("--cluster", choices=["request", "stream"], default="request",
                         help="bootstrap unit; stream (request, layer) ignores layer correlation")
+    parser.add_argument("--recency-strata", choices=["binned", "exact"], default="binned",
+                        help="stratify H1 by the preregistered recency bins or exact recency")
     parser.add_argument("--bootstrap", type=int, default=1000, help="replicates")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=Path("results/analysis"))
@@ -316,7 +324,8 @@ def main():
         effects, curve, sizes = analyze(
             read_trace(args.trace), tuple(args.horizons), samples=samples,
             budget=args.lru_budget, by=args.by, layer_groups=args.layer_groups,
-            cluster=args.cluster, replicates=args.bootstrap, seed=args.seed,
+            cluster=args.cluster, recency_strata=args.recency_strata,
+            replicates=args.bootstrap, seed=args.seed,
             on_row=writer.writerow if writer else None)
     except ValueError as error:
         parser.error(str(error))
