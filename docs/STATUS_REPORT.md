@@ -45,8 +45,9 @@
 | 14:15 | 发现 MFQA 答完后反复输出答案，加入截断工具 | `1daecbd` |
 | 14:31 | **差距分析**：坏驱逐、特征画像、可学习策略的上界 | `b926dd5` |
 | 14:55 | notebook 改为从固定 commit 读取划分文件、按 `SUBSET` 选文档；manifest 记录标准答案和 dense 生成 | `a19ada8` |
+| 14:58 | **第二轮文献核实**：InfLLM、Scissorhands、H₂O 附录、HiSparse 与 Quest 代码、PARROT；补进矩阵 | `d529def` [`related_work_matrix.md`](related_work_matrix.md) |
 | ~15:06 | **采集全部 20 篇 dev**（L4）；发现 A100 与 L4 的选择结果不同（见 §4.7） | 结果在 [`results/dev_full/`](results/dev_full/) |
-| 15:20 | **在 20 篇 dev 上调参并预注册**：完整策略 δ=8、β=2，R+F β=4，R+rank δ=4，逻辑回归系数固定；评估脚本随预注册一起提交 | `2f6a9bd` [`preregistration.md`](preregistration.md) |
+| 15:13 | **在 20 篇 dev 上调参并预注册**：完整策略 δ=8、β=2，R+F β=4，R+rank δ=4，逻辑回归系数固定；评估脚本随预注册一起提交 | `2f6a9bd` [`preregistration.md`](preregistration.md) |
 | ~15:24 | **采集 40 篇 held-out**（L4，sparse trace + dense 生成），随后按预注册**只评估一次** | 结果在 [`results/heldout/`](results/heldout/) |
 
 GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`dev_full`）和 40 篇 held-out 都用 NVIDIA L4。其余设置相同：bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
@@ -74,13 +75,18 @@ GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`
 
 ### 4.1 Phase A：文献核实 → Gate A 通过
 
-**做法**：读 ArkVale（NeurIPS 2024）和 HiSparse（arXiv:2608.07009）全文，并读了 ArkVale 的驱逐 kernel（`select.cu`）。
+**做法**：分两轮。
+- 第一轮：读 ArkVale（NeurIPS 2024）和 HiSparse（arXiv:2608.07009）全文，以及 ArkVale 的驱逐 kernel（`select.cu`）；概览 Quest、H₂O、PARROT。
+- 第二轮（补齐未核实条目）：读 InfLLM、Scissorhands 全文，H₂O 的附录，HiSparse 在 SGLang 中的 kernel 代码，Quest 的代码，以及 PARROT 的相关章节。
 
 **发现**：
-- ArkVale 的驱逐只用**当前步**的 query 分数（`select.cu` 第 127、131 行），没有 recency、frequency 或历史排名状态，也没有把驱逐策略和 LRU 做消融。
-- HiSparse 的设置和我们几乎相同（固定选择、host KV、B 个 slot、对比 FIFO/LRU/Bélády），但用的是纯 LRU，并明确把 LRU 与 Bélády 之间的差距留作"预测式替换策略能挽回的空间"（§4.3）。
+- **ArkVale** 的驱逐只用**当前步**的 query 分数（`select.cu` 第 127、131 行），没有 recency、frequency 或历史排名状态；camera-ready 中也没有驱逐策略消融、oracle 或 miss rate。
+- **HiSparse** 的设置和我们几乎相同（固定选择、host KV、B 个 slot、对比 FIFO/random/LRU/Bélády），但用的是纯 LRU，并明确把 LRU 与 Bélády 之间的差距留作"预测式替换策略能挽回的空间"（§4.3）。代码显示即使搭配 Quest，它的缓存和 LRU 仍按 **token** 管理。Fig. 6 的数字全部复核无误。
+- **InfLLM** 是最接近的已有缓存策略：KV 块放在 CPU、按需召回，GPU 缓存用"按注意力加权、带衰减的频率分数"驱逐（论文称之为 LRU），并在 GovReport 上报告了 miss rate、和 FIFO/Random 比较过。但它不用选择分数或排名，也没有和 Bélády 比。
+- **Scissorhands** 是最接近 H1 的说法（"过去重要的将来也重要"），但证据只是前后两半句子的重合率，不是逐步预测，也没有控制 recency 和 frequency。**H₂O** 从未测量 heavy hitter 在解码步之间是否稳定。
+- **Quest** 的代码按每个 query head 各自选 page，我们把各 head 的分数平均成一个排名，所以应称为"Quest 式"。
 
-**推导**：没有论文在选择固定的前提下，用"上次观测到的 top-K 排名"决定 page 是否留在缓存 → Gate A 通过，但只能声称增量问题，不能说"首个基于重要性的驱逐"。完整矩阵和"必须避免的说法"见 [`related_work_matrix.md`](related_work_matrix.md)。
+**推导**：没有论文在选择固定的前提下，用"上次观测到的 top-K 排名"决定 page 是否留在缓存，也没有论文检验它在 recency 和 frequency 之外的预测力 → Gate A 通过。但只能声称增量问题，不能说"首个基于重要性的驱逐"，也不能说"首个用过去重要性做可召回缓存替换"（InfLLM 已经做过）。完整矩阵和"必须避免的说法"见 [`related_work_matrix.md`](related_work_matrix.md)。
 
 ### 4.2 Pilot：一篇 4K 文档
 
@@ -357,7 +363,9 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 - **trace 依赖 GPU 型号**：同一 prompt 在 A100 与 L4 上的选择差别很大（§4.7）。正式检验全部在 L4 上进行；结论是否适用于其他 GPU 没有验证，但 A100 上 8 篇 dev pilot 的结论方向与 L4 一致。
 - **trace 是固定的**：回放没有在线反馈，不影响生成；没有测延迟。
 - **MFQA 重复**：贪心解码下的重复输出会夸大复用；停止规则会影响结果。按预注册，主分析用原样 trace，截断版作为次要分析，两者对 rank 策略的结论一致，但逻辑回归的收益在截断后基本消失。
-- **文献**：Scissorhands、InfLLM 没有读；部分细节标为"未核实"（见 [`related_work_matrix.md`](related_work_matrix.md)）。
+- **文献**：第二轮已补齐大部分未核实条目。仍未核实的是 ArkVale 的 OpenReview 评审（页面有反爬虫验证），以及几处小尾巴（H₂O 附录 D 末尾、HiSparse 代码版本是否与论文评测一致）；Scissorhands 和 H₂O 的引文需对照 PDF 抽查。详见 [`related_work_matrix.md`](related_work_matrix.md) 末尾。
+- **选择器与 Quest 不同**：Quest 按 query head 各自选择，我们把各 head 的上界平均成一个排名，每层共用一个缓存。
+- **缺少 InfLLM 式 baseline**：按注意力加权的衰减频率分数需要每个 page 的注意力质量，trace v1 没有记录。
 - **ArkVale 式 baseline 缺失**：按"当前分数最低"驱逐需要记录未选中 page 的当前分数，trace v1 没有这个字段。
 
 ---
