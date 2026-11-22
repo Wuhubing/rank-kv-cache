@@ -1,5 +1,6 @@
 import json
 import unittest
+from hashlib import sha256
 from collections import Counter
 from pathlib import Path
 
@@ -46,17 +47,17 @@ class SplitTests(unittest.TestCase):
         cell, = [c for c in notebook["cells"] if c["id"] == "config"]
         namespace = {}
         exec("".join(cell["source"]), namespace)
-        tokens = {p["request_id"]: p["prompt_tokens"] for p in SPLIT["prompts"]}
-        self.assertEqual(list(namespace["DEV_COLLECTION"]), SPLIT["dev_collection"])
-        self.assertEqual(namespace["DEV_COLLECTION"],
-                         {r: tokens[r] for r in SPLIT["dev_collection"]})
+        digest = sha256((ROOT / "splits/longbench_v1.json").read_bytes()).hexdigest()
+        self.assertEqual(namespace["SPLIT_SHA256"], digest)
+        self.assertTrue(namespace["SPLIT_URL"].endswith("/splits/longbench_v1.json"))
+        self.assertIn("6f269a0756dff3e4d4e72821e5cc9b6878aba68c", namespace["SPLIT_URL"])
+        self.assertIn(namespace["SUBSET"], ("dev_collection", "dev"))
         self.assertEqual(namespace["TEMPLATES"], split.TEMPLATES)
         self.assertEqual((namespace["MODEL_REV"], namespace["DATA_REV"], namespace["MAX_NEW"]),
                          (split.MODEL_REV, split.DATA_REV, 128))
         heldout = {p["request_id"] for p in SPLIT["prompts"] if p["split"] == "heldout"}
         text = "".join("".join(c["source"]) for c in notebook["cells"])
         self.assertFalse([r for r in heldout if r.split("/")[-1] in text])
-
 
 if __name__ == "__main__":
     unittest.main()
