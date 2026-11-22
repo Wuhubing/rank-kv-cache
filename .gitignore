@@ -4,7 +4,7 @@ __pycache__/
 .ipynb_checkpoints/
 *.pt
 *.npz
-results/
+/results/
 *.aux
 *.log
 *.out

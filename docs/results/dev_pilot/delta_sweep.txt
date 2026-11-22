@@ -1,0 +1,8 @@
+B=128  lru       misses 79029/1820672  first 44450  repeat 34579/1776222
+B=128  score:1:0  misses 78991/1820672  first 44450  repeat 34541/1776222
+B=128  score:2:0  misses 78977/1820672  first 44450  repeat 34527/1776222
+B=128  score:4:0  misses 78954/1820672  first 44450  repeat 34504/1776222
+B=128  score:8:0  misses 78940/1820672  first 44450  repeat 34490/1776222
+B=128  score:16:0  misses 78992/1820672  first 44450  repeat 34542/1776222
+B=128  score:32:0  misses 79054/1820672  first 44450  repeat 34604/1776222
+B=128  belady    misses 56287/1820672  first 44450  repeat 11837/1776222
