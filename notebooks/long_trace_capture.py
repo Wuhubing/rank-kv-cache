@@ -16,6 +16,16 @@ USER = {
                   "covering every section, in at least eight paragraphs.",
 }
 
+# Robustness check D only (docs/efficient_policy_dev.md): a differently worded summary prompt.
+ALT_USER = {
+    "qmsum": "Here is a meeting transcript.\n\n{context}\n\nSummarize this meeting for someone who missed it. "
+             "Organize the summary by topic, with a short heading for each topic, and explain the decisions "
+             "and open questions.",
+    "gov_report": "Here is a government report.\n\n{context}\n\nSummarize this report for a policy maker. "
+                  "Organize the summary by section, with a short heading for each section, and explain the "
+                  "findings and recommendations.",
+}
+
 
 def chat_prompt(tok, task, row):
     msg = [{"role": "user", "content": USER[task].format(context=row["context"])}]
