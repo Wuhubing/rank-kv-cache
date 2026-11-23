@@ -5,7 +5,84 @@ A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2
 We test whether a page's sparse-attention top-K selection rank predicts reuse beyond
 recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, GovReport).
 
-**Current status (2026-11-22):** see [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) for the full log, data and how each conclusion was reached. On eight dev documents, rank does not close the LRU–Bélády gap; result summaries are in [docs/results/](docs/results/).
+**Current status (2026-11-23):** the rank study ended negative (preregistered 40-document held-out test). A follow-up line, a score-EMA replacement policy on long Quest traces, passed its preregistered 21-document held-out test but gives no latency gain on an L4. The Chinese walkthrough below explains it from the start; [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) has the full log, data and how each conclusion was reached.
+
+## 高效替换策略：从问题到结果
+
+下面从头讲一遍：问题是什么，策略怎么来的，最后得到什么结果。详细数据和推导见 [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §9。
+
+### 1. 问题：GPU 放不下所有 KV
+
+- 长文本解码时，KV cache 很大（2–3 万 token）。分层的做法是**把所有 KV page 放在主机内存**（每个 page 16 个 token），**GPU 上每层只留 B 个槽位**作为缓存。
+- 每生成一个 token，Quest 选择器给所有 page 打分（用每个 page 的 key 最小、最大值估计它和当前 query 的相关度），取**分数最高的 K=64 个 page** 做注意力。
+- 这 64 个必须都在 GPU 上。不在的就是 **miss**，要通过 PCIe 从主机拷过来；如果槽位满了，还得**换出**一个旧 page。
+- **我们研究的问题：换出哪个？** 换得好，后面 miss 就少。
+
+### 2. 基准和上限
+
+- **LRU**（HiSparse 用的）：换出最久没被选中的 page。
+- **Bélády**（理论最优，需要知道未来）：换出下一次被使用最晚的 page。
+- 两者之间有一段差距（B=96 时 miss rate 是 6.03% 对 3.86%）。**G = 新策略补上了这段差距的比例**：0 表示和 LRU 一样，1 表示达到最优。
+
+### 3. 第一轮：rank 策略为什么失败
+
+- 最初的想法是用 page 在 top-K 里的**排名**来决定换出谁。
+- 结果 G ≈ 0.027，几乎等于 LRU。
+- 反思后发现：v1 trace 只记录了被选中 page 的排名，**丢掉了两样关键信息**：分数的具体大小，以及没被选中的 page 当前的分数。排名只告诉你"第几"，不告诉你"差多少"，也不告诉你"刚掉出 top-K 的 page 还差一点就能回来"。
+
+### 4. 核心直觉：分数会延续
+
+- 一个 page 这一步分数高，下一步大概率也高，因为相邻 token 的 query 很像。
+- 所以分数本身就是"它很快还会被用到"的信号，**包括没被选中的 page**：分数排在第 65 名的 page，比排在第 500 名的更可能很快被选中。
+- LRU 只看"上次什么时候被选中"，完全忽略了这个信号。
+
+### 5. 策略本身：分数 EMA
+
+每一步、每一层：
+
+1. **归一化分数**：`z = (s − s_K) / (s_1 − s_K)`，其中 s_1 是最高分，s_K 是第 K 名的分数。这样每一步的分数尺度一致，第 K 名为 0，第 1 名为 1。
+2. **对 GPU 上每个驻留 page 更新**：`e ← α·e + (1−α)·z`，即指数滑动平均，α 是衰减系数，B=96 时为 0.5。
+3. **需要换出时**，在没被选中的驻留 page 里换出 **e 最小**的。
+
+开销：每个 page 只多存 1 个浮点数，每步做一次乘加。
+
+### 6. 一步步验证"为什么有效"（消融实验）
+
+| 变体 | G | 说明 |
+|---|---|---|
+| 只看当前一步的分数（KVDrive 式） | 0.244 | 分数本身就有用 |
+| **分数 EMA** | **0.279** | 平滑掉噪声后更好 |
+| 只在 page 被选中时才更新 | EMA 版 −1.596；InfLLM 式 0.028 | 远差于或几乎等于 LRU，说明**必须更新所有驻留 page** |
+| 用排名代替分数 | 0.016 | 几乎没用，说明**分数大小是关键**，这正是 rank 失败的原因 |
+| 衰减计数（只数被选中几次） | 0.044 | 频率信号很弱 |
+| LFU、ARC、LRU-2 等传统策略 | ≤ 0 | 都不如 LRU |
+| 线性回归预测下一次使用时间（学习式） | 0.300 | 只多一点，代价是每页存约 5 个数 |
+
+### 7. 叠加：按层分配槽位
+
+- 观察到差距集中在少数几层：有的层 page 选择很稳定，有的层变化剧烈。
+- 用 dev 上每层的 miss 曲线，在总预算 28·B 不变的前提下，给"难"的层多分槽位、"简单"的层少分。
+- 和分数 EMA 几乎线性叠加：0.279 + 0.127 ≈ **0.409**。
+
+### 8. 结果
+
+**模拟器（dev，14 篇）**：G 0.279，14/14 篇好于 LRU。换模型、换提示词、换 5 种预算都成立。
+
+**预注册后的 held-out（21 篇，只评估一次）**：
+- 分数 EMA：G **0.281** [0.277, 0.285]，**21/21** 篇好于 LRU。
+- 加按层分配：G **0.402**。
+- repeat miss 比 LRU 少 11.6%；加按层分配后少 16.6%。
+- 三条成功标准全部达到。
+
+**真实 GPU（L4，Qwen3-0.6B）**：
+- miss 数和模拟器一致，PCIe 流量少 10–19%。
+- **但延迟没降**：EMA 93.1 ms 对 LRU 86.6 ms。传输只占每步约 1%，时间花在固定开销上；连 Bélády 也不比 LRU 快。
+
+### 9. 一句话总结
+
+> 从 rank 失败中发现"分数大小 + 全体驻留 page 都要更新"是关键，于是用一个每页只存 1 个数的分数滑动平均来做换出决策。它稳定拿到 LRU→最优差距的 28%，加按层分配后是 40%，真实系统里 PCIe 流量减少 10–19%。但在小模型、单卡上，这些节省换不成延迟。
+
+**定位**：这个规则和 InfLLM 的衰减分数规则很接近，本质是把它用在 Quest 分数上。贡献在于系统比较、消融分析、按层分配的叠加，以及"什么时候省下的 miss 能变成延迟"的真实测量。
 
 ## Team
 
