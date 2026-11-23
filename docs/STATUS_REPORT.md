@@ -33,7 +33,7 @@
    - 真实卸载 cache 选出的 page 和生成的 token 都与 trace 完全一致，miss 数与模拟器吻合。
    - PCIe 流量减少：EMA 少 9–10%，分配 + EMA 少 13–19%。
    - **延迟没有改善**：LRU 86.6 ms/token，EMA 93.1 ms/token，Bélády 87.3 ms/token。这个规模下真正的 PCIe 时间不到 1 ms，时间主要花在每层的固定开销上。
-   - 另一个会话正在测一个免同步、zero-copy 的改进版本，结果还没出来。
+   - 后续测试换成免同步、zero-copy 的实现，延迟仍然不变，瓶颈是 CPU 派发。只算 GPU 实际忙的时间，Bélády 也只值约 3%，EMA 不到 1%。要让 miss 减少变成延迟收益，最直接的办法是加大 batch（未实测）。
 
 ### 0.2 第一部分：selection rank（§1–§8）
 
@@ -87,6 +87,7 @@
 | 12:34 | **只用 dev 冻结**按层分配和线性模型系数，在读到任何 held-out 输出之前提交 | `f87e982` [`splits/heldout_frozen_v1.json`](../splits/heldout_frozen_v1.json) |
 | 12:43 | **采集 21 篇 held-out，按预注册只评估一次**：三条标准全部通过 | `91f7041` [`heldout_results.md`](heldout_results.md) |
 | 13:29 | **GPU 延迟测试**：L4 上的真实两级卸载 cache | `f8ca5ab` [`gpu_benchmark.md`](gpu_benchmark.md) |
+| 13:48 | **GPU 后续测试**：免同步、zero-copy 实现，以及 GPU 忙碌时间分析；延迟仍不变，瓶颈是 CPU 派发 | `e327cfb` [`gpu_benchmark.md`](gpu_benchmark.md) |
 
 GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`dev_full`）和 40 篇 held-out 都用 NVIDIA L4。第二部分的全部采集和延迟测试也都在 L4 上。其余设置相同：bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
 
@@ -617,7 +618,28 @@ B=96 时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.6%，Bélády 41.
 
 所以"几乎零开销"对算法本身成立（每个 page 一个浮点数），但对这个未融合的 PyTorch 实现不成立，EMA 每 token 慢约 7.5%。要让 miss 减少变成延迟收益，传输必须占每步时间的很大一部分：更大的模型或 batch、更慢的链路，或者融合 kernel 去掉固定开销。这些都还没测。
 
-**进行中**：另一个会话正在测一个免同步、zero-copy gather 的版本（`gpu_bench.py` 的未提交修改），结果出来后补进 `gpu_benchmark.md` 和本节。
+**后续测试：免同步、zero-copy 实现（`e327cfb`）。** 目的是排除"每层同步和 CPU 拷贝掩盖了策略收益"这种可能。`gpu_bench.run(..., zc=True)` 不再做 host 同步，驱逐对象用固定大小（K）的张量操作选出；一个 Triton kernel 直接从映射的 pinned host memory 读取缺失的 page（微基准约 12 GB/s），不经过中转拷贝。
+
+- **正确性**（gov_report/00dfb，128 步）：token 和排名完全一致。LRU 19,538 次、Bélády 13,604 次 miss，与模拟器完全相同；EMA 17,929 对模拟器 17,937，分配 + EMA 17,380 对 17,377。
+- **延迟仍然不变**：LRU 89.1、EMA 95.5、分配 + EMA 95.5、Bélády 89.4 ms/token。同步不是瓶颈，瓶颈是 **CPU 派发**：Python 和 HF 的开销，加上每层约 60 次小 kernel 启动。
+- **只算 GPU 实际忙的时间**（`torch.profiler` 统计所有 kernel 和拷贝的耗时，减去 prefill，40 步，B=96）。它近似一个没有启动开销的实现（CUDA graph 或融合 kernel）：
+
+  | 配置 | GPU ms/步 | miss/步 |
+  |---|---|---|
+  | Quest，KV 全在 GPU（HF DynamicCache） | 35.0 | 0 |
+  | 卸载 + LRU | 16.7 | 194 |
+  | 卸载 + score EMA | 17.4 | 184 |
+  | 卸载 + 分配 + EMA | 17.8 | 182 |
+  | 卸载 + Bélády | 16.3 | 155 |
+
+  推导：
+  - 一次 miss 在 GPU 上很便宜。Bélády 每步少 39 次 miss，只省 0.45 ms，约每个 64 KiB page 11.5 µs。
+  - EMA 每步少约 10 次 miss（约 0.12 ms），但它没合并的几个逐元素 kernel 更贵，GPU 时间净多 0.7 ms。合并成每层一个 kernel 后大约能打平。
+  - 即使没有启动开销，最好的策略（Bélády）也只值约 3% 的 GPU 时间，EMA 能拿到的不到 1%。
+- **"KV 全在 GPU"这组对照偏大。** HF 的 `DynamicCache` 每步拼接整个 KV（约 3.4 GB），所以它的 GPU 工作量反而比卸载版多；墙钟时间只有 57 ms，是因为它启动的 kernel 更少。公平的对照应该用 static cache，还没做。
+- **什么时候 miss 才重要。** 8-head GQA 下每个 page 每层的 KV 字节数不随模型宽度增长，所以关键是 **batch**：每条序列都带来自己的 miss。外推估算（未实测）：batch 32 时 LRU 每步传约 400 MB（12 GB/s 下约 33 ms），EMA 9–10% 的字节节省约合每步 3 ms。
+
+GPU 忙碌时间来自每个配置在一篇文档上的一次 profile，只作参考（±0.2 ms）。
 
 ### 9.7 局限与待团队决定
 
@@ -626,12 +648,12 @@ B=96 时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.6%，Bélády 41.
 - 只有一个主模型（Qwen3-0.6B）和一种选择器；1.7B 和第二种 prompt 只在 dev 上抽查。
 - G 是相对 page 级 Bélády 算的；结论不能直接推到 token 级缓存。
 - InfLLM baseline 用 Quest 上界的 softmax 代替真实注意力质量。
-- 延迟只在一种 GPU、batch=1、3 篇文档上测过。
+- 延迟只在一种 GPU、batch=1、3 篇文档上测过；GPU 忙碌时间只 profile 了一篇文档。
 
 **待团队决定：**
 1. 报告里把策略写成"InfLLM 式衰减规则用在 Quest 分数上"（推荐），贡献是测量、消融和分配叠加。
 2. 按层分配（需要离线、和模型相关的曲线）是否算作报告里的"策略"。
-3. 延迟结论怎么写：只报"字节减少、延迟没变"，还是再投入去测一个传输占比大的场景（更大模型、batch 或融合 kernel）。
+3. 延迟结论怎么写：只报"字节减少、延迟没变"加上 GPU 忙碌时间的分析，还是再投入去测一个传输占比大的场景。最有希望的是加大 batch（按外推，batch 32 时 EMA 每步约省 3 ms），其次是融合 EMA kernel 和 static-cache 对照。
 4. 是否需要用真实注意力质量重做 InfLLM 对比（要新的采集字段）。
 5. 成员名单仍未统一（见 §7 第 5 项）。
 

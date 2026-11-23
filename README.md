@@ -77,6 +77,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 **真实 GPU（L4，Qwen3-0.6B）**：
 - miss 数和模拟器一致，PCIe 流量少 10–19%。
 - **但延迟没降**：EMA 93.1 ms 对 LRU 86.6 ms。传输只占每步约 1%，时间花在固定开销上；连 Bélády 也不比 LRU 快。
+- 换成免同步、zero-copy 的实现后延迟仍然不变，瓶颈是 CPU 派发。只算 GPU 实际忙的时间，Bélády 也只值约 3%，EMA 不到 1%；要让省下的 miss 变成延迟收益，最直接的办法是加大 batch（未实测）。
 
 ### 9. 一句话总结
 
