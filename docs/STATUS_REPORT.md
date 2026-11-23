@@ -716,3 +716,15 @@ python3 heldout.py eval HELDOUT_TRACES --frozen splits/heldout_frozen_v1.json --
 ```
 
 `DEV_TRACES` 和 `HELDOUT_TRACES` 是放 npz trace 的目录。以上脚本都需要 numpy。`gpu_bench.py` 在 Colab 上和模型一起运行。
+
+**不需要 trace 的复现。** 结果 CSV 已经放进仓库，每个目录都有 README，说明每列含义和对应的文档表格：
+
+- [`docs/results/longctx_heldout/`](results/longctx_heldout/)：`misses.csv`（held-out 原始 miss 计数，来自 `heldout.py eval`）、`doc_level.csv`、`frozen.json`。
+- [`docs/results/longctx_dev/`](results/longctx_dev/)：`efficient_dev.py` 和 `checks.py` 的全部输出（`misses.csv`、`misses_ext.csv`、`summary.csv`、`lodo.csv`、`checks_*.csv`、`checks_report.txt` 等）。
+- [`results_gpu/`](../results_gpu/)：GPU 测试汇总，`bench_summary.csv` 是未融合版，`bench_fused_summary.csv` 和 `gpu_busy_fused.json` 是融合版。逐步数据的 pickle 不在仓库里，在 Drive 上。
+
+只用 CSV 重算 held-out 的三条成功标准和 budget 曲线（与 [`heldout_results.md`](heldout_results.md) 完全一致）：
+
+```bash
+python3 recompute_heldout.py docs/results/longctx_heldout/misses.csv
+```
