@@ -271,7 +271,7 @@ def main():
         g = (sum(lru) - sum(pol)) / (sum(lru) - sum(opt)) if sum(lru) != sum(opt) else float("nan")
         lo, hi = kp.bootstrap(lru, pol, opt)
         out.append((label, B, B / 64, sum(pol), A, sum(pol) / A, (sum(pol) - C) / (A - C), g, lo, hi,
-                    1 - (sum(pol) - C) / (sum(lru) - C)))
+                    1 - (sum(pol) - C) / (sum(lru) - C) if sum(lru) != C else float("nan")))
     write(args.out / "summary.csv", ["policy", "B", "B_over_K", "misses", "accesses", "miss_rate",
                                      "repeat_miss_rate", "G", "G_lo", "G_hi", "repeat_miss_drop_vs_lru"], out)
     for r in out:

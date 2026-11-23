@@ -187,19 +187,38 @@ class ScoreCurrent(Policy):
 
 
 class ScoreEMA(Policy):
-    """Evict the lowest exponential moving average of the normalised score z (one float per resident)."""
+    """Evict the lowest exponential moving average of a per-step page signal (one float per resident).
+
+    signal: "z"    score relative to the K-th selected score, in units of (top1 - K-th)
+            "raw"  the raw selector score
+            "rank" rank-only information (schema v1): (K - rank + 1) / K if selected, else 0
+    mode:   "all"       every resident is updated every step (needs every resident's current score)
+            "selected"  a resident is updated only on steps where it is selected
+    """
     needs_scores = True
 
-    def __init__(self, K, alpha=0.5, **kw):
+    def __init__(self, K, alpha=0.5, mode="all", signal="z", **kw):
         super().__init__(K, **kw)
-        self.alpha = alpha
+        if mode not in ("all", "selected") or signal not in ("z", "raw", "rank"):
+            raise ValueError("bad mode or signal")
+        self.alpha, self.mode, self.signal = alpha, mode, signal
         self.ema = {}
+
+    def value(self, p):
+        if self.signal == "z":
+            return _z(self.srow, self.ranked, p)
+        if self.signal == "raw":
+            return self.srow[p]
+        r = self.rank_of.get(p)
+        return 0.0 if r is None else (self.K - r + 1) / self.K
 
     def begin(self, t, ranked, srow):
         super().begin(t, ranked, srow)
+        self.rank_of = {p: r for r, p in enumerate(ranked, 1)}
         a = self.alpha
-        for p in self.ema:
-            self.ema[p] = a * self.ema[p] + (1 - a) * _z(srow, ranked, p)
+        pages = self.ema if self.mode == "all" else [p for p in ranked if p in self.ema]
+        for p in pages:
+            self.ema[p] = a * self.ema[p] + (1 - a) * self.value(p)
 
     def key(self, p):
         return self.ema[p], self.last[p], self.hit[p], -p
@@ -211,7 +230,41 @@ class ScoreEMA(Policy):
     def admit(self, hits, misses):
         super().admit(hits, misses)
         for p in misses:
-            self.ema[p] = _z(self.srow, self.ranked, p)
+            self.ema[p] = self.value(p)
+
+
+class InfLLM(Policy):
+    """InfLLM-style unit eviction: a decayed, attention-weighted use frequency per resident page,
+    f <- d * f + a_p, where a_p is page p's share of the step's attention. Approximation: the true
+    attention mass is not in the trace, so a_p is the softmax of the Quest upper-bound scores over
+    the selected pages with temperature sqrt(head_dim) (pages not selected receive 0)."""
+    needs_scores = True
+
+    def __init__(self, K, decay=0.9, head_dim=128, **kw):
+        super().__init__(K, **kw)
+        self.decay, self.tau = decay, math.sqrt(head_dim)
+        self.f = {}
+
+    def begin(self, t, ranked, srow):
+        super().begin(t, ranked, srow)
+        top = srow[ranked[0]]
+        w = [math.exp((srow[p] - top) / self.tau) for p in ranked]
+        tot = sum(w)
+        self.share = {p: x / tot for p, x in zip(ranked, w)}
+        for p in self.f:
+            self.f[p] = self.decay * self.f[p] + self.share.get(p, 0.0)
+
+    def key(self, p):
+        return self.f[p], self.last[p], self.hit[p], -p
+
+    def dropped(self, p):
+        super().dropped(p)
+        del self.f[p]
+
+    def admit(self, hits, misses):
+        super().admit(hits, misses)
+        for p in misses:
+            self.f[p] = self.share[p]
 
 
 class Hybrid(Policy):
@@ -310,7 +363,7 @@ class Belady(Policy):
 
 
 POLICIES = dict(lru=LRU, fifo=FIFO, lfu=LFU, lru2=LRU2, arc=ARC, rank=RankFull,
-                score=ScoreCurrent, ema=ScoreEMA, hybrid=Hybrid, linear=Linear, belady=Belady)
+                score=ScoreCurrent, ema=ScoreEMA, infllm=InfLLM, hybrid=Hybrid, linear=Linear, belady=Belady)
 
 
 def future_uses(ranked):

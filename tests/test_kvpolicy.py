@@ -102,3 +102,23 @@ def test_efficient_dev_smoke(tmp_path, monkeypatch):
     rows = list(_csv.DictReader(open(tmp_path / "o" / "summary.csv")))
     assert any(r["policy"] == "belady" and abs(float(r["G"]) - 1) < 1e-9 for r in rows)
     assert any(r["policy"].startswith("linear-dagger") for r in rows)
+
+
+def test_ema_variants_and_infllm_run_and_bound():
+    R, S = synthetic(seed=7)
+    opt = kp.simulate(R, S, 12, "belady")["misses"]
+    for kw in (dict(mode="selected"), dict(signal="raw"), dict(signal="rank"),
+               dict(signal="rank", mode="selected")):
+        assert kp.simulate(R, S, 12, "ema", alpha=0.5, **kw)["misses"] >= opt
+    assert kp.simulate(R, S, 12, "infllm", decay=0.9)["misses"] >= opt
+    with pytest.raises(ValueError):
+        kp.simulate(R, S, 12, "ema", mode="bogus")
+
+
+def test_ema_alpha_zero_all_z_equals_current_score():
+    # alpha=0 with every resident updated is the current normalised score, whose order equals the
+    # current raw score order within a step
+    R, S = synthetic(seed=8)
+    a = kp.simulate(R, S, 12, "ema", alpha=0.0)["misses"]
+    b = kp.simulate(R, S, 12, "score")["misses"]
+    assert a == b
