@@ -26,11 +26,13 @@ leave-one-document-out (LODO) on the 14 dev documents unless the text says "fixe
 |---|---|---|---|---|
 | LRU | 6.03% | 0 | 0 | — |
 | **score EMA** (α by LODO = 0.5 in every fold) | **5.42%** | **+0.279 [0.274, 0.284]** | 11.6% | 14/14 |
-| current score (no averaging) | 5.50% | +0.244 [0.236, 0.251] | 10.1% | 14/14 |
+| current score (no averaging; KVDrive-style) | 5.50% | +0.244 [0.236, 0.251] | 10.1% | 14/14 |
 | **per-layer allocation + score EMA** | **5.14%** | **+0.409** | ~16% | — |
 | per-layer allocation + LRU | 5.75% | +0.127 [0.113, 0.140] | 5.3% | — |
 | linear next-use regression (DAgger) | 5.38% | +0.300 [0.295, 0.305] | 12.4% | 14/14 |
-| InfLLM-style decayed attention frequency | 5.97% | +0.028 | 1.2% | 14/14 |
+| InfLLM-style decayed sum, every resident, softmax (d by LODO = 0.5; d=0.1: G 0.264) | 5.44% | +0.269 [0.263, 0.274] | 11.2% | 14/14 |
+| InfLLM-style, updated only when selected (earlier proxy) | 5.97% | +0.028 | 1.2% | 14/14 |
+| decayed selection count, no score (MoE-style, d=0.8) | 5.93% | +0.044 | 1.8% | 14/14 |
 | rank policy from stage 1/2 (LODO) | 5.97% | +0.027 | 1.1% | 14/14 |
 | ARC / LRU-2 / LFU / FIFO | 6.04 / 6.13 / 7.85 / 8.18% | −0.01 / −0.05 / −0.84 / −1.00 | — | 3 / 0 / 0 / 0 |
 | Bélády (offline) | 3.86% | 1 | 41.5% | — |
@@ -96,14 +98,28 @@ miss starts at its current `z`.
    - "Score gap to the K-th page" orders candidates the same way as the current score within a step,
      so it is the same policy. Normalising the gap by (s_1 − s_K) matters only through the EMA (z vs
      raw: 0.279 vs 0.269).
-9. **InfLLM-style baseline.** f ← d·f + a, where a is the page's share of the step's attention.
-   - Approximation: the trace has no true attention mass, so a is the softmax of the Quest upper bounds
-     over the selected pages with temperature √128, and unselected pages get 0.
-   - LODO G is +0.028 at B=96 (+0.01 to +0.11 across budgets, decay 0.5 chosen). With decay 0.9 it is
-     worse than LRU (G −0.11 to −0.14).
-   - Like the rank variant, it only sees pages when they are selected, which is why it falls into the
-     same regime.
-   - Caveat: with true attention mass it might do better. Our version is a proxy.
+9. **InfLLM-style baselines** (see `docs/related_work_matrix.md`, "Policy baselines from related work").
+   - InfLLM's rule is s ← d·s + attention mass. Implemented over every resident page, with a softmax
+     of the Quest bounds over residents standing in for attention probabilities, it gives G +0.269 at
+     B=96 (d=0.5 by LODO; InfLLM's d=0.1 gives 0.264).
+   - It tracks our score EMA within 0.01–0.04 G at every budget. **Our rule should be presented as the
+     InfLLM-style decayed score rule applied to Quest upper-bound scores of every resident**, not as
+     a new rule.
+   - Updating only selected pages (our first proxy) gives G +0.028.
+   - Summing raw unnormalised scores with d ≥ 0.5 is worse than LRU (−0.04 to −0.50).
+   - So the essential choices are the update scope (every resident) and a bounded per-step value.
+   - KVDrive's current-step-score eviction is our "current score" row (G +0.244).
+   - A score-free decayed selection count (the MoE-caching analogue) gives only G +0.044, against the
+     roughly 27% reported for MoE expert caching.
+   - LRU tie-break: our default (hits ranked above newly fetched misses within a step) is HiSparse's
+     rule. Reversing it costs G −0.044, and page-ID ties cost −0.029.
+   - KVDrive-style exact multiple-choice knapsack allocation on the same per-layer miss curves equals
+     our greedy allocation (0.409 vs 0.409 with EMA at B=96, 0.545 vs 0.540 at B=128).
+   - Budgets proportional to the per-layer LRU–Bélády gap are much worse than uniform (G −0.32 with
+     EMA at B=96).
+   - HiSparse reports little residual value in cross-layer coordination, which differs from our
+     allocation gain. The possible reasons (granularity, budget, model, criterion) are listed in the
+     related-work matrix; none is tested.
 10. **"Don't admit" and additivity.**
    - Under HiSparse semantics a selected page must be loaded, so "not admitting" can only mean
      "evict right after use". That action is already in every policy's action space.
@@ -130,6 +146,14 @@ miss starts at its current `z`.
   distance) at B=96: z −4.0, z_ema −1.1, last rank +0.97, log age +0.53, log count −0.22, log
   residency −0.03. A higher current score means a sooner reuse; the score features dominate.
 
+### Novelty boundaries
+- Not new: score-based replacement in recallable caches (InfLLM, ArkVale, KVDrive), decayed
+  accumulated-score replacement (InfLLM), per-layer budget allocation (KVDrive), and frequency-style
+  policies not beating LRU (RetroInfer, PQCache).
+- What this study adds: the systematic page-level comparison under Quest bounds with G and CIs, the
+  decay-by-budget sweep, the ablations isolating the needed information, and the concentration of
+  the gap in a few layers with curve-based allocation stacking on the score rule.
+
 ### Learned policies (no RL)
 - A linear next-use-distance regression over 6 features (age, z, z_ema, log count, last rank, log
   residency), ridge-fitted with LODO.
@@ -144,7 +168,8 @@ miss starts at its current `z`.
 11. **Qwen3-1.7B, 4 dev documents, same frozen rules.** One QMSum document stopped at 292 steps on the
     32-gram loop rule; the others reached 1024 tokens.
     - At B=96: LRU 6.19%, Bélády 3.99%. Score EMA α=0.5 gives G +0.281 (0.6B on the same documents:
-      +0.272), current score +0.246, InfLLM-style −0.105.
+      +0.272), current score +0.246, InfLLM-style updated only on selection (d=0.9) −0.105. The
+      every-resident InfLLM variant was not run on these documents.
     - The best α is still 0.5 (0.3: 0.274, 0.7: 0.269). 4/4 documents beat LRU.
 12. **Different summary prompt, 3 dev documents** (topic/section headings): EMA α=0.5 gives G +0.276
     (0.6B with the original prompt on the same documents: +0.273). 3/3 documents beat LRU. B=128
@@ -158,7 +183,7 @@ miss starts at its current `z`.
 | score (current) | 0 | gather B scores; argmin | Quest scores (already computed) |
 | **score EMA** | 1 float | gather B scores, B FMAs, normalise by s_1, s_K; argmin | Quest scores |
 | EMA, selected-only | 1 float | K FMAs | (fails) |
-| InfLLM-style | 1 float | softmax over K, B FMAs | Quest scores |
+| InfLLM-style (every resident) | 1 float | softmax over B, B FMAs | Quest scores |
 | linear next-use | ~5 floats | about 6 MACs × candidates | Quest scores and counters |
 | per-layer allocation | 0 | 0 (a 28-entry budget table) | offline dev curves |
 | Bélády | — | future knowledge | not implementable |
@@ -203,8 +228,9 @@ the model.
     B = 72, 80, 96, 128, 256).
   - Per-layer allocation + score EMA, with the allocation computed on all 14 dev documents (per-layer
     budgets written into the preregistration).
-  - Secondary: current score, linear next-use model (coefficients refit on all 14 dev documents and
-    frozen), InfLLM-style (decay 0.5).
+  - Secondary: current score (KVDrive-style), InfLLM-style decayed sum over residents (d=0.5),
+    decayed count (d=0.8), and the linear next-use model (coefficients refit on all 14 dev documents
+    and frozen).
   - Bélády as the reference.
 - **Primary outcome:** G of score EMA versus LRU at B=96, pooled over held-out documents, with a
   2000-replicate document-clustered bootstrap 95% CI.
@@ -222,8 +248,10 @@ the model.
    report.
 3. Whether to widen the allocation grid (needed for B/K=1.125 and 4) before freezing.
 4. Which 2–3 policies go to the GPU benchmark.
-5. Whether the InfLLM comparison needs a version with true attention mass, which needs a new
-   capture field.
+5. Whether the InfLLM comparison needs true attention mass (a new capture field) to replace the
+   softmax-of-bounds proxy.
+6. How to frame the policy in the report: as InfLLM's decayed rule on Quest scores (recommended), with
+   the contribution being the measurement and ablations.
 
 Housekeeping: `distill_kvrl.py` (abandoned RL distillation) is still untracked, unused and not
 deleted.

@@ -84,3 +84,45 @@ The Scissorhands and H₂O quotes were extracted through a page-reading tool rat
 - **Scissorhands:** the last ~2% of the text (likely references or appendix).
 - **Quote extraction:** the Scissorhands and H₂O quotes came through a page-reading tool; spot-check them against the PDF before quoting.
 - **TOVA:** cited by ArkVale as a baseline but not read by us.
+
+## Policy baselines from related work (efficient-policy study, 2026-11-23)
+
+Sources forwarded by the coordinating session. "Method read" means its subagent read the method
+section; the other entries are abstract-level and must be checked before they are cited.
+
+| Work | Replacement / allocation rule | Status | Our replay (dev, B=96, LODO G vs LRU; LRU 6.03%, Bélády 3.86%) |
+|---|---|---|---|
+| **InfLLM** (arXiv:2402.04617, App. A) | s_b ← d·s_b + Σ attention mass on the unit, d=0.1; evict the lowest s_b | method read | Decayed sum over **every resident**, with softmax of the Quest bounds over residents: G +0.269 (d=0.5, LODO) and +0.264 at InfLLM's d=0.1. Updating only on selection (the earlier proxy) gives G +0.028. |
+| **KVDrive** (arXiv:2605.18071, §5) | (1) evict the lowest **current-step** attention score, ported to Quest/ShadowKV/RetroInfer and compared with LRU; (2) offline profiling plus a multiple-choice knapsack (greedy) for per-layer×head windows under a total GPU budget | method read | (1) The current-score policy gives G +0.244. (2) An exact knapsack on per-layer miss curves gives the same allocation as our greedy (G with EMA 0.409 vs 0.409; with LRU 0.127 vs 0.127). |
+| **HiSparse** (arXiv:2608.07009) | token-granular LRU; hits promoted above newly fetched misses within a step | method read | Our default LRU tie-break is the same "hits above misses" order. The alternatives are worse: misses kept above hits gives G −0.044, page-ID ties −0.029. HiSparse reports little residual value in cross-layer coordination, whereas our per-layer allocation adds G +0.127 (LRU) and +0.13 on top of EMA at B=96 (see below). |
+| **MoE expert caching** (arXiv:2611.15842) | a decayed usage count closes about 27% of the gap; learned scoring is no better; evicting by the current router logit moves 46% more than LRU | abstract-level | A decayed selection count with no score gives G +0.044 (d=0.8). Scores matter much more here than in the MoE setting. Our current-score policy beats LRU (G +0.244), unlike their current-logit result. |
+| RetroInfer / PQCache | LRU best among tried; LFU ≈ LRU | abstract-level | Consistent with our results: LFU −0.84, LRU-2 −0.05, ARC −0.01. |
+
+**How our score EMA relates to InfLLM.**
+- Our rule is e ← α·e + (1−α)·z over every resident, where z is the Quest bound normalised by the best and K-th selected scores.
+- InfLLM's rule is s ← d·s + a, where a is attention mass.
+- With the same update set and the same input the two differ only by the factor (1−α), which does not change the order apart from how a newly admitted page is initialised.
+- Measured: InfLLM-style softmax over residents with d=0.5 gives G 0.269, and our EMA with α=0.5 gives 0.279. They agree on every budget to within 0.01–0.04, and the decay sweeps have the same shape.
+- **Our policy should be described as an InfLLM-style decayed score rule applied to Quest upper-bound scores of every resident page**, not as a new rule.
+- What matters, measured:
+  - (a) **Update every resident with its current score.** Updating only selected pages gives G ≤ 0.03, or below LRU.
+  - (b) **Normalise or bound the per-step value.** A raw-score sum with d ≥ 0.5 is worse than LRU (G −0.04 to −0.50), because unnormalised sums let a page's age dominate.
+  - (c) **Choose d by budget.** The best d is 0.1–0.5 at B/K ≤ 2 and higher at B/K = 4.
+
+**Allocation and HiSparse's "little cross-layer value".** Possible reasons for the disagreement, none tested:
+- (i) Granularity: we cache 16-token pages.
+- (ii) Budget: at B/K = 4 our allocation gain also vanishes, and HiSparse's headline is B/K = 2 at token level.
+- (iii) Model and selector: our gap is concentrated in a few layers (11, 16, 24, 25).
+- (iv) Allocation criterion: per-layer miss curves. Budgets proportional to the per-layer LRU–Bélády gap are much **worse** than uniform (G −0.32 with EMA at B=96), because layers with a small gap are pushed down to K slots.
+
+**Claims we must not make (in addition to those above):**
+- Using attention or selector scores for recallable-cache replacement is not new (InfLLM, ArkVale, KVDrive).
+- Decayed accumulated-score replacement is not new (InfLLM).
+- Per-layer GPU budget allocation in a recallable cache is not new (KVDrive).
+- "Frequency-style policies are no better than LRU" is not new (RetroInfer, PQCache).
+
+**What we can claim (dev so far):**
+- A systematic comparison, under Quest upper-bound scores and a page-level recallable cache, of score-aware, frequency and learned (non-RL) policies, measured as the share of the Bélády gap closed, with LODO tuning and document-clustered CIs.
+- A decay-rate sweep showing the best decay rises with budget.
+- Ablations that isolate the needed information: the current scores of unselected residents. Rank-only information, as in trace v1, recovers almost nothing.
+- The gap is concentrated in a few layers. Allocation by per-layer miss curves (equivalent to an exact knapsack) adds to the score rule. This is set against KVDrive's transfer-benefit criterion and HiSparse's "little cross-layer value".
