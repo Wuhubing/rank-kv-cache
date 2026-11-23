@@ -52,3 +52,13 @@ The original long-context trace and GPU-result folders were excluded at the user
 | `results/systems_evaluation.png` | Plot of measured synthetic results |
 
 The validation branch deliberately preserves production defects for review. The report gives a specific remedy and a regression check for each one.
+
+## Open the portable branch
+
+The accompanying `rank-kv-cache-validation.bundle` contains this branch and its history. It can be cloned without GitHub access:
+
+```bash
+git clone --branch validation/comprehensive-systems-evaluation-2026-11-23 /path/to/rank-kv-cache-validation.bundle rank-kv-validation
+```
+
+The delivered branch is local; it has not been pushed to GitHub.

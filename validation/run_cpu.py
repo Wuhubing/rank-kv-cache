@@ -9,7 +9,6 @@ import hashlib
 import importlib.metadata
 import json
 import platform
-import subprocess
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -19,6 +18,7 @@ import evaluate
 import kvpolicy as kp
 
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_COMMIT = "24e5018341f0a0910a2c6e7f41bd7081522a2bc0"
 
 
 def audit_rank_tables():
@@ -98,7 +98,7 @@ def main():
     args = parser.parse_args()
     source_files = ["kvpolicy.py", "heldout.py", "gpu_bench.py", "efficient_dev.py", "checks.py"]
     result = {
-        "source_commit": subprocess.check_output(["git", "rev-parse", "origin/efficient-policy"], cwd=ROOT, text=True).strip(),
+        "source_commit": SOURCE_COMMIT,
         "source_sha256": {p: hashlib.sha256((ROOT / p).read_bytes().replace(b"\r\n", b"\n")).hexdigest() for p in source_files},
         "environment": {"python": platform.python_version(), "platform": platform.platform(),
                         "numpy": importlib.metadata.version("numpy")},
