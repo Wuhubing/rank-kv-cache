@@ -49,6 +49,6 @@ Latency or throughput (needs the GPU benchmark); other models, prompts or select
 on dev only cover Qwen3-1.7B and one second prompt); token-level granularity.
 
 ## Notes
-- Held-out traces and per-document CSVs exist only on the Colab runtime (`/content/heldout`,
-  `/content/results/heldout`). Drive was not mounted this session, so they are not backed up yet.
+- Held-out traces (21 npz) are backed up to Drive `MyDrive/rank-kv-cache/longctx_v1_heldout/`
+  (md5-verified), and `misses.csv`, `doc_level.csv`, `frozen.json` to `MyDrive/rank-kv-cache/results_heldout/`.
 - `distill_kvrl.py` remains untracked and unused.
