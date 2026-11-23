@@ -1,0 +1,23 @@
+........................................................................ [ 59%]
+.................................xxxxxxxxxxx.xx..                        [100%]
+============================== warnings summary ===============================
+tests/test_kvpolicy.py::test_efficient_dev_smoke
+  C:\Users\hp\anaconda3\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1437: RuntimeWarning: All-NaN slice encountered
+    return _nanquantile_unchecked(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+XFAIL validation/test_contracts.py::test_frozen_alpha_controls_evaluation - F1: heldout.configs ignores frozen alpha
+XFAIL validation/test_contracts.py::test_renamed_development_trace_is_rejected - F2: heldout validates filenames only, not document IDs
+XFAIL validation/test_contracts.py::test_auc_ties_are_half_credit_and_order_invariant[labels0] - F4: equal scores get arbitrary ordinal AUC ranks
+XFAIL validation/test_contracts.py::test_auc_ties_are_half_credit_and_order_invariant[labels1] - F4: equal scores get arbitrary ordinal AUC ranks
+XFAIL validation/test_contracts.py::test_invalid_ranked_pages_are_rejected[ranked0] - F6: NPZ simulator silently accepts malformed selections
+XFAIL validation/test_contracts.py::test_invalid_ranked_pages_are_rejected[ranked1] - F6: NPZ simulator silently accepts malformed selections
+XFAIL validation/test_contracts.py::test_nonfinite_selected_score_is_rejected - F6: NPZ load accepts nonfinite scores for selected pages
+XFAIL validation/test_contracts.py::test_allocator_rejects_infeasible_budget - F9: greedy allocation exceeds an infeasible total
+XFAIL validation/test_contracts.py::test_zero_weights_produce_feasible_allocation - F9: zero allocation weights produce scalar raw and IndexError
+XFAIL validation/test_contracts.py::test_zero_weight_rank_policy_preserves_lru_baseline - F5: RankFull omits the hit/miss LRU tie key
+XFAIL validation/test_contracts.py::test_partial_check_resume_schedules_missing_document - F3: resume treats one document as a completed config/budget
+XFAIL validation/test_gpu_contracts.py::test_tiered_decode_releases_prefill_cache_before_memory_measurement - F7: prefill ModelOutput retains full cache into decode
+XFAIL validation/test_gpu_contracts.py::test_warmup_is_applied_to_latency_samples - F8: warmup argument does not filter returned samples
+108 passed, 13 xfailed, 1 warning in 12.44s
