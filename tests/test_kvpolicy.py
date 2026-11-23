@@ -122,3 +122,32 @@ def test_ema_alpha_zero_all_z_equals_current_score():
     a = kp.simulate(R, S, 12, "ema", alpha=0.0)["misses"]
     b = kp.simulate(R, S, 12, "score")["misses"]
     assert a == b
+
+
+def test_lru_tie_variants_and_decayed_sum():
+    R, S = synthetic(seed=9)
+    opt = kp.simulate(R, S, 12, "belady")["misses"]
+    assert kp.simulate(R, S, 12, "lru", tie="miss_first")["misses"] == kp.simulate(R, S, 12, "lru")["misses"]
+    for tie in ("hit_first", "id"):
+        assert kp.simulate(R, S, 12, "lru", tie=tie)["misses"] >= opt
+    for v in ("softmax", "raw", "indicator"):
+        for d in (0.0, 0.1, 0.9):
+            assert kp.simulate(R, S, 12, "dsum", decay=d, v=v)["misses"] >= opt
+    # d=0 with raw values is the current-score policy
+    assert kp.simulate(R, S, 12, "dsum", decay=0.0, v="raw")["misses"] == kp.simulate(R, S, 12, "score")["misses"]
+
+
+def test_allocate_dp_is_optimal_and_no_worse_than_greedy():
+    import itertools
+    rng = np.random.default_rng(1)
+    grid = [8, 12, 16, 24]
+    curves = {l: dict(zip(grid, sorted(rng.integers(0, 100, 4))[::-1])) for l in range(3)}
+    total = 44
+    dp = kp.allocate_dp(curves, 3, total, grid)
+    brute = min((sum(curves[l][g] for l, g in enumerate(c)), c)
+                for c in itertools.product(grid, repeat=3) if sum(c) <= total)
+    assert sum(curves[l][dp[l]] for l in range(3)) == brute[0]
+    gr = kp.allocate(curves, 3, total, grid)
+    assert sum(curves[l][dp[l]] for l in range(3)) <= sum(curves[l][gr[l]] for l in range(3))
+    pr = kp.allocate_proportional({0: 1, 1: 0, 2: 3}, 3, total, grid)
+    assert sum(pr.values()) <= total and pr[2] >= pr[1]

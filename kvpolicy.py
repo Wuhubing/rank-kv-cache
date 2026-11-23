@@ -44,7 +44,22 @@ class Policy:
 
 
 class LRU(Policy):
-    pass
+    """tie: how pages last selected at the same step are ordered (key ascending = evicted first)
+       "miss_first" (default, as replay.py): among equals, pages that were misses leave first
+       "hit_first": pages that were hits leave first (newly loaded pages are protected)
+       "id": larger page ID leaves first"""
+    def __init__(self, K, tie="miss_first", **kw):
+        super().__init__(K, **kw)
+        if tie not in ("miss_first", "hit_first", "id"):
+            raise ValueError("bad tie")
+        self.tie = tie
+
+    def key(self, p):
+        if self.tie == "miss_first":
+            return self.last[p], self.hit[p], -p
+        if self.tie == "hit_first":
+            return self.last[p], not self.hit[p], -p
+        return self.last[p], -p
 
 
 class FIFO(Policy):
@@ -233,6 +248,53 @@ class ScoreEMA(Policy):
             self.ema[p] = self.value(p)
 
 
+class DecayedSum(Policy):
+    """InfLLM-style decayed sum over every resident: s <- d*s + v, evict the lowest s.
+    v: "softmax"   softmax of the Quest scores over the current residents (temperature sqrt(head_dim)),
+                   the closest analogue of InfLLM's attention probabilities
+       "raw"       the raw Quest score (order-equivalent to ScoreEMA(signal="raw", alpha=d) up to
+                   the value given to newly admitted pages)
+       "indicator" 1 if selected else 0: a decayed selection count with no score (MoE-style frequency)
+    A newly admitted page starts at its current v."""
+    needs_scores = True
+
+    def __init__(self, K, decay=0.5, v="softmax", head_dim=128, **kw):
+        super().__init__(K, **kw)
+        if v not in ("softmax", "raw", "indicator"):
+            raise ValueError("bad v")
+        self.decay, self.v, self.tau = decay, v, math.sqrt(head_dim)
+        self.s = {}
+
+    def begin(self, t, ranked, srow):
+        super().begin(t, ranked, srow)
+        pages = set(self.s) | set(ranked)
+        if self.v == "softmax":
+            top = max(srow[p] for p in pages)
+            w = {p: math.exp((srow[p] - top) / self.tau) for p in pages}
+            z = sum(w.values())
+            self.val = {p: x / z for p, x in w.items()}
+        elif self.v == "raw":
+            self.val = {p: srow[p] for p in pages}
+        else:
+            sel = set(ranked)
+            self.val = {p: float(p in sel) for p in pages}
+        d = self.decay
+        for p in self.s:
+            self.s[p] = d * self.s[p] + self.val[p]
+
+    def key(self, p):
+        return self.s[p], self.last[p], self.hit[p], -p
+
+    def dropped(self, p):
+        super().dropped(p)
+        del self.s[p]
+
+    def admit(self, hits, misses):
+        super().admit(hits, misses)
+        for p in misses:
+            self.s[p] = self.val[p]
+
+
 class InfLLM(Policy):
     """InfLLM-style unit eviction: a decayed, attention-weighted use frequency per resident page,
     f <- d * f + a_p, where a_p is page p's share of the step's attention. Approximation: the true
@@ -363,7 +425,7 @@ class Belady(Policy):
 
 
 POLICIES = dict(lru=LRU, fifo=FIFO, lfu=LFU, lru2=LRU2, arc=ARC, rank=RankFull,
-                score=ScoreCurrent, ema=ScoreEMA, infllm=InfLLM, hybrid=Hybrid, linear=Linear, belady=Belady)
+                score=ScoreCurrent, ema=ScoreEMA, infllm=InfLLM, dsum=DecayedSum, hybrid=Hybrid, linear=Linear, belady=Belady)
 
 
 def future_uses(ranked):
@@ -462,3 +524,46 @@ def allocate(curves, L, total, grid):
         used += grid[alloc[best] + 1] - grid[alloc[best]]
         alloc[best] += 1
     return {l: grid[i] for l, i in alloc.items()}
+
+
+def allocate_dp(curves, L, total, grid):
+    """Optimal multiple-choice knapsack: pick one grid budget per layer, minimising total misses
+    with sum(budgets) <= total (KVDrive-style offline allocation, solved exactly)."""
+    unit = math.gcd(*grid)
+    cap = total // unit
+    INF = float("inf")
+    best = [0.0] + [INF] * cap  # best[c] = min misses using exactly c units over layers so far
+    choice = []
+    for l in range(L):
+        new = [INF] * (cap + 1)
+        arg = [None] * (cap + 1)
+        for c in range(cap + 1):
+            if best[c] == INF:
+                continue
+            for g in grid:
+                c2 = c + g // unit
+                if c2 <= cap and best[c] + curves[l][g] < new[c2]:
+                    new[c2] = best[c] + curves[l][g]
+                    arg[c2] = (c, g)
+        best = new
+        choice.append(arg)
+    c = min(range(cap + 1), key=lambda i: best[i])
+    out = {}
+    for l in reversed(range(L)):
+        prev, g = choice[l][c]
+        out[l] = g
+        c = prev
+    return out
+
+
+def allocate_proportional(weights, L, total, grid):
+    """Budgets proportional to a per-layer weight (e.g. the LRU-Belady gap), on the grid,
+    each layer at least grid[0], never exceeding the total."""
+    w = np.maximum(np.array([weights[l] for l in range(L)], float), 0)
+    spare = total - L * grid[0]
+    raw = grid[0] + (spare * w / w.sum() if w.sum() > 0 else 0)
+    out = {l: max(g for g in grid if g <= max(grid[0], raw[l])) for l in range(L)}
+    while sum(out.values()) > total:
+        l = max(out, key=lambda k: out[k])
+        out[l] = max(g for g in grid if g < out[l])
+    return out

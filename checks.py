@@ -28,6 +28,14 @@ for a in (0.3, 0.5, 0.7):
     EXTRA[f"ema_raw:{a}"] = ("ema", dict(alpha=a, signal="raw"))
 for d in (0.5, 0.8, 0.9, 0.95, 0.99):
     EXTRA[f"infllm:{d}"] = ("infllm", dict(decay=d))
+# Related-work baselines (docs/related_work_matrix.md, "Policy baselines from related work").
+EXTRA["lru_hit_first"] = ("lru", dict(tie="hit_first"))
+EXTRA["lru_id"] = ("lru", dict(tie="id"))
+for d in (0.1, 0.5, 0.9):
+    EXTRA[f"dsum_softmax:{d}"] = ("dsum", dict(decay=d, v="softmax"))
+    EXTRA[f"dsum_raw:{d}"] = ("dsum", dict(decay=d, v="raw"))
+for d in (0.5, 0.8, 0.9, 0.95, 0.99):
+    EXTRA[f"dcount:{d}"] = ("dsum", dict(decay=d, v="indicator"))
 
 FAMILIES = {
     "ema(z,all)": ["ema:0.1", "ema:0.2", "ema:0.3", "ema:0.4", "ema:0.5", "ema:0.6", "ema:0.7",
@@ -39,8 +47,12 @@ FAMILIES = {
     "infllm": [c for c in EXTRA if c.startswith("infllm:")],
     "rank(stage1-2)": [f"rank:{d}:{b}" for d in (0, 4, 8) for b in (0, 2, 4)],
     "hybrid": [f"hybrid:{w}:{a}" for w in (1, 4, 16, 64) for a in (0, 0.5, 0.8)],
+    "InfLLM decayed sum (softmax, all residents)": [f"dsum_softmax:{d}" for d in (0.1, 0.5, 0.9)],
+    "decayed sum (raw score)": [f"dsum_raw:{d}" for d in (0.1, 0.5, 0.9)],
+    "decayed count (no score)": [f"dcount:{d}" for d in (0.5, 0.8, 0.9, 0.95, 0.99)],
 }
 FIXED = ["lru", "fifo", "lfu", "lru2", "arc", "score", "belady"]
+SINGLE = ["lru_hit_first", "lru_id"] + [c for c in EXTRA if c.startswith(("dsum_", "dcount:"))]
 
 
 def run_doc(args):
@@ -145,7 +157,7 @@ def main():
     for B in budgets:
         if B not in M["lru"]:
             continue
-        for c in FIXED:
+        for c in FIXED + [c for c in SINGLE if B in M[c]]:
             rows.append(dict(policy=c, B=B, **stats(vec(c, B), B)))
         for fam in FAMILIES:
             if not all(B in M[c] for c in FAMILIES[fam]):
@@ -225,6 +237,29 @@ def main():
         alloc_rows.append((B, "G_ema|alloc_lru|alloc_ema", e_only, a_only, both, e_only + a_only, "", ""))
     write(args.res / "checks_alloc.csv", ["B", "base", "uniform", "alloc_lodo", "alloc_oracle",
                                           "share_of_oracle", "fold_std", "median_alloc"], alloc_rows)
+
+    # Allocation methods: ours (greedy on per-layer miss curves), KVDrive-style exact multiple-choice
+    # knapsack on the same curves, and budgets proportional to the per-layer LRU-Belady gap.
+    report.append("\n== allocation methods (LODO; total = 28*B): greedy vs exact knapsack vs gap-proportional")
+    meth_rows = []
+    for B in (80, 96, 128):
+        lru_tot, opt_tot = vec("lru", B).sum(), vec("belady", B).sum()
+        for base in ("lru", "ema"):
+            tot = {"greedy": 0, "knapsack": 0, "gap_prop": 0}
+            for held in docs:
+                tr = [d for d in docs if d != held]
+                cfg = "lru" if base == "lru" else min(ema_grid, key=lambda c: (sum(M[c][B][d][1] for d in tr), c))
+                curves = {l: {g: sum(ML[cfg][g][d, l] for d in tr) for g in GRID} for l in range(L)}
+                gap = {l: sum(ML["lru"][B][d, l] - ML["belady"][B][d, l] for d in tr) for l in range(L)}
+                plans = {"greedy": kp.allocate(curves, L, L * B, GRID),
+                         "knapsack": kp.allocate_dp(curves, L, L * B, GRID),
+                         "gap_prop": kp.allocate_proportional(gap, L, L * B, GRID)}
+                for k, a in plans.items():
+                    tot[k] += sum(ML[cfg][a[l]][held, l] for l in range(L))
+            g = {k: (lru_tot - v) / (lru_tot - opt_tot) for k, v in tot.items()}
+            meth_rows.append((B, base, g["greedy"], g["knapsack"], g["gap_prop"]))
+            report.append(f"B={B:>3} base={base:<4} G greedy {g['greedy']:+.3f}  knapsack {g['knapsack']:+.3f}  gap-proportional {g['gap_prop']:+.3f}")
+    write(args.res / "checks_alloc_methods.csv", ["B", "base", "G_greedy", "G_knapsack", "G_gap_prop"], meth_rows)
 
     # C10: use-once (no-admission) evictions.
     by = args.res / "bypass.csv"
