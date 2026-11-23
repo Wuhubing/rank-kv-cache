@@ -1,12 +1,41 @@
-# 项目近况报告：Selection Rank 能否改进 KV Cache 替换？
+# 项目近况报告：KV Cache 替换策略（rank 检验 → 高效替换策略）
 
-**截至 2026-11-22 · 分支 `stage1-2` · 已完成 proposal 规定的正式检验：20 篇 dev 调参并预注册（`2f6a9bd`），40 篇 held-out 采集一次、评估一次**
+**截至 2026-11-23 · 分支 `efficient-policy`（draft PR #3，叠在 `stage1-2` / PR #2 之上）**
 
-本文汇总从 proposal 到现在做过的全部工作：每一步做了什么、用什么实现、得到什么数据，以及每条结论是怎么推出来的。所有数字都能在 [`docs/results/`](results/) 下的 CSV/TXT 中找到原始输出，文末给出复现命令。
+本报告分两部分：
+
+- **第一部分（§1–§8）：selection rank 能否改进替换。** 按 proposal 完成正式检验：20 篇 dev 调参并预注册（`2f6a9bd`），40 篇 held-out 采集一次、评估一次。结论是负面的。
+- **第二部分（§9）：新主线"高效替换策略"。** 在更长的 trace 上找极小、因果、低代价的替换策略。21 篇 held-out 预注册检验，三条标准全部通过；之后在 L4 上做了真实卸载 cache 的延迟测试。
+
+每一步做了什么、用什么实现、得到什么数据、每条结论怎么推出来的，都写在对应小节里。第一部分的原始输出在 [`docs/results/`](results/) 下；第二部分的详细文档是 [`efficient_policy_dev.md`](efficient_policy_dev.md)、[`heldout_results.md`](heldout_results.md)、[`gpu_benchmark.md`](gpu_benchmark.md)。两部分的复现命令分别在 §8 和 §9.8。
 
 ---
 
 ## 0. 一页摘要
+
+### 0.1 新主线：高效替换策略（§9）
+
+**正式结论（21 篇 held-out，预注册，只评估一次）：一个每个 page 只存一个浮点数的 score EMA 策略，稳定地填上了 LRU 到 Bélády 差距的 28%；再加上按层分配 slot，能填上 40%。但在 L4 + Qwen3-0.6B 上，省下的传输换不成延迟。**
+
+1. **为什么换主线。** 第一部分发现 rank 没用；消融（§9.4）说明原因是 trace v1 只记录了排名，丢掉了未选中 page 的当前分数，而这个分数恰恰是驱逐最需要的信息。
+2. **新设定。** trace v2 记录每一步所有历史 page 的 Quest 分数；上下文 16–32K token；带思考的长摘要，生成 473–1016 步。主 budget 是 B=96（B/K=1.5），此时 LRU 的 miss rate 约 6%，Bélády 约 3.9%。
+3. **held-out 结果（B=96）**：
+
+   | 标准 | 阈值 | 结果 |
+   |---|---|---|
+   | score EMA 的 G，CI 下界 | > 0.15 | **G 0.281**，CI [0.277, 0.285] |
+   | EMA 优于 LRU 的文档数 | ≥ 18/21 | **21/21** |
+   | 分配 + EMA 显著优于 EMA | 配对 CI > 0 | **G 0.402**，ΔG +0.120 [0.113, 0.128] |
+
+   dev 和 held-out 几乎一致（EMA 0.279 对 0.281，分配 + EMA 0.409 对 0.402），策略排名不变。
+4. **定位。** score EMA 本质上是"InfLLM 的衰减分数规则，用在所有驻留 page 的 Quest 上界分数上"，不是新规则。贡献在于 page 级的系统比较、衰减随 budget 的扫描、找出所需信息的消融，以及按层分配和分数规则可以叠加。
+5. **GPU 延迟（L4）。**
+   - 真实卸载 cache 选出的 page 和生成的 token 都与 trace 完全一致，miss 数与模拟器吻合。
+   - PCIe 流量减少：EMA 少 9–10%，分配 + EMA 少 13–19%。
+   - **延迟没有改善**：LRU 86.6 ms/token，EMA 93.1 ms/token，Bélády 87.3 ms/token。这个规模下真正的 PCIe 时间不到 1 ms，时间主要花在每层的固定开销上。
+   - 另一个会话正在测一个免同步、zero-copy 的改进版本，结果还没出来。
+
+### 0.2 第一部分：selection rank（§1–§8）
 
 **正式结论（40 篇 held-out，按预注册执行一次）：selection rank 不能实质改进 KV cache 替换。proposal 的主成功标准（S1）不满足。**
 
@@ -49,8 +78,17 @@
 | ~15:06 | **采集全部 20 篇 dev**（L4）；发现 A100 与 L4 的选择结果不同（见 §4.7） | 结果在 [`results/dev_full/`](results/dev_full/) |
 | 15:13 | **在 20 篇 dev 上调参并预注册**：完整策略 δ=8、β=2，R+F β=4，R+rank δ=4，逻辑回归系数固定；评估脚本随预注册一起提交 | `2f6a9bd` [`preregistration.md`](preregistration.md) |
 | ~15:24 | **采集 40 篇 held-out**（L4，sparse trace + dense 生成），随后按预注册**只评估一次** | 结果在 [`results/heldout/`](results/heldout/) |
+| 11-22 晚 | 团队决定换主线到"高效替换策略"，不使用 RL；原 kvrl 蒸馏方案放弃（`distill_kvrl.py` 未跟踪、未使用） | — |
+| 11-23 00:11 | **trace schema v2**：每步记录所有历史 page 的分数；`replay.py` 兼容 v1/v2 | `db51faa` |
+| 00:39 | **长 trace pilot**：一篇 26K QMSum，741 步；确定 prompt 和停止规则 | `537a196` [`long_trace_pilot.md`](long_trace_pilot.md) |
+| 00:47 | **冻结 `longctx_v1` 划分和 budget**（14 dev / 21 held-out，主 budget B=96） | `950cb37` [`splits/longctx_v1.json`](../splits/longctx_v1.json) |
+| 01:06–02:44 | **策略族模拟与 dev 研究**：`kvpolicy.py`、`efficient_dev.py`、`checks.py`；EMA 消融、稳健性检查、相关工作 baseline（InfLLM 式、KVDrive 式、knapsack、HiSparse tie 规则） | `ab1921e`–`056c3ad` [`efficient_policy_dev.md`](efficient_policy_dev.md) |
+| 11:35 | held-out 预注册标记为已批准并冻结 | `bb0ce87` |
+| 12:34 | **只用 dev 冻结**按层分配和线性模型系数，在读到任何 held-out 输出之前提交 | `f87e982` [`splits/heldout_frozen_v1.json`](../splits/heldout_frozen_v1.json) |
+| 12:43 | **采集 21 篇 held-out，按预注册只评估一次**：三条标准全部通过 | `91f7041` [`heldout_results.md`](heldout_results.md) |
+| 13:29 | **GPU 延迟测试**：L4 上的真实两级卸载 cache | `f8ca5ab` [`gpu_benchmark.md`](gpu_benchmark.md) |
 
-GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`dev_full`）和 40 篇 held-out 都用 NVIDIA L4。其余设置相同：bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
+GPU：pilot 和 8 篇 dev pilot 用的是 NVIDIA A100-SXM4-40GB；20 篇 dev（`dev_full`）和 40 篇 held-out 都用 NVIDIA L4。第二部分的全部采集和延迟测试也都在 L4 上。其余设置相同：bf16，torch 2.14.1+cu130，transformers 4.53.3，贪心解码，batch=1。
 
 ---
 
@@ -372,6 +410,8 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 
 ## 7. 待团队决定
 
+> **注**：以下是第一部分结束时的待办。第 2 项（layer-level benchmark）和第 4 项（记录未选中 page 的分数）已由第二部分解决：trace v2 记录了全部分数，GPU 测试改为针对新策略做。新主线的待决事项见 §9.7。
+
 已在本轮解决：MFQA 停止规则（主分析按 proposal 生成 128 token 或 EOS，截断版作为次要分析）；held-out 上比较的策略（见预注册）。
 
 1. **按负面结论加现象刻画来写最终报告和 poster**。正式检验支持这个方向：S1 不满足，S2 显著但只有 0.22%。
@@ -418,3 +458,193 @@ python3 gap_analysis.py results/dev_pilot --trace trace_truncated.jsonl --out re
 δ 扫描用 `--policies lru belady score:1:0 score:2:0 ...`（`score:δ:β`）。
 
 各脚本的完整参数见 [README](../README.md)。`gap_analysis.py` 需要 numpy。
+
+---
+
+## 9. 第二部分：高效替换策略
+
+**目标**（对齐课程 Project 10 原题）：在同一个可召回的 Quest page cache 上，找一个极小、因果、几乎不花代价的替换策略，拿到 Bélády 相对 LRU 优势的一大部分；然后测它在 GPU 上能换来什么。不使用 RL。第一部分的负面结论保留，作为消融。
+
+### 9.1 为什么换主线、换设定
+
+- **rank 失败的原因要先查清。** 第一部分的 trace v1 每步只记录 top-K 的排名。驱逐时要比较的却是**没被选中**的驻留 page，它们在 v1 里没有任何当前信息。所以 trace v2（`db51faa`）记录每一步所有历史 page 的 Quest 分数（float16，npz）。Quest 每步本来就给所有 page 打分，在线策略拿到这个分数没有额外代价。
+- **差距要足够大。** 第一部分在 4–16K、128 步下，LRU 与 Bélády 只差 1.08 pp，低于 proposal 定的 2 pp 门槛。新设定把上下文加长到 16–32K，并用带思考的长摘要让生成更长。
+
+### 9.2 长 trace pilot 与冻结（[`long_trace_pilot.md`](long_trace_pilot.md)）
+
+**prompt 和停止规则怎么定的：**
+- 不带 chat template 的 prompt 永远不输出 EOS，约 250 token 后开始逐字重复答案，会虚高命中率，弃用。
+- 带思考的具体问题在 304 步就结束，太短。
+- **最终选择**：chat template、开启思考、要求"至少八段"的全文摘要。4 篇探测文档分别在 741–873 步正常输出 EOS，没有循环。
+- 停止规则：EOS、1024 token，或最新的 32-gram 在输出里已经出现过。
+
+**pilot 结果**（一篇 26K token 的 QMSum，741 步）：B=96 时 LRU 5.70%、Bélády 3.54%，差 2.15 pp；B=128（B/K=2）时只差 1.35 pp。
+- 把 page 从 16 token 改成 8 或 4 token，差距只略微变大，粒度不是主要原因。
+- 差距集中在少数几层（L11、L16、L24、L25）。
+- 解释：HiSparse 按 token 缓存，我们按 16-token page 缓存，page 级的选择在相邻步之间更稳定，所以 B/K=2 时空间天然更小。这一点作为发现写进报告，不为了凑数改 B 的定义。
+
+**团队决定**：主 budget 用 B/K=1.5（B=96），完整曲线用 B/K ∈ {1.125, 1.25, 1.5, 2, 4}。连同划分一起冻结在 [`splits/longctx_v1.json`](../splits/longctx_v1.json)（`950cb37`）：**14 篇 dev**（10 GovReport、4 QMSum）、**21 篇 held-out**（15 GovReport、6 QMSum）。
+
+### 9.3 实现
+
+| 文件 | 作用 |
+|---|---|
+| [`notebooks/first_trace.ipynb`](../notebooks/first_trace.ipynb)、[`notebooks/long_trace_capture.py`](../notebooks/long_trace_capture.py) | schema v2 采集：每步每层的 top-K 排名（int16）和所有 page 的分数（float16），存成 npz（26K token、1K 步的文档约 97 MB） |
+| [`replay.py`](../replay.py)、[`truncate_trace.py`](../truncate_trace.py) | 兼容 v1 和 v2（gzip） |
+| [`kvpolicy.py`](../kvpolicy.py) | 策略族模拟器。语义与 HiSparse 一致：每步的 top-K page 必须驻留，策略只决定驱逐哪些未选中的驻留 page |
+| [`efficient_dev.py`](../efficient_dev.py) | dev 研究：参数网格、按文档留一（LODO）选参、按层分配、学习式模型、差距分析 |
+| [`checks.py`](../checks.py) | 稳健性检查、消融、机制分析 |
+| [`heldout.py`](../heldout.py) | `freeze` 只用 dev 冻结分配和线性系数；`eval` 对 held-out 按预注册评估 |
+| [`gpu_bench.py`](../gpu_bench.py) | 真实两级卸载 cache 和计时（在 Colab 上运行） |
+| `tests/test_kvpolicy.py`、`tests/test_schema_v2.py` | 新增测试；整个测试集 50 个全部通过（需要 numpy） |
+
+**score EMA 的定义**：每个驻留 page 存一个浮点数 e。每步更新 `e ← α·e + (1−α)·z`，其中 `z = (s − s_K) / (s_1 − s_K)`，s 是该 page 当前的 Quest 分数，s_1 和 s_K 是本步第 1 名和第 K 名的分数。驱逐 e 最小的 page。新装入的 page 以当前 z 作为初值。
+
+### 9.4 dev 结果与结论推导（[`efficient_policy_dev.md`](efficient_policy_dev.md)）
+
+所有超参数都用 14 篇 dev 的 LODO 选择。G = (LRU miss − 策略 miss) / (LRU miss − Bélády miss)，CI 是按文档聚类的 2000 次 bootstrap。
+
+**主表（B=96，LRU 6.03%，Bélády 3.86%）：**
+
+| 策略 | miss rate | G [95% CI] | 优于 LRU 的文档 |
+|---|---|---|---|
+| **score EMA**（α=0.5，14 折都选了它） | 5.42% | **+0.279** [0.274, 0.284] | 14/14 |
+| 当前分数，不平均（KVDrive 式） | 5.50% | +0.244 [0.236, 0.251] | 14/14 |
+| **按层分配 + score EMA** | 5.14% | **+0.409** | — |
+| 按层分配 + LRU | 5.75% | +0.127 | — |
+| 线性下次使用距离回归（DAgger） | 5.38% | +0.300 [0.295, 0.305] | 14/14 |
+| InfLLM 式衰减求和，所有驻留 page | 5.44% | +0.269 | 14/14 |
+| 衰减选中计数，不看分数（MoE 式） | 5.93% | +0.044 | 14/14 |
+| 第一部分的 rank 策略 | 5.97% | +0.027 | 14/14 |
+| ARC / LRU-2 / LFU / FIFO | 6.04 / 6.13 / 7.85 / 8.18% | −0.01 / −0.05 / −0.84 / −1.00 | — |
+
+**结论 1：有用的信息是"未选中驻留 page 的当前分数"。** 推导来自消融（B=96 的 G）：
+- EMA 每步更新所有驻留 page：+0.279。只在 page 被选中时更新：−1.596，远差于 LRU，因为过时的高分把已经不在 top-K 附近的 page 钉住了。
+- 把分数换成排名（v1 里唯一的信息）：+0.016，基本等于 LRU。**这解释了第一部分的负面结果：v1 恰好丢掉了有用的信号。**
+- 不做平均、只用当前分数：+0.244。平均带来约 +0.035。
+
+**结论 2：这条规则不是新规则。** InfLLM 的衰减求和（用所有驻留 page 上 Quest 上界的 softmax 代替注意力概率）得到 +0.269，每个 budget 下都和 EMA 相差 0.01–0.04。所以报告里把它写成"InfLLM 式衰减分数规则，用在 Quest 分数上"，贡献是测量和消融。
+
+**结论 3：按层分配和分数规则可以叠加。**
+- 差距集中在少数几层，所以按每层的 miss 曲线贪心分配 slot（总量保持 28·B）。
+- LODO 分配能拿到 oracle 分配收益的 89–94%，不同折之间几乎一样。
+- B=96 时 EMA 0.279 加上分配 + LRU 0.127，合计 0.406，实际的分配 + EMA 是 0.409，接近相加。
+- KVDrive 式精确 knapsack 分配和贪心结果相同；按 LRU–Bélády 差距比例分配反而更差（−0.32）。
+
+**结论 4：效果稳定。**
+- EMA 在每篇文档、每个任务、每个长度段、每个 budget 上都优于 LRU。B=96 时最差的一篇也比 LRU 少 9.3% 的 miss。
+- α 在 0.3–0.7 之间时 G 都在 0.268–0.279 之间。最优 α 随 budget 变化（B/K≤1.25 时 0.4，4 时 0.95），所以 held-out 按 budget 分别冻结 α。
+- 外部有效性检查（只在 dev 上）：Qwen3-1.7B 的 4 篇 G +0.281，另一种摘要 prompt 的 3 篇 G +0.276。
+
+**结论 5：学习式策略只多一点。**
+- 6 个特征的线性回归加两轮 DAgger，G 为 0.300（B=96）和 0.317（B=128、256）。DAgger 比行为克隆只多约 0.005。
+- 它在 B/K=4 时明显好于 EMA（0.317 对 0.220），但每个 page 要存约 5 个浮点数。
+
+**差距分析**：B=96 时 LRU 的被驱逐 page 中，68.5% 在 32 步内又被选中，而 LRU 留下的候选是 78.9%，LRU 只比随机略好。单特征 AUC：z_ema 0.70、当前 z 0.67、缓存内选中次数 0.65、最后排名 0.41。
+
+**"不准入"变体**：HiSparse 语义下选中的 page 必须装入，所以"不准入"只能是"用完就驱逐"，这已经在所有策略的动作空间里。Bélády 的驱逐中有 18.2% 是这种用一次就走的（LRU 只有 0.3%），对应 MoE 缓存文献的发现。
+
+**开销**（每层每步，B 个驻留 page）：
+
+| 策略 | 每个 page 的状态 | 每步计算 |
+|---|---|---|
+| LRU | 1 个整数 | 更新 K 个时间戳，取最小 |
+| 当前分数 | 0 | 取 B 个分数，取最小 |
+| **score EMA** | 1 个浮点数 | 取 B 个分数，B 次乘加，归一化，取最小 |
+| 线性回归 | 约 5 个浮点数 | 每个候选约 6 次乘加 |
+| 按层分配 | 0 | 0（一张 28 项的 budget 表，离线算好） |
+
+Quest 本身每层每步要算约 6–8 MFLOP，EMA 只加约 400 FLOP，不到 0.01%；每个请求的状态约 11 KB。
+
+### 9.5 held-out 正式检验（[`heldout_results.md`](heldout_results.md)）
+
+**流程：**
+1. 预注册写在 `efficient_policy_dev.md` 末尾，11:35 标记为已批准（`bb0ce87`）。
+2. 只用 14 篇 dev 冻结按层分配和线性系数，12:34 提交（`f87e982`），之后才读任何 held-out 输出。
+3. 21 篇 held-out 用同样的模型、prompt、选择器、解码和停止规则采集一次，按预注册评估一次（`91f7041`）。
+4. sanity check：在新 runtime 上重新采集 dev，完全复现 dev 报告（LRU 6.03%，EMA G 0.279）。
+
+**成功标准（B=96）：全部通过。**
+
+| 标准 | 阈值 | 结果 |
+|---|---|---|
+| (i) score EMA 的 G，CI 下界 | > 0.15 | G 0.281，CI [0.277, 0.285] |
+| (ii) EMA 优于 LRU 的文档数 | ≥ 18/21 | 21/21 |
+| (iii) 分配 + EMA 优于 EMA（配对 CI 不含 0） | CI > 0 | ΔG +0.120，CI [0.113, 0.128] |
+
+单篇文档的 EMA G 在 0.26–0.30 之间。
+
+**budget 曲线（21 篇合并）：**
+
+| B（B/K） | LRU miss | Bélády | EMA G | 分配 + EMA G | InfLLM 式 G | 当前分数 G | 线性 G |
+|---|---|---|---|---|---|---|---|
+| 72（1.125） | 11.50% | 8.81% | 0.257 | 0.257* | 0.239 | 0.229 | – |
+| 80（1.25） | 8.88% | 6.19% | 0.276 | 0.307 | 0.257 | 0.249 | – |
+| **96（1.5）** | **5.98%** | **3.85%** | **0.281** | **0.402** | 0.270 | 0.246 | 0.303 |
+| 128（2） | 3.56% | 2.19% | 0.271 | 0.528 | 0.266 | 0.224 | 0.314 |
+| 256（4） | 1.38% | 0.98% | 0.242 | 0.242* | 0.216 | 0.145 | 0.336 |
+
+\* B=72 和 256 时分配网格到了边界，冻结的分配是均匀的，所以等于 EMA。
+
+B=96 时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.6%，Bélády 41.3%。dev 和 held-out 几乎一致，策略排名不变。
+
+### 9.6 GPU 延迟测试（[`gpu_benchmark.md`](gpu_benchmark.md)）
+
+**设置：**
+- Colab L4，Qwen3-0.6B，3 篇 held-out 文档（20–30K token），每篇 384 个解码步。held-out 只用来计时，没有在上面调任何参数。
+- prefill 之后，所有完整 page 移到 pinned host memory；每层在 GPU 上有 B 个 slot，按需装入。
+- 每步每层：给所有 page 打分，取 top-K，策略选驱逐对象，把缺失的 page 从 host 拷到 GPU，再做 attention。
+- 拷贝是同步的，没有预取，也没有和计算重叠。
+
+**正确性**：
+- 24 次卸载运行每一步每一层选出的 page 都和 trace 一致，生成的 token 也一致。
+- LRU 和 Bélády 的 miss 数和模拟器完全相同。EMA 差不到 0.1%，因为 trace 存的是 fp16 分数，在线运行用 fp32，少数近似打平的情况结果不同。
+
+**延迟（3 篇的中位数）：**
+
+| 配置 | ms/token（B=96） | ms/token（B=128） | PCIe MB/token（B=96） |
+|---|---|---|---|
+| Quest，KV 全在 GPU（不卸载） | 57.1 | – | 0 |
+| 卸载 + LRU | 86.6 | 84.5 | 8.50 |
+| 卸载 + score EMA | 93.1 | 89.5 | 7.71 |
+| 卸载 + 分配 + EMA | 93.0 | 90.3 | 7.38 |
+| 卸载 + Bélády（oracle） | 87.3 | – | 5.61 |
+
+**结论：在这个规模下，miss 少了不会变快。** 推导：
+- 实测 host→GPU 带宽 12.2 GB/s，LRU 每 token 的 8.5 MB 只需约 0.7 ms。但传输阶段实际花了 11.4 ms，九成以上是每层的固定开销（CPU gather、kernel 启动、同步）。
+- 策略阶段同理：EMA 为了省约 0.07 ms 的传输，多了约 5 ms 的小 kernel 启动。
+- Bélády 比 LRU 少 34% 的 miss，延迟却只差 1 ms 以内，直接说明 miss 在这里几乎不影响延迟。
+
+所以"几乎零开销"对算法本身成立（每个 page 一个浮点数），但对这个未融合的 PyTorch 实现不成立，EMA 每 token 慢约 7.5%。要让 miss 减少变成延迟收益，传输必须占每步时间的很大一部分：更大的模型或 batch、更慢的链路，或者融合 kernel 去掉固定开销。这些都还没测。
+
+**进行中**：另一个会话正在测一个免同步、zero-copy gather 的版本（`gpu_bench.py` 的未提交修改），结果出来后补进 `gpu_benchmark.md` 和本节。
+
+### 9.7 局限与待团队决定
+
+**局限：**
+- 只有 14 篇 dev 和 21 篇 held-out，来自 2 个任务、一种 prompt。CI 窄说明各文档效果一致，不说明覆盖面广。
+- 只有一个主模型（Qwen3-0.6B）和一种选择器；1.7B 和第二种 prompt 只在 dev 上抽查。
+- G 是相对 page 级 Bélády 算的；结论不能直接推到 token 级缓存。
+- InfLLM baseline 用 Quest 上界的 softmax 代替真实注意力质量。
+- 延迟只在一种 GPU、batch=1、3 篇文档上测过。
+
+**待团队决定：**
+1. 报告里把策略写成"InfLLM 式衰减规则用在 Quest 分数上"（推荐），贡献是测量、消融和分配叠加。
+2. 按层分配（需要离线、和模型相关的曲线）是否算作报告里的"策略"。
+3. 延迟结论怎么写：只报"字节减少、延迟没变"，还是再投入去测一个传输占比大的场景（更大模型、batch 或融合 kernel）。
+4. 是否需要用真实注意力质量重做 InfLLM 对比（要新的采集字段）。
+5. 成员名单仍未统一（见 §7 第 5 项）。
+
+### 9.8 复现
+
+原始 trace 没有放进仓库（被 gitignore）。held-out trace 和各类输出备份在 Google Drive 的 `MyDrive/rank-kv-cache/` 下（`longctx_v1_heldout/`、`results_heldout/`、`results_efficient_dev/`、`results_gpu_benchmark/`）。采集用 `notebooks/long_trace_capture.py`，需要 L4。
+
+```bash
+python3 -m unittest discover -s tests
+python3 efficient_dev.py DEV_TRACES --out results/efficient_dev
+python3 checks.py DEV_TRACES --res results/efficient_dev --budgets 96 128 256
+python3 heldout.py freeze DEV_TRACES --out frozen.json
+python3 heldout.py eval HELDOUT_TRACES --frozen splits/heldout_frozen_v1.json --out results/heldout_longctx
+```
+
+`DEV_TRACES` 和 `HELDOUT_TRACES` 是放 npz trace 的目录。以上脚本都需要 numpy。`gpu_bench.py` 在 Colab 上和模型一起运行。
