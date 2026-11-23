@@ -1,8 +1,10 @@
 """Replay batched sparse-KV page selections. Core replay uses the standard library."""
 import argparse
 import csv
+import gzip
 import json
 import math
+from array import array
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 
@@ -10,10 +12,63 @@ POLICIES = ("lru", "fifo", "rank", "score", "belady")
 FREQ_WINDOW, FREQ_CAP = 8, 4
 
 
-def read_trace(path):
-    """Load JSONL, preserving time order independently for each request and layer."""
+def open_trace(path):
+    """Open a JSONL trace as text; a .gz suffix means gzip-compressed JSONL."""
+    path = Path(path)
+    if path.suffix == ".gz":
+        return gzip.open(path, "rt", encoding="utf-8")
+    return path.open(encoding="utf-8")
+
+
+def _finite_numbers(values, name):
+    if not isinstance(values, list) or any(
+            type(v) not in (int, float) or not math.isfinite(v) for v in values):
+        raise ValueError(f"{name} must be a list of finite numbers")
+
+
+def check_scores(pages, row):
+    """Validate the optional schema v2 score fields of one row; return (ranked, all) or None.
+
+    ranked_scores is aligned with ranked_page_ids and non-increasing. page_scores, when
+    present, has one entry per completed historical page (index = page ID), agrees with
+    ranked_scores on the selected pages and no unselected page scores above the last one.
+    """
+    if "ranked_scores" not in row:
+        if "page_scores" in row:
+            raise ValueError("page_scores requires ranked_scores")
+        return None
+    ranked = row["ranked_scores"]
+    _finite_numbers(ranked, "ranked_scores")
+    if len(ranked) != len(pages):
+        raise ValueError("ranked_scores must align with ranked_page_ids")
+    if any(a < b for a, b in zip(ranked, ranked[1:])):
+        raise ValueError("ranked_scores must be non-increasing")
+    every = row.get("page_scores")
+    if every is not None:
+        _finite_numbers(every, "page_scores")
+        if pages and max(pages) >= len(every):
+            raise ValueError("page_scores must cover every selected page")
+        if any(every[p] != s for p, s in zip(pages, ranked)):
+            raise ValueError("page_scores disagrees with ranked_scores")
+        if pages and len(pages) < len(every):
+            chosen = set(pages)
+            if max(s for p, s in enumerate(every) if p not in chosen) > ranked[-1]:
+                raise ValueError("an unselected page scores above the selection")
+        every = array("f", every)
+    return array("f", ranked), every
+
+
+def read_trace(path, *, scores=False):
+    """Load JSONL (schema v1 or v2), preserving time order for each request and layer.
+
+    Returns {(request_id, layer_id): [tuple of ranked page IDs per step]}. With
+    scores=True, also returns the same keys mapped to per-step (ranked_scores,
+    page_scores) pairs from schema v2 rows; v1 rows give None and a missing
+    page_scores gives (ranked_scores, None).
+    """
     streams = defaultdict(list)
-    with Path(path).open(encoding="utf-8") as source:
+    score_streams = defaultdict(list)
+    with open_trace(path) as source:
         for line_number, line in enumerate(source, 1):
             try:
                 row = json.loads(line)
@@ -32,11 +87,16 @@ def read_trace(path):
                     raise ValueError("ranked_page_ids must be a list of nonnegative integers")
                 if len(pages) != len(set(pages)):
                     raise ValueError("duplicate page in the same step")
+                checked = check_scores(pages, row)
                 stream.append(tuple(pages))
+                if scores:
+                    score_streams[request, layer].append(checked)
             except (KeyError, ValueError, TypeError) as error:
                 raise ValueError(f"{path}, line {line_number}: {error}") from error
     if not streams:
         raise ValueError("empty trace")
+    if scores:
+        return dict(streams), dict(score_streams)
     return dict(streams)
 
 
