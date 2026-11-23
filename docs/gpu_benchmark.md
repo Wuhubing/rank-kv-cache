@@ -102,3 +102,49 @@ hardly move latency in this regime.
   per-layer misses and the breakdown for every run), `bench_summary.csv`, and a copy of
   `gpu_bench.py`.
 - `distill_kvrl.py` remains untracked and unused.
+
+## Follow-up: sync-free zero-copy path and launch-free GPU cost (same day)
+To check whether the per-layer sync and the CPU gather were hiding the policy effect,
+`gpu_bench.run(..., zc=True)` adds a second tiered implementation:
+- No host sync: victims are assigned with fixed-size (K) tensor ops.
+- A Triton kernel reads only the missed pages directly from mapped pinned host memory over PCIe
+  (zero-copy, about 12 GB/s in a microbenchmark), with no staging copy.
+
+**Correctness** (doc gov_report/00dfb, 128 steps): identical tokens and rankings. LRU 19,538 and
+Bélády 13,604 misses equal the simulator exactly; EMA is 17,929 vs 17,937 in the simulator, and
+allocation + EMA is 17,380 vs 17,377.
+
+**Latency is unchanged** (LRU 89.1, EMA 95.5, allocation + EMA 95.5, Bélády 89.4 ms/token). The
+sync was not the bottleneck: the step is bound by **CPU dispatch**, meaning Python and HF overhead
+plus about 60 small kernel launches per layer.
+
+**GPU-busy time per step** (sum of all kernel and copy durations from `torch.profiler`, prefill
+subtracted, 40 steps, B=96). This approximates the cost of a launch-free (CUDA-graph or fused)
+implementation:
+
+| Config | GPU ms/step | Misses/step |
+|---|---|---|
+| Resident Quest (HF DynamicCache) | 35.0 | 0 |
+| Tiered LRU | 16.7 | 194 |
+| Tiered score EMA | 17.4 | 184 |
+| Tiered allocation + EMA | 17.8 | 182 |
+| Tiered Bélády | 16.3 | 155 |
+
+What these numbers show:
+- **The resident baseline is inflated by HF itself.** It does more GPU work than the tiered cache
+  because HF's `DynamicCache` concatenates the whole KV every step (about 3.4 GB copied per step).
+  Its 57 ms wall time is still lower only because it launches fewer kernels. A static-cache
+  resident baseline would be the fair comparison; it was not built.
+- **A miss is cheap on the GPU.** Bélády removes 39 misses per step and saves 0.45 ms, about 11.5 µs
+  per 64 KiB page. Score EMA removes about 10 misses per step (about 0.12 ms) but its extra
+  unfused elementwise kernels cost more (net +0.7 ms GPU). A single fused EMA kernel per layer
+  (28 × a few µs) would put EMA at roughly break-even at this scale.
+- **Conclusion at batch 1 / 0.6B / L4:** even launch-free, the best possible policy (Bélády) is
+  worth only about 3 % of GPU time, and EMA's share of that is under 1 %. Misses only matter where
+  transfer is a large share of the step. KV bytes per page and layer do not grow with model width
+  under 8-head GQA, so the relevant lever is **batching** (each sequence brings its own misses). At
+  batch 32, LRU would move about 400 MB per step (about 33 ms at 12 GB/s), and EMA's 9–10 % byte
+  saving would be about 3 ms per step. This is an extrapolation; it was not measured.
+
+Latency wall times above are wall-clock with `torch.cuda.synchronize`; GPU-busy times come from one
+profiled run per config on one document, so treat them as indicative (±0.2 ms).

@@ -1,4 +1,4 @@
-"""GPU latency benchmark of a real two-tier Quest KV cache (run in Colab next to the model).
+"""GPU latency benchmark (v2 adds zc=True: sync-free, zero-copy gather)\n\nGPU latency benchmark of a real two-tier Quest KV cache (run in Colab next to the model).
 
 Tiers: every completed 16-token page of every layer lives in pinned host memory; each layer has
 B GPU page slots. Each decode step and layer: Quest scores all pages from GPU-resident min/max
@@ -214,7 +214,7 @@ def next_use(trace):
 
 
 @torch.inference_mode()
-def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing=False, warmup=8):
+def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing=False, warmup=8, zc=False):
     """Greedy decode `steps` tokens after the prefill. Returns per-step latencies (s), the ranked
     pages per step [steps, L, K], generated ids, per-layer misses, and the timing breakdown."""
     cfg = model.config
@@ -239,6 +239,7 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             pmax = (N + steps + 2) // PS + 1
             if mode == "belady":
                 b.nxt_all = next_use(trace)
+                b.nxt_gpu = torch.as_tensor(b.nxt_all, device="cuda")
             for l in range(L):
                 kf, vf = cache.key_cache[l][0], cache.value_cache[l][0]
                 kvh, _, dim = kf.shape
@@ -250,7 +251,10 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             del cache
             torch.cuda.empty_cache()
             cache = LenCache(N)
-            AttentionInterface.register(name, b.quest_tiered)
+            for T in b.tiers.values():  # one dummy slot-table entry for masked scatters (zc path)
+                T.slot = torch.cat((T.slot, T.slot.new_full((1,), -1)))
+                T.mgpu = torch.zeros((), dtype=torch.long, device="cuda")
+            AttentionInterface.register(name, b.quest_zc if zc else b.quest_tiered)
             cfg._attn_implementation = name
         torch.cuda.reset_peak_memory_stats()
         lat, ranks, brk = [], [], []
@@ -268,10 +272,126 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             if timing and b.evs:
                 torch.cuda.synchronize()
                 brk.append(np.array([[e[i].elapsed_time(e[i+1]) for i in range(5)] for e in b.evs]).sum(0))
-        misses = [b.tiers[l].misses for l in range(L)] if b.tiers else None
+        misses = ([int(b.tiers[l].mgpu) if zc else b.tiers[l].misses for l in range(L)]
+                  if b.tiers else None)
         return dict(lat=np.array(lat), ranks=np.array(ranks) if ranks else None, gen=gen, misses=misses,
                     breakdown=np.array(brk) if brk else None, peak_mem=torch.cuda.max_memory_allocated())
     finally:
         cfg._attn_implementation = orig
         b.tiers.clear()
         torch.cuda.empty_cache()
+
+
+# ---- sync-free variant: GPU gathers missed pages straight from mapped pinned host memory -------
+try:
+    import triton
+    import triton.language as tl
+
+    @triton.jit
+    def _gather(src_ptr, dst_ptr, page_ptr, slot_ptr, n_el: tl.constexpr, BLOCK: tl.constexpr):
+        i = tl.program_id(0)
+        j = tl.program_id(1)
+        p = tl.load(page_ptr + i)
+        if p >= 0:
+            d = tl.load(slot_ptr + i)
+            offs = j * BLOCK + tl.arange(0, BLOCK)
+            x = tl.load(src_ptr + p.to(tl.int64) * n_el + offs)
+            tl.store(dst_ptr + d.to(tl.int64) * n_el + offs, x)
+except ImportError:
+    triton = None
+
+
+class _HostPtr:
+    """Lets Triton take a pinned host tensor: under UVA its host pointer is valid on the device."""
+    def __init__(self, t):
+        self.t, self.dtype = t, t.dtype
+
+    def data_ptr(self):
+        return self.t.data_ptr()
+
+
+def quest_zc(s, module, query, key, value, attention_mask, scaling, **kw):
+    """Same algorithm as quest_tiered, with no host sync: fixed-size (K) victim assignment and a
+    Triton gather that reads only the missed pages over PCIe (zero-copy)."""
+    l = module.layer_idx
+    T = s.tiers[l]
+    e0 = s.ev()
+    T.tk = torch.cat((T.tk, key[0]), 1)
+    T.tv = torch.cat((T.tv, value[0]), 1)
+    if T.tk.shape[1] > PS:
+        pk, pv = T.tk[:, :PS], T.tv[:, :PS]
+        pf = pk.float()
+        T.lo = torch.cat((T.lo, pf.amin(1)[:, None]), 1)
+        T.hi = torch.cat((T.hi, pf.amax(1)[:, None]), 1)
+        T.kh[T.np].copy_(pk, non_blocking=True)
+        T.vh[T.np].copy_(pv, non_blocking=True)
+        T.np += 1
+        T.tk, T.tv = T.tk[:, PS:], T.tv[:, PS:]
+    kvh, dim = key.shape[1], key.shape[3]
+    g = query.shape[1] // kvh
+    e1 = s.ev()
+    q = query[0, :, 0].reshape(kvh, g, dim).float()
+    sc = (torch.einsum("hgd,hpd->hgp", q.clamp_min(0), T.hi)
+          + torch.einsum("hgd,hpd->hgp", q.clamp_max(0), T.lo)).mean((0, 1))
+    ranked = sc.argsort(descending=True, stable=True)[:K]
+    s.rec[l] = ranked
+    e2 = s.ev()
+    t = s.step
+    B = T.B
+    occ = T.pos >= 0
+    pg = T.pos.clamp_min(0)
+    hs = T.slot[ranked]
+    ishit = hs >= 0
+    miss = ~ishit
+    if T.policy == "ema":
+        kth, top = sc[ranked[-1]], sc[ranked[0]]
+        z = (sc - kth) / (top - kth + 1e-6)
+        T.ema = torch.where(occ, T.alpha * T.ema + (1 - T.alpha) * z[pg], T.ema)
+    sel = torch.zeros(B + 1, dtype=torch.bool, device=sc.device)
+    sel[torch.where(ishit, hs, B)] = True
+    sel = sel[:B]
+    sec = T.last * (T.pmax * 4) + T.hit * T.pmax * 2 + (T.pmax - 1 - pg)
+    if T.policy == "belady":
+        prim = -T.nx.double()
+    elif T.policy == "ema":
+        prim = T.ema.double()
+    else:
+        prim = torch.zeros(B, dtype=torch.float64, device=sc.device)
+    prim = torch.where(occ, prim, torch.full_like(prim, -1e300))
+    prim = torch.where(sel, torch.full_like(prim, 1e300), prim)
+    o1 = torch.sort(sec, stable=True).indices
+    order = o1[torch.sort(prim[o1], stable=True).indices]
+    cum = torch.cumsum(miss.long(), 0) - 1
+    tgt = torch.where(miss, order[cum.clamp_min(0)], hs)          # slot of every ranked page
+    old = T.pos[tgt]
+    T.slot[torch.where(miss & (old >= 0), old, T.pmax)] = -1      # index pmax is a dummy entry
+    T.slot[T.pmax] = -1
+    T.pos[tgt] = ranked
+    T.slot[ranked] = tgt
+    T.mgpu += miss.sum()
+    e3 = s.ev()
+    src = torch.where(miss, ranked, -1).to(torch.int32)
+    dst = tgt.to(torch.int32)
+    n_el = kvh * PS * dim
+    _gather[(K, n_el // 1024)](_HostPtr(T.kh), T.sk, src, dst, n_el, 1024)
+    _gather[(K, n_el // 1024)](_HostPtr(T.vh), T.sv, src, dst, n_el, 1024)
+    T.last[tgt] = t
+    T.hit[tgt] = ishit.long()
+    if T.policy == "ema":
+        T.ema[tgt] = torch.where(miss, z[ranked], T.ema[tgt])
+    if T.policy == "belady":
+        T.nx[tgt] = s.nxt_gpu[t, l]
+    e4 = s.ev()
+    srt = ranked.sort().values
+    ss = T.slot[srt]
+    k = torch.cat((T.sk[ss].permute(1, 0, 2, 3).reshape(kvh, -1, dim), T.tk), 1)[None]
+    v = torch.cat((T.sv[ss].permute(1, 0, 2, 3).reshape(kvh, -1, dim), T.tv), 1)[None]
+    out = F.scaled_dot_product_attention(query, k.repeat_interleave(g, 1), v.repeat_interleave(g, 1),
+                                         scale=scaling)
+    e5 = s.ev()
+    if s.timing:
+        s.evs.append((e0, e1, e2, e3, e4, e5))
+    return out.transpose(1, 2).contiguous(), None
+
+
+Bench.quest_zc = quest_zc
