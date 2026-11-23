@@ -254,7 +254,13 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             for T in b.tiers.values():  # one dummy slot-table entry for masked scatters (zc path)
                 T.slot = torch.cat((T.slot, T.slot.new_full((1,), -1)))
                 T.mgpu = torch.zeros((), dtype=torch.long, device="cuda")
-            AttentionInterface.register(name, b.quest_zc if zc else b.quest_tiered)
+                T.src = torch.empty(K, dtype=torch.int32, device="cuda")
+                T.dst = torch.empty(K, dtype=torch.int32, device="cuda")
+                T.old = torch.empty(K, dtype=torch.long, device="cuda")
+                T.pos2, T.last2, T.hit2 = T.pos.clone(), T.last.clone(), T.hit.clone()
+                T.ema2, T.nx2 = T.ema.clone(), T.nx.clone()
+            fn = b.quest_fused if zc == "fused" else (b.quest_zc if zc else b.quest_tiered)
+            AttentionInterface.register(name, fn)
             cfg._attn_implementation = name
         torch.cuda.reset_peak_memory_stats()
         lat, ranks, brk = [], [], []
@@ -395,3 +401,143 @@ def quest_zc(s, module, query, key, value, attention_mask, scaling, **kw):
 
 
 Bench.quest_zc = quest_zc
+
+
+# ---- fused path: one Triton kernel per layer for the whole policy step, one for the K/V gather --
+if triton is not None:
+    @triton.jit
+    def _policy(sc_ptr, rk_ptr, pos_ptr, slot_ptr, last_ptr, hit_ptr, ema_ptr, nx_ptr, nxrow_ptr,
+                pos2, last2, hit2, ema2, nx2, src_ptr, dst_ptr, old_ptr, cnt_ptr, t, alpha, pmax, B,
+                POL: tl.constexpr, KK: tl.constexpr, BB: tl.constexpr):
+        """POL 0 = LRU, 1 = score EMA, 2 = Belady. Keys as kvpolicy.py: (prim, last, hit, -page).
+        Reads the current per-slot state and writes the next state to the second buffer set (no
+        in-place read-after-write inside the kernel); the page->slot table is updated by _slotup."""
+        i = tl.arange(0, BB)
+        vi = i < B
+        k = tl.arange(0, KK)
+        rk = tl.load(rk_ptr + k)
+        pos = tl.load(pos_ptr + i, mask=vi, other=-1)
+        occ = pos >= 0
+        pg = tl.where(occ, pos, 0)
+        last = tl.load(last_ptr + i, mask=vi, other=0)
+        hit = tl.load(hit_ptr + i, mask=vi, other=0)
+        hs = tl.load(slot_ptr + rk)
+        ishit = hs >= 0
+        miss = hs < 0
+        sel = tl.sum(((hs[:, None] == i[None, :]) & ishit[:, None]).to(tl.int32), 0) > 0
+        top = tl.load(sc_ptr + tl.load(rk_ptr))
+        kth = tl.load(sc_ptr + tl.load(rk_ptr + KK - 1))
+        den = top - kth + 1e-6
+        if POL == 1:
+            ema = tl.load(ema_ptr + i, mask=vi, other=0.0)
+            z = (tl.load(sc_ptr + pg, mask=vi & occ, other=0.0) - kth) / den
+            ema = tl.where(occ, alpha * ema + (1 - alpha) * z, ema)
+            prim = ema.to(tl.float64)
+        elif POL == 2:
+            nx = tl.load(nx_ptr + i, mask=vi, other=0)
+            prim = -nx.to(tl.float64)
+        else:
+            prim = tl.zeros([BB], dtype=tl.float64)
+        prim = tl.where(occ, prim, -1e300)
+        prim = tl.where(sel | (i >= B), 1e300, prim)
+        sec = last.to(tl.int64) * (pmax * 4) + hit.to(tl.int64) * pmax * 2 + (pmax - 1 - pg).to(tl.int64)
+        pa, pb = prim[:, None], prim[None, :]
+        sa, sb = sec[:, None], sec[None, :]
+        ia, ib = i[:, None], i[None, :]
+        less = (pa < pb) | ((pa == pb) & ((sa < sb) | ((sa == sb) & (ia < ib))))
+        rank = tl.sum(less.to(tl.int32), 0)
+        cum = tl.cumsum(miss.to(tl.int32), 0) - 1
+        vic = tl.sum(tl.where((rank[None, :] == cum[:, None]) & miss[:, None], i[None, :], 0), 1)
+        tgt = tl.where(miss, vic, hs)
+        m2 = tgt[:, None] == i[None, :]                       # [KK, BB]: ranked page k goes to slot i
+        touched = tl.sum(m2.to(tl.int32), 0) > 0
+        old = tl.sum(tl.where(m2, pos[None, :], 0), 1)        # page previously in tgt slot
+        pos_f = tl.where(touched, tl.sum(tl.where(m2, rk[:, None], 0), 0), pos)
+        hit_f = tl.where(touched, tl.sum(tl.where(m2, ishit[:, None].to(tl.int64), 0), 0), hit)
+        last_f = tl.where(touched, t, last)
+        tl.store(pos2 + i, pos_f, mask=vi)
+        tl.store(hit2 + i, hit_f, mask=vi)
+        tl.store(last2 + i, last_f.to(tl.int64), mask=vi)
+        if POL == 1:
+            zr = (tl.load(sc_ptr + rk) - kth) / den
+            mv = m2 & miss[:, None]
+            isv = tl.sum(mv.to(tl.int32), 0) > 0
+            ema_f = tl.where(isv, tl.sum(tl.where(mv, zr[:, None], 0.0), 0), ema)
+            tl.store(ema2 + i, ema_f, mask=vi)
+        if POL == 2:
+            nr = tl.load(nxrow_ptr + k)
+            nx_f = tl.where(touched, tl.sum(tl.where(m2, nr[:, None], 0), 0), nx)
+            tl.store(nx2 + i, nx_f, mask=vi)
+        tl.store(src_ptr + k, tl.where(miss, rk, -1).to(tl.int32))
+        tl.store(dst_ptr + k, tgt.to(tl.int32))
+        tl.store(old_ptr + k, tl.where(miss & (old >= 0), old, pmax))
+        tl.atomic_add(cnt_ptr, tl.sum(miss.to(tl.int64), 0))
+
+    @triton.jit
+    def _slotup(slot_ptr, rk_ptr, dst_ptr, old_ptr, KK: tl.constexpr):
+        """Write-only update of the page->slot table: evicted pages -> -1, selected pages -> slot.
+        Evicted pages are never selected, so the two sets of addresses are disjoint (pmax = dummy)."""
+        k = tl.arange(0, KK)
+        tl.store(slot_ptr + tl.load(old_ptr + k), -1)
+        tl.store(slot_ptr + tl.load(rk_ptr + k), tl.load(dst_ptr + k).to(tl.int64))
+
+    @triton.jit
+    def _gather2(ksrc, vsrc, kdst, vdst, page_ptr, slot_ptr, n_el: tl.constexpr, BLOCK: tl.constexpr):
+        i = tl.program_id(0)
+        j = tl.program_id(1)
+        p = tl.load(page_ptr + i)
+        if p >= 0:
+            d = tl.load(slot_ptr + i).to(tl.int64)
+            offs = j * BLOCK + tl.arange(0, BLOCK)
+            p64 = p.to(tl.int64)
+            tl.store(kdst + d * n_el + offs, tl.load(ksrc + p64 * n_el + offs))
+            tl.store(vdst + d * n_el + offs, tl.load(vsrc + p64 * n_el + offs))
+
+
+def quest_fused(s, module, query, key, value, attention_mask, scaling, **kw):
+    l = module.layer_idx
+    T = s.tiers[l]
+    T.tk = torch.cat((T.tk, key[0]), 1)
+    T.tv = torch.cat((T.tv, value[0]), 1)
+    if T.tk.shape[1] > PS:
+        pk, pv = T.tk[:, :PS], T.tv[:, :PS]
+        pf = pk.float()
+        T.lo = torch.cat((T.lo, pf.amin(1)[:, None]), 1)
+        T.hi = torch.cat((T.hi, pf.amax(1)[:, None]), 1)
+        T.kh[T.np].copy_(pk, non_blocking=True)
+        T.vh[T.np].copy_(pv, non_blocking=True)
+        T.np += 1
+        T.tk, T.tv = T.tk[:, PS:], T.tv[:, PS:]
+    kvh, dim = key.shape[1], key.shape[3]
+    g = query.shape[1] // kvh
+    q = query[0, :, 0].reshape(kvh, g, dim).float()
+    sc = (torch.einsum("hgd,hpd->hgp", q.clamp_min(0), T.hi)
+          + torch.einsum("hgd,hpd->hgp", q.clamp_max(0), T.lo)).mean((0, 1))
+    ranked = sc.argsort(descending=True, stable=True)[:K]
+    s.rec[l] = ranked
+    pol = {"lru": 0, "ema": 1, "belady": 2}[T.policy]
+    nxrow = s.nxt_gpu[s.step, l] if pol == 2 else T.nx
+    _policy[(1,)](sc, ranked, T.pos, T.slot, T.last, T.hit, T.ema, T.nx, nxrow,
+                  T.pos2, T.last2, T.hit2, T.ema2, T.nx2, T.src, T.dst, T.old, T.mgpu,
+                  s.step, float(T.alpha or 0.0), T.pmax, T.B, POL=pol, KK=K,
+                  BB=triton.next_power_of_2(T.B), num_warps=8)
+    _slotup[(1,)](T.slot, ranked, T.dst, T.old, KK=K)
+    T.pos, T.pos2 = T.pos2, T.pos
+    T.last, T.last2 = T.last2, T.last
+    T.hit, T.hit2 = T.hit2, T.hit
+    if pol == 1:
+        T.ema, T.ema2 = T.ema2, T.ema
+    if pol == 2:
+        T.nx, T.nx2 = T.nx2, T.nx
+    n_el = kvh * PS * dim
+    _gather2[(K, n_el // 1024)](_HostPtr(T.kh), _HostPtr(T.vh), T.sk, T.sv, T.src, T.dst, n_el, 1024)
+    srt = ranked.sort().values
+    ss = T.slot[srt]
+    k = torch.cat((T.sk[ss].permute(1, 0, 2, 3).reshape(kvh, -1, dim), T.tk), 1)[None]
+    v = torch.cat((T.sv[ss].permute(1, 0, 2, 3).reshape(kvh, -1, dim), T.tv), 1)[None]
+    out = F.scaled_dot_product_attention(query, k.repeat_interleave(g, 1), v.repeat_interleave(g, 1),
+                                         scale=scaling)
+    return out.transpose(1, 2).contiguous(), None
+
+
+Bench.quest_fused = quest_fused

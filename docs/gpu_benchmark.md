@@ -148,3 +148,87 @@ What these numbers show:
 
 Latency wall times above are wall-clock with `torch.cuda.synchronize`; GPU-busy times come from one
 profiled run per config on one document, so treat them as indicative (±0.2 ms).
+
+## Fused kernels (same day): the policy overhead is gone, and the policy still does not change latency
+`gpu_bench.run(..., zc="fused")` replaces the per-layer policy step with two Triton kernels plus one
+gather kernel:
+- **`_policy`** (one CTA per layer):
+  - EMA update over all slots;
+  - victim ranking by pairwise comparison of the (prim, last, hit, −page) keys over B ≤ 256 slots;
+  - assignment of misses to victims;
+  - next per-slot state.
+- **`_slotup`**: a write-only update of the page→slot table.
+- **`_gather2`**: K and V pages read zero-copy from pinned host memory, missed pages only.
+
+Bugs found and fixed while building it:
+- **Race in the first version.** It updated the slot tables in place inside the kernel. Triton may
+  re-issue a load after a store, so about 15 % of replays of one captured state produced duplicate
+  target slots. On allocation layers (B=88/112) this caused an illegal memory access (Xid 43) that
+  killed the Colab kernel.
+- **Fix.** The per-slot state is now ping-ponged between two buffers: the kernel reads set A and
+  writes set B. The page→slot update moved into a separate write-only kernel whose two address sets
+  are disjoint.
+- **Check.** After the fix, two full passes of all four policies are bit-identical, and a 300-replay
+  stress test of the failing state passed.
+
+**Correctness (3 held-out docs × 384 steps, all configs):**
+- Rankings and tokens are identical to the trace (rank_eq = 1.0 on every run).
+- LRU and Bélády miss counts equal the simulator exactly.
+- EMA and allocation + EMA are within 39 misses of about 45K (the trace stores fp16 scores).
+
+**Wall-clock latency** (median ms/token, mean over 3 documents; LRU and EMA at B=96 run twice):
+
+| Config | B=96 | B=128 | vs unfused (B=96) |
+|---|---|---|---|
+| Resident Quest (no offload, HF DynamicCache) | 57.3 | – | – |
+| Tiered LRU | 62.3 | 62.0 | 86.6 → 62.3 |
+| Tiered score EMA | 62.3 | 61.7 | 93.1 → 62.3 |
+| Tiered allocation + EMA | 61.6 | 61.7 | 93.0 → 61.6 |
+| Tiered Bélády (oracle) | 62.1 | – | 87.3 → 62.1 |
+
+p90 is 1.5–2.5 ms above the median, and repeat runs differ by up to about 1.5 ms. **All four tiered
+policies are within noise of one another**, so EMA is no longer slower than LRU. Even the oracle is
+not measurably faster, because the step is still bound by CPU dispatch of the HF model (about 60
+ms per token of Python and launches for a 0.6B model).
+
+**GPU-busy time per decode step** (profiler started after the prefill and 16 warm-up steps;
+32 profiled steps; doc gov_report/00dfb; B=96):
+
+| Config | GPU ms/step | `_policy` | `_slotup` | `_gather2` (H2D) | Misses/step |
+|---|---|---|---|---|---|
+| Resident Quest | 36.32 | – | – | – | 0 |
+| Tiered LRU, fused | 14.86 | 0.806 | 0.038 | 0.901 | 194 |
+| Tiered score EMA, fused | 14.87 | 0.890 | 0.038 | 0.835 | 184 |
+| Tiered allocation + EMA, fused | 14.90 | 0.948 | 0.038 | 0.813 | 182 |
+| Tiered Bélády, fused | 14.72 | 0.970 | 0.038 | 0.613 | 155 |
+| Tiered LRU, unfused (zc) | 16.94 | | | | 194 |
+| Tiered score EMA, unfused (zc) | 17.60 | | | | 184 |
+
+What the GPU-busy numbers show:
+- **EMA overhead is now near zero.** EMA's policy kernel costs +0.084 ms per token over LRU
+  (28 layers, about 3 µs per layer), against +0.66 ms unfused. **"Near-zero overhead" now holds in
+  the implementation**, not just on paper.
+- **Transfer time scales with misses** at about 7.3 µs per 64 KiB page (zero-copy gather). EMA saves
+  0.066 ms per token of gather time, allocation + EMA 0.088 ms, and Bélády 0.29 ms.
+- **Net GPU effect at batch 1:** EMA ≈ LRU (−0.07 transfer + 0.08 policy, within ±0.01 ms);
+  allocation + EMA is +0.04 ms; Bélády is −0.14 ms. All are ≤ 1 % of the 14.9 ms GPU step.
+- **The offloaded cache uses much less GPU time than the resident path** (14.9 vs 36.3 ms), mostly
+  because HF's DynamicCache copies the whole KV every step. It still has a higher wall time, because
+  both paths are bound by CPU dispatch.
+
+**Verdict.** With fused kernels the score-EMA policy costs the same as LRU on the GPU and moves
+9–10 % fewer bytes (13–19 % with allocation). At batch 1 on a 0.6B model, that byte saving is worth only about 0.07 ms per
+token, so the policy is a tie with LRU in latency, not a win. A latency win needs transfer to be a
+real fraction of the step: large batch or long K, a slower host link, or no prefetch overlap. The
+measured per-page cost (7.3 µs) and the measured miss reductions let that be estimated directly:
+saving per step ≈ 7.3 µs × misses saved × batch. For EMA that is about 10 misses × batch; at
+batch 32 about 2.3 ms per step, not measured.
+
+Data, all in `MyDrive/rank-kv-cache/results_gpu_benchmark/`:
+- `bench_fused.pkl`: per-step latencies, per-layer misses, simulator counts and tokens for every
+  run;
+- `bench_fused_summary.csv`;
+- `gpu_busy_fused.json`;
+- `gpu_bench.py` (copy).
+
+A local copy of the summary files is in `results_gpu/` (the per-step pickle is on Drive only).
