@@ -36,4 +36,12 @@ misses, but in absolute terms that is small.
   L16 8.0/4.7%, L25 9.7/5.7% and L24 7.4/4.2%. Layers 0–5, 7–10 and 27 are each ≤1.4%.
 
 **Conclusion:** a 32K context and ~750-step generation do not restore a gap of several points at
-B/K=2. The paper-like numbers (13.4% / 8.2%) appear only at B/K≈1.1. This is a single-document pilot.
+B/K=2 ("twice the Top-K size", as the course problem states). Our interpretation is a granularity
+difference rather than a different B. HiSparse caches individual tokens. We cache 16-token pages,
+and page-level selections are more stable across adjacent decode steps, so at B/K=2 the headroom is
+naturally smaller. This is a finding. B keeps its definition (pages per layer, as a multiple of K);
+we do not redefine it to match the paper. The page-size probe (16 → 8 → 4 slightly widens the gap)
+points the same way but cannot isolate the effect at token granularity. Single-document pilot.
+
+**Decision (team):** primary budget B/K=1.5 (B=96), full curve B/K ∈ {1.125, 1.25, 1.5, 2, 4}.
+This is frozen in `splits/longctx_v1.json`.
