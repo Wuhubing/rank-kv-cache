@@ -218,7 +218,7 @@ the model.
 3. Per-layer allocation + score EMA, the best G. If only two policies can be benchmarked, drop the
    linear model; its 0.02–0.1 extra G costs more state.
 
-## Held-out preregistration draft (not executed; needs team sign-off)
+## Held-out preregistration (approved by the user as drafted, 2026-11-23; frozen, not yet executed)
 - **Data:** the 21 held-out documents of `splits/longctx_v1.json` (sha of the commit that froze it),
   with the same model, prompts, selector, decoding and stop rule as dev. Collected once, with no
   re-runs.
