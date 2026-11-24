@@ -29,6 +29,22 @@ def test_lru_and_belady_match_replay(seed):
         assert got["misses"] == ref["misses"] and got["accesses"] == ref["accesses"]
 
 
+@pytest.mark.parametrize("delta,beta", [(0, 0), (0, 2), (4, 2), (8, 2)])
+def test_rank_keeps_original_replay_tie_break(delta, beta):
+    steps = [[6, 4, 0], [3, 1, 4], [3, 1, 6], [3, 0, 2], [6, 1, 0],
+             [1, 2, 4], [0, 5, 6], [1, 4, 0], [5, 1, 3]]
+    expected = replay_stream(steps, 4, "score", delta=delta, beta=beta)
+    assert kp.simulate(steps, None, 4, "rank", delta=delta, beta=beta)["misses"] == expected["misses"]
+
+
+def test_dev_auc_counts_equal_scores_as_half():
+    from efficient_dev import auc
+
+    assert auc([1, 1], [True, False]) == 0.5
+    assert auc([1, 1], [False, True]) == 0.5
+    assert np.isnan(auc([1, 1], [False, False]))
+
+
 @pytest.mark.parametrize("seed", [0, 3])
 def test_belady_is_lower_bound(seed):
     R, S = synthetic(seed=seed)

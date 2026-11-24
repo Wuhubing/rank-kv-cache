@@ -1,6 +1,8 @@
 # Wuhubing 分支复核
 
-复核基线为 `efficient-policy` 的 `083f758`，包含 `stage1-2` 的 `14c1578`。覆盖原 proposal 的 rank 实验、长上下文 score EMA、按层分配与 L4 benchmark。此分支保留了上游的实验实现、参数和结果，新增可重跑的审计脚本。Olivia 的旁支有独立实现，本文仅用它说明固定频率权重的补充比较。
+复核基线为 `efficient-policy` 的 `083f758`，包含 `stage1-2` 的 `14c1578`。覆盖原 proposal 的 rank 实验、长上下文 score EMA、按层分配与 L4 benchmark。初始审计提交保留了上游的实验实现、参数和结果，新增可重跑的审计脚本。Olivia 的旁支有独立实现，本文仅用它说明固定频率权重的补充比较。
+
+本文记录 `083f758` 的审计结果。后续提交修复了第 1、2 项，并新增 [定向重跑入口](rerun_longctx_dev.py) 和 [Colab notebook](../notebooks/colab_rank_followup.ipynb)。真实数据重跑结果将在拿到原始 dev NPZ 后单独记录。
 
 ## 可以复现的结果
 

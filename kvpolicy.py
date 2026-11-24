@@ -174,7 +174,7 @@ class RankFull(Policy):
     def key(self, p):
         f = sum(p in s for s in self.window)
         return (self.last[p] + self.delta * (self.lrank[p] <= self.q) + self.beta * min(f, 4),
-                self.last[p], -p)
+                *super().key(p))
 
     def dropped(self, p):
         super().dropped(p)
