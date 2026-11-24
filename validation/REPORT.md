@@ -2,7 +2,21 @@
 
 复核基线为 `efficient-policy` 的 `083f758`，包含 `stage1-2` 的 `14c1578`。覆盖原 proposal 的 rank 实验、长上下文 score EMA、按层分配与 L4 benchmark。初始审计提交保留了上游的实验实现、参数和结果，新增可重跑的审计脚本。Olivia 的旁支有独立实现，本文仅用它说明固定频率权重的补充比较。
 
-本文记录 `083f758` 的审计结果。后续提交修复了第 1、2 项，并新增 [定向重跑入口](rerun_longctx_dev.py) 和 [Colab notebook](../notebooks/colab_rank_followup.ipynb)。真实数据重跑结果将在拿到原始 dev NPZ 后单独记录。
+本文记录 `083f758` 的审计结果。后续提交 `7bc0f2c` 修复了第 1、2 项，并新增 [定向重跑入口](rerun_longctx_dev.py) 和 [Colab notebook](../notebooks/colab_rank_followup.ipynb)。
+
+## 14 篇 dev trace 的修正后结果
+
+在原始 `longctx_v1` 的 14 篇 dev trace 上重跑 `B=96`。LRU 和 Bélády 的基准计数通过核对，Colab 保存了 4,312 条逐层结果。Rank 策略按原实验的 leave-one-document-out 流程选择参数。
+
+| 指标 | 修正前 | 修正后 |
+|---|---:|---:|
+| Rank 策略总 miss | 1,166,769 | 1,165,593 |
+| 相对 LRU 的重复 miss 降幅 | 1.1408% | 1.2561% |
+| 填补 LRU 到 Bélády 的差距 `G` | 2.7480% | 3.0257% |
+
+修正后总 miss 减少 1,176 次，历史 rank 在这批 dev trace 上仍只带来小幅收益。历史 rank 的 AUC 从 0.41015 变为 0.41022，再限定有完整 32 步观察窗口的样本后为 0.41144。在同一完整窗口上，当前分数和 EMA 分数的 AUC 分别为 0.67481 和 0.69754。`last_rank` 数值越小代表排名越高，所以其方向应反过来解释。
+
+原始输出为 `summary.json`、`rank_by_layer.csv`、`rank_lodo.csv` 和 `auc.csv`，保存在 `My Drive/rank-kv-followup/full-20261124-044821/`。 [已运行的 Colab notebook](https://colab.research.google.com/drive/1x6V5ABv6rou0Ep4zrUQW_DavuN6iVt05)
 
 ## 可以复现的结果
 
@@ -53,7 +67,7 @@
 
 ## 未能独立复现的部分
 
-原作者的短文本 JSONL、长文本 dev/held-out NPZ、GPU 逐步计时和生成 token 日志未随 Git 提交，且当前权限下未找到记录中的 Drive 备份。当前运行环境没有 CUDA。因而本次可独立验证回放与汇总数学、已提交数据的内部一致性和另一套真实 trace 上的实现一致性。原作者的模型采集过程、逐页 payload 和 token 对照、AUC 更正后的实际数值和硬件时间仍需原始数据或 L4。报告里的三条长文本主要结果可以从提交的逐层 miss 表重算。
+短文本 JSONL、长文本 dev/held-out NPZ 和 GPU 逐步计时未随 Git 提交。长文本 dev NPZ 已从共享 Drive 获取，并用于上面的 Colab 重跑。GPU 归档也已找到，模型采集、逐页 payload 和 token 对照以及修正测量口径后的硬件计时仍待独立复现。报告里的三条长文本主要结果可以从提交的逐层 miss 表重算。 [GPU benchmark 归档](https://drive.google.com/drive/folders/125FYYpCIZYnJJK5wBuOWBW9B6qutw_cv)
 
 ## 复现命令
 
