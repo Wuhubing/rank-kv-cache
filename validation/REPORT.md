@@ -1,6 +1,6 @@
 # Evaluation of rank kv cache efficient policy
 
-Evaluated on 2026-11-23, from `efficient-policy` commit `24e5018341f0a0910a2c6e7f41bd7081522a2bc0`. Validation branch: `validation/comprehensive-systems-evaluation-2026-11-23`.
+Evaluated on 2026-11-23, from `efficient-policy` commit `24e5018341f0a0910a2c6e7f41bd7081522a2bc0`. Original validation branch: `validation/comprehensive-systems-evaluation-2026-11-23`. Review branch: `validation/systems-review-2026-11-23`.
 
 **Verdict:** the score-EMA replacement mechanism is correct in the tested simulator and synchronous GPU path, and it can reduce misses when current page scores predict future selections. It has no general advantage over LRU, and fewer misses do not establish a latency improvement. The shipped implementation was slower with EMA in the independent synthetic GPU measurement. Several evaluation-integrity defects need correction before extending the experiments or relying on automated reproductions.
 

@@ -61,4 +61,4 @@ The accompanying `rank-kv-cache-validation.bundle` contains this branch and its 
 git clone --branch validation/comprehensive-systems-evaluation-2026-11-23 /path/to/rank-kv-cache-validation.bundle rank-kv-validation
 ```
 
-The delivered branch is local; it has not been pushed to GitHub.
+The portable bundle preserves the original validation branch. The separate review branch is `validation/systems-review-2026-11-23`.
