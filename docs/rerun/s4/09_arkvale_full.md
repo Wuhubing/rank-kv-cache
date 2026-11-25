@@ -12,8 +12,8 @@ the S4.4 simplified ArkVale had 0.214. Taking the three parts one at a time:
 2. **Unbudgeted layers 0–1.** (a) Counting only layers 2–27 at the same B moves the G of LRU-relative policies (EMA,
    percentile EMA, power law, simplified ArkVale) by at most 0.003. ArkVale full itself improves from −0.245 to −0.219
    at B=96, because the cuboid-mean digest is at its worst in layers 0–1. (b) At equal total slots this is infeasible at B ≤ 128: two full layers (1 101–1 938 pages
-   each) would need more than 28·B slots. It becomes feasible for 13/14 documents from B=192, and there it raises
-   total misses (see the table under item 2).
+   each) would need more than 28·B slots. It becomes feasible for 13/14 documents from B=192, and there it multiplies
+   total misses for every policy: ×3.2 at B=192, ×1.7 at 256, ×1.15 at 384, neutral at 512.
 3. **Digest.** Under Quest selection, evicting by any ArkVale digest is worse than evicting by the selector's own
    score. Cuboid-mean, the code's digest, scores G −0.201 at B=96 (all layers, no forcing) against +0.240 for the
    current Quest score; cuboid-center −0.110; spheres −0.42 to −1.11. LODO picks the Quest score (cuboid-max) on
@@ -102,7 +102,33 @@ completed pages, so this is below K + 2 = 66 for every document at B ≤ 128 and
 budgets are in `main/eq_budgets.csv`. At B=192, 256, 384 and 512 the limited layers get 67–122, 126–191, 264–328
 and 402–466 pages. G within (b), page stream:
 
-EQ_TABLE_PLACEHOLDER
+| Policy | G (b) @192 (13 docs) | @256 | @384 | @512 |
+|---|---|---|---|---|
+| LRU miss % (layers 2–27) | 6.57 | 2.56 | 1.19 | 0.91 |
+| Current Quest score | 0.230 | 0.180 | 0.099 | 0.094 |
+| Score EMA z (LODO) | 0.268 | 0.246 | 0.236 | 0.263 |
+| All-page percentile EMA (LODO) | 0.262 | 0.236 | 0.227 | 0.264 |
+| Power law (LODO) | 0.280 | 0.270 | 0.239 | 0.261 |
+| ArkVale simplified | 0.189 | 0.171 | 0.097 | 0.093 |
+| ArkVale full (cuboid-mean, window rule) | −0.176 | −0.070 | −0.109 | −0.186 |
+| ArkVale full, best digest (LODO) | 0.182 | 0.094 | −0.063 | −0.168 |
+
+The ranking matches scope (a). But spending the slots on two full layers costs far more misses than any policy
+saves. Total misses over all 28 layers (layers 0–1 have none under (b)) as a share of all accesses, against the
+plain all-layer budget B on the same documents (`main/eq_vs_std.csv`; the B=192/384/512 all-layer rows come from an
+extra replay, `main/misses_extra.csv.gz`, page stream, Quest and cuboid-mean digests only):
+
+| Policy | B=192: (b) / all layers | B=256 | B=384 | B=512 |
+|---|---|---|---|---|
+| LRU | 6.10 % / 1.93 % (×3.16) | 2.37 / 1.36 (×1.75) | 1.11 / 0.95 (×1.16) | 0.85 / 0.84 (×1.01) |
+| Score EMA z (LODO) | 5.61 / 1.76 (×3.18) | 2.15 / 1.27 (×1.70) | 1.05 / 0.92 (×1.14) | 0.83 / 0.83 (×0.99) |
+| Power law (LODO) | 5.59 / 1.75 (×3.20) | 2.13 / 1.26 (×1.69) | 1.04 / 0.92 (×1.13) | 0.83 / 0.83 (×1.00) |
+| ArkVale full (cuboid-mean) | 6.42 / 1.97 (×3.26) | 2.43 / 1.39 (×1.75) | 1.13 / 0.97 (×1.17) | 0.86 / 0.85 (×1.01) |
+| Bélády | 4.27 / 1.23 (×3.46) | 1.47 / 0.97 (×1.53) | 0.85 / 0.83 (×1.02) | 0.78 / 0.81 (×0.96) |
+
+At equal memory, ArkVale's unbudgeted first layers are a net loss for every policy until B ≈ 512 (B/K = 8), where
+they are neutral. ArkVale's own setting (LongChat-7B, 32 layers, 4 096-token budget, contexts mostly below 32K) has
+much more memory per layer relative to the context than our B=96–128.
 
 ## Item 3: digests
 

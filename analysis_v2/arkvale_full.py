@@ -291,19 +291,23 @@ def cmd_summarize(args):
                 base = (stream, nb)
                 if not M.get(base + ("lru", scope)):
                     continue
+                Cb = [c for c in C if M.get(base + (c, scope))]   # configs replayed at this budget
                 docs = sorted(M[base + ("lru", scope)])
                 if scope == "b":   # documents where the equal-slots budget is feasible for every config
-                    docs = [d for d in docs if all(d in M[base + (c, scope)] for c in C)]
+                    docs = [d for d in docs if all(d in M[base + (c, scope)] for c in Cb)]
                 if not docs:
                     continue
                 n = len(docs)
                 if n not in idx_cache:
                     idx_cache[n] = np.random.default_rng(SEED).integers(0, n, size=(REPS, n))
                 idx = idx_cache[n]
-                per = {c: np.array([M[base + (c, scope)][d][1] for d in docs]) for c in C}
+                per = {c: np.array([M[base + (c, scope)][d][1] for d in docs]) for c in Cb}
                 acc = np.array([M[base + ("lru", scope)][d][0] for d in docs])
                 comp = np.array([M[base + ("lru", scope)][d][2] for d in docs])
                 for fam, cfgs in FAMILIES.items():
+                    cfgs = [c for c in cfgs if c in per]
+                    if not cfgs:
+                        continue
                     out = []
                     for i, d in enumerate(docs):
                         train = [j for j in range(n) if j != i]
@@ -311,7 +315,7 @@ def cmd_summarize(args):
                         out.append(per[best][i])
                         choices.append((stream, scope, nb, fam, d, best))
                     per[f"{fam}(lodo)"] = np.array(out)
-                dg = [c for c in C if c.startswith("ark:") and c.endswith(":1")]
+                dg = [c for c in Cb if c.startswith("ark:") and c.endswith(":1")]
                 if len(dg) > 1:   # tuned digest (LODO over the digests, window exit on)
                     out = []
                     for i, d in enumerate(docs):
@@ -357,7 +361,25 @@ def cmd_summarize(args):
             if not M.get((stream, nb, "lru", "all")):
                 continue
             docs = sorted(d for d in M[stream, nb, "lru", "b"] if all(d in M[stream, nb, c, "b"] for c in C))
-            for c in C:
+
+            def lodo_total(fam, scope):
+                cfgs = [c for c in FAMILIES[fam] if c in C]
+                tot = 0
+                for d in docs:
+                    best = min(cfgs, key=lambda c: (sum(M[stream, nb, c, scope][x][1] for x in docs if x != d), c))
+                    tot += M[stream, nb, best, scope][d][1]
+                return tot
+            for c in list(C) + [f"{f}(lodo)" for f in FAMILIES]:
+                if c.endswith("(lodo)"):
+                    fam = c[:-6]
+                    if not M.get((stream, nb, FAMILIES[fam][0], "all")):
+                        continue
+                    mb, ms = lodo_total(fam, "b"), lodo_total(fam, "all")
+                    acc = sum(M[stream, nb, "lru", "all"][d][0] for d in docs)
+                    eqs.append(dict(stream=stream, nominal_B=nb, policy=c, docs=len(docs), misses_unlimited_eq=mb,
+                                    misses_all_layers_B=ms, accesses_all_layers=acc, miss_rate_unlimited_eq=mb / acc,
+                                    miss_rate_all_layers_B=ms / acc, ratio=mb / ms if ms else float("nan")))
+                    continue
                 if not M.get((stream, nb, c, "all")):
                     continue
                 mb = sum(M[stream, nb, c, "b"][d][1] for d in docs)

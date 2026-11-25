@@ -1,2 +1,2 @@
-traces: 14; LRU/Belady streams in misses.csv: 33536; recomputed with replay.py: 33536
+traces: 14; LRU/Belady streams in misses.csv: 38240; recomputed with replay.py: 38240
 mismatches: 0; not recomputed: 0
