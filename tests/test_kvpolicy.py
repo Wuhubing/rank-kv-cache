@@ -167,3 +167,83 @@ def test_allocate_dp_is_optimal_and_no_worse_than_greedy():
     assert sum(curves[l][dp[l]] for l in range(3)) <= sum(curves[l][gr[l]] for l in range(3))
     pr = kp.allocate_proportional({0: 1, 1: 0, 2: 3}, 3, total, grid)
     assert sum(pr.values()) <= total and pr[2] >= pr[1]
+
+
+def test_allrank_values_and_ties():
+    t = kp._allrank_table([0.1, float("nan"), 0.5, 0.5, 0.9])
+    assert list(t) == [0.1, 0.5, 0.5, 0.9]
+    assert kp._allrank(t, 0.1) == 0.0
+    assert kp._allrank(t, 0.9) == 1.0
+    assert kp._allrank(t, 0.5) == 0.5  # two tied pages occupy ranks 1 and 2 of 0..3 -> mean 1.5 / 3
+    assert kp._allrank(t, float("nan")) == 0.0
+    assert kp._allrank(kp._allrank_table([2.0, float("nan")]), 2.0) == 1.0
+
+
+def _ema_trajectory(R, S, B, **kw):
+    """Misses plus the EMA value of every resident after every step."""
+    traj = []
+
+    class Spy(kp.ScoreEMA):
+        def admit(self, hits, misses):
+            super().admit(hits, misses)
+            traj.append(dict(self.ema))
+    kp.POLICIES["_spy"] = Spy
+    try:
+        c = kp.simulate(R, S, B, "_spy", **kw)
+    finally:
+        del kp.POLICIES["_spy"]
+    return c["misses"], traj
+
+
+MONOTONE = (lambda s: np.exp(2.0 * s), lambda s: 5.0 * s - 3.0, lambda s: s ** 3 + 0.1 * s)
+
+
+@pytest.mark.parametrize("seed", [0, 4, 11])
+def test_allrank_invariant_to_monotone_transforms(seed):
+    R, S = synthetic(seed=seed)
+    S = S.astype(np.float64)
+    for alpha in (0.0, 0.5, 0.9):
+        base = _ema_trajectory(R, S, 12, alpha=alpha, signal="allrank")
+        for f in MONOTONE:
+            got = _ema_trajectory(R, f(S), 12, alpha=alpha, signal="allrank")
+            assert got[0] == base[0]
+            assert len(got[1]) == len(base[1])
+            for a, b in zip(got[1], base[1]):
+                assert a.keys() == b.keys()
+                assert all(abs(a[p] - b[p]) < 1e-12 for p in a)
+
+
+def test_z_is_not_invariant_to_monotone_transforms():
+    changed = False
+    for seed in (0, 4, 11):
+        R, S = synthetic(seed=seed)
+        S = S.astype(np.float64)
+        base = kp.simulate(R, S, 12, "ema", alpha=0.5, signal="z")["misses"]
+        changed |= any(kp.simulate(R, f(S), 12, "ema", alpha=0.5, signal="z")["misses"] != base
+                       for f in MONOTONE[:1] + MONOTONE[2:])
+    assert changed
+
+
+@pytest.mark.parametrize("seed", [1, 8])
+def test_allrank_alpha_zero_equals_current_score(seed):
+    # allrank is a strictly increasing function of the current score within a step, with equal
+    # scores mapped to equal values, so with alpha=0 its eviction order is the raw-score order
+    R, S = synthetic(seed=seed)
+    for B in (8, 12, 20):
+        assert (kp.simulate(R, S, B, "ema", alpha=0.0, signal="allrank")["misses"]
+                == kp.simulate(R, S, B, "score")["misses"])
+
+
+def test_allrank_differs_from_selected_rank_and_bounds():
+    R, S = synthetic(seed=7)
+    opt = kp.simulate(R, S, 12, "belady")["misses"]
+    for mode in ("all", "selected"):
+        assert kp.simulate(R, S, 12, "ema", alpha=0.5, signal="allrank", mode=mode)["misses"] >= opt
+    # selected-rank gives every unselected page 0: its EMA among unselected pages carries no
+    # ordering from the current step, unlike allrank
+    _, rank_traj = _ema_trajectory(R, S, 12, alpha=0.0, signal="rank")
+    sel = set(int(p) for p in R[-1])
+    assert all(v == 0.0 for p, v in rank_traj[-1].items() if p not in sel)
+    _, all_traj = _ema_trajectory(R, S, 12, alpha=0.0, signal="allrank")
+    unsel = [v for p, v in all_traj[-1].items() if p not in sel]
+    assert len(set(unsel)) > 1

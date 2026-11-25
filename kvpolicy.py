@@ -201,20 +201,48 @@ class ScoreCurrent(Policy):
         return self.srow[p], self.last[p], self.hit[p], -p
 
 
+def _allrank_table(srow):
+    """Sorted finite scores of every eligible page at this step (NaN = not yet a completed page)."""
+    a = np.asarray(srow, dtype=np.float64)
+    return np.sort(a[np.isfinite(a)])
+
+
+def _allrank(table, s):
+    """Mid-rank percentile of score s among all eligible pages, in [0, 1]:
+    (#{q: s_q < s} + (#{q: s_q == s} - 1) / 2) / (N - 1); 1.0 when N == 1, 0.0 for a NaN score.
+    Tied scores share the same value (the mean of the ranks they occupy), so the result does not
+    depend on page IDs or iteration order, and it is invariant to any strictly increasing transform
+    of the score row."""
+    n = len(table)
+    if not math.isfinite(s) or n == 0:
+        return 0.0
+    if n == 1:
+        return 1.0
+    lo = int(np.searchsorted(table, s, side="left"))
+    hi = int(np.searchsorted(table, s, side="right"))
+    return (lo + 0.5 * (hi - lo - 1)) / (n - 1)
+
+
 class ScoreEMA(Policy):
     """Evict the lowest exponential moving average of a per-step page signal (one float per resident).
 
-    signal: "z"    score relative to the K-th selected score, in units of (top1 - K-th)
-            "raw"  the raw selector score
-            "rank" rank-only information (schema v1): (K - rank + 1) / K if selected, else 0
+    signal: "z"       score relative to the K-th selected score, in units of (top1 - K-th)
+            "raw"     the raw selector score
+            "rank"    rank-only information among the *selected* pages (schema v1):
+                      (K - rank + 1) / K if selected, else 0. Every unselected page gets the same 0,
+                      so this removes both score magnitude and the ordering among unselected pages.
+            "allrank" percentile rank of the page's score among *all* eligible pages at this step
+                      (mid-rank ties, see _allrank). Keeps the full ordering, discards magnitude:
+                      the control that separates "magnitude" from "ranking among unselected pages".
     mode:   "all"       every resident is updated every step (needs every resident's current score)
             "selected"  a resident is updated only on steps where it is selected
     """
     needs_scores = True
+    SIGNALS = ("z", "raw", "rank", "allrank")
 
     def __init__(self, K, alpha=0.5, mode="all", signal="z", **kw):
         super().__init__(K, **kw)
-        if mode not in ("all", "selected") or signal not in ("z", "raw", "rank"):
+        if mode not in ("all", "selected") or signal not in self.SIGNALS:
             raise ValueError("bad mode or signal")
         self.alpha, self.mode, self.signal = alpha, mode, signal
         self.ema = {}
@@ -224,12 +252,16 @@ class ScoreEMA(Policy):
             return _z(self.srow, self.ranked, p)
         if self.signal == "raw":
             return self.srow[p]
+        if self.signal == "allrank":
+            return _allrank(self.table, self.srow[p])
         r = self.rank_of.get(p)
         return 0.0 if r is None else (self.K - r + 1) / self.K
 
     def begin(self, t, ranked, srow):
         super().begin(t, ranked, srow)
         self.rank_of = {p: r for r, p in enumerate(ranked, 1)}
+        if self.signal == "allrank":
+            self.table = _allrank_table(srow)
         a = self.alpha
         pages = self.ema if self.mode == "all" else [p for p in ranked if p in self.ema]
         for p in pages:
