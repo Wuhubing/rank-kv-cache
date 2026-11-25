@@ -12,3 +12,5 @@ __pycache__/
 *.pdf
 .DS_Store
 /traces/
+# small result arrays that reviewers need (miss schedule, review slice)
+!docs/results/**/*.npz
