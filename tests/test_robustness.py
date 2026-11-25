@@ -148,3 +148,110 @@ def test_invalid_frozen_parameters_are_rejected(mutate):
 def test_configs_without_frozen_alpha_raise():
     with pytest.raises(ValueError, match="alpha"):
         heldout.configs(96, {"alpha": {}, "linear": {}})
+
+
+# F2: held-out traces are validated against the split by internal document id.
+from types import SimpleNamespace
+
+SPLIT = json.loads((ROOT / "splits/longctx_v1.json").read_text())
+
+
+class InlinePool:
+    jobs = []
+
+    def __init__(self, *args):
+        pass
+
+    def map(self, fn, jobs):
+        InlinePool.jobs.extend(jobs)
+        return list(map(fn, jobs))
+
+
+def _write_trace(folder, rid, name=None, layers=28, width=64, steps=2, pages=100, **extra):
+    rng = np.random.default_rng(abs(hash(rid)) % 2**32)
+    S = rng.normal(size=(steps, layers, pages)).astype(np.float16)
+    R = np.argsort(-S.astype(np.float32), axis=2, kind="stable")[:, :, :width].astype(np.int16)
+    np.savez(folder / (name or heldout.trace_name(rid)), ranked=R, scores=S, rid=rid, **extra)
+
+
+def _rids(subset):
+    return [p["rid"] for p in SPLIT["prompts"] if p["split"] == subset]
+
+
+def _eval(tmp_path, monkeypatch, frozen=FROZEN):
+    monkeypatch.setattr(heldout, "CURVE", [96])
+    monkeypatch.setattr(heldout, "Pool", InlinePool)
+    InlinePool.jobs = []
+    args = SimpleNamespace(traces=tmp_path / "traces", out=tmp_path / "out", procs=1, frozen=frozen)
+    heldout.evaluate(args)
+    return args
+
+
+@pytest.fixture
+def traces(tmp_path):
+    folder = tmp_path / "traces"
+    folder.mkdir()
+    return folder
+
+
+def test_renamed_development_trace_is_rejected(traces, tmp_path, monkeypatch):
+    for rid in _rids("heldout")[1:]:
+        _write_trace(traces, rid)
+    _write_trace(traces, _rids("dev")[0], name="renamed.npz")
+    with pytest.raises(ValueError, match="dev document"):
+        _eval(tmp_path, monkeypatch)
+
+
+def test_single_renamed_dev_trace_is_rejected(traces, tmp_path, monkeypatch):
+    _write_trace(traces, _rids("dev")[0], name="renamed.npz", layers=1)
+    with pytest.raises(ValueError, match="dev|held|split|document"):
+        _eval(tmp_path, monkeypatch)
+
+
+@pytest.mark.parametrize("case", ["missing", "duplicate", "renamed", "unknown", "layers", "width", "ctx"])
+def test_incomplete_or_malformed_heldout_folder_is_rejected(traces, tmp_path, monkeypatch, case):
+    rids = _rids("heldout")
+    for rid in rids[1:]:
+        _write_trace(traces, rid)
+    first = rids[0]
+    if case == "duplicate":
+        _write_trace(traces, rids[1], name="copy.npz")
+    elif case == "renamed":
+        _write_trace(traces, first, name="other.npz")
+    elif case == "unknown":
+        _write_trace(traces, "gov_report/not-in-split")
+    elif case == "layers":
+        _write_trace(traces, first, layers=27)
+    elif case == "width":
+        _write_trace(traces, first, width=32)
+    elif case == "ctx":
+        _write_trace(traces, first, ctx="0000000000000000")
+    with pytest.raises(ValueError):
+        _eval(tmp_path, monkeypatch)
+
+
+def test_valid_heldout_folder_uses_frozen_alpha_and_records_provenance(traces, tmp_path, monkeypatch):
+    for rid in _rids("heldout"):
+        _write_trace(traces, rid)
+    frozen = json.loads(FROZEN.read_text())
+    frozen["alpha"]["96"] = 0.123
+    path = tmp_path / "frozen.json"
+    path.write_text(json.dumps(frozen))
+    args = _eval(tmp_path, monkeypatch, frozen=path)
+    ema = [kw["alpha"] for _, name, kw, _ in InlinePool.jobs if name == "ema"]
+    assert ema and set(ema) == {0.123}
+    prov = json.loads((args.out / "provenance.json").read_text())
+    assert prov["frozen_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert prov["configs"]["96"]["ema"][1]["alpha"] == 0.123
+    assert prov["docs"] == sorted(_rids("heldout"))
+    rows = (args.out / "misses.csv").read_text().splitlines()
+    assert len({r.split(",")[1] for r in rows[1:]}) == 21
+
+
+def test_freeze_rejects_heldout_trace_in_dev_folder(traces, tmp_path):
+    for rid in _rids("dev")[1:]:
+        _write_trace(traces, rid)
+    _write_trace(traces, _rids("heldout")[0], name=heldout.trace_name(_rids("dev")[0]))
+    args = SimpleNamespace(traces=traces, out=tmp_path / "frozen.json", procs=1)
+    with pytest.raises(ValueError, match="heldout document"):
+        heldout.freeze(args)

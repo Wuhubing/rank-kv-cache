@@ -3,7 +3,10 @@
   python heldout.py freeze DEV_TRACES --out frozen.json   # dev only: allocation + linear coefficients
   python heldout.py eval HELDOUT_TRACES --frozen frozen.json --out DIR
 
-Nothing here is tuned on held-out data: `eval` only reads the frozen file.
+Nothing here is tuned on held-out data: `eval` only reads the frozen file. Both commands check
+the trace folder against the split file (--split): every trace's internal rid must belong to the
+expected subset, the folder must hold exactly that subset's documents once each, file names must
+match the rids, and every trace must have the split's top-K width and the expected layer count.
 """
 import argparse
 import csv
@@ -23,6 +26,60 @@ CURVE = [72, 80, 96, 128, 256]
 PRIMARY = 96
 ALPHA = {72: 0.4, 80: 0.4, 96: 0.5, 128: 0.7, 256: 0.95}  # written by `freeze` only; `eval` reads the frozen file
 LINEAR_B = (96, 128, 256)
+SPLIT = Path(__file__).resolve().parent / "splits/longctx_v1.json"
+
+
+def trace_name(rid):
+    return rid.replace("/", "__") + ".npz"
+
+
+def check_traces(paths, split, subset, layers=None):
+    """Check a trace folder against split membership; returns the sorted rids. `subset` is "dev"
+    or "heldout"; `layers` is the required layer count (None: equal across traces)."""
+    prompts = split["prompts"]
+    expected = {p["rid"]: p for p in prompts if p["split"] == subset}
+    elsewhere = {p["rid"]: p["split"] for p in prompts if p["split"] != subset}
+    top_k = split["selector"]["top_k"]
+    if not expected:
+        raise ValueError(f"split {split.get('name')} has no {subset} documents")
+    seen = {}
+    for path in map(Path, paths):
+        with np.load(path, allow_pickle=False) as z:
+            if "rid" not in z.files or "ranked" not in z.files:
+                raise ValueError(f"{path.name}: trace lacks rid or ranked")
+            rid, shape = str(z["rid"]), z["ranked"].shape
+            ctx = str(z["ctx"]) if "ctx" in z.files else None
+        if rid in elsewhere:
+            raise ValueError(f"{path.name}: document {rid} is a {elsewhere[rid]} document, "
+                             f"not {subset} (split {split.get('name')})")
+        if rid not in expected:
+            raise ValueError(f"{path.name}: document {rid} is not in split {split.get('name')}")
+        if rid in seen:
+            raise ValueError(f"{path.name}: document {rid} duplicates {seen[rid].name}")
+        if path.name != trace_name(rid):
+            raise ValueError(f"{path.name}: file name does not match its document id {rid}")
+        if ctx is not None and ctx != expected[rid]["ctx"]:
+            raise ValueError(f"{path.name}: context {ctx} differs from the split's {expected[rid]['ctx']}")
+        if len(shape) != 3 or shape[2] != top_k:
+            raise ValueError(f"{path.name}: ranked shape {shape}, expected [T, L, {top_k}]")
+        if layers is None:
+            layers = shape[1]
+        if shape[1] != layers:
+            raise ValueError(f"{path.name}: {shape[1]} layers, expected {layers}")
+        seen[rid] = path
+    missing = sorted(set(expected) - set(seen))
+    if missing:
+        raise ValueError(f"{len(missing)} {subset} documents missing from the trace folder: {missing}")
+    ctxs = [expected[r]["ctx"] for r in seen]
+    other_ctx = {p["ctx"] for p in prompts if p["split"] != subset}
+    if len(set(ctxs)) != len(ctxs) or set(ctxs) & other_ctx:
+        raise ValueError(f"{subset} documents do not have unique contexts disjoint from other splits")
+    return sorted(seen)
+
+
+def load_split(path):
+    raw = Path(path).read_bytes()
+    return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
 
 def frozen_alpha(frozen, B):
@@ -106,9 +163,11 @@ def per_layer(args):
 
 def freeze(args):
     paths = [str(p) for p in sorted(args.traces.glob("*.npz"))]
+    split, split_sha = load_split(getattr(args, "split", SPLIT))
+    check_traces(paths, split, "dev")
     pool = Pool(args.procs)
     out = {"dev_docs": [Path(p).name for p in paths], "alpha": ALPHA, "alloc": {}, "linear": {},
-           "dev_check": {}}
+           "dev_check": {}, "split_sha256": split_sha}
     for B in CURVE:
         rows = [r for part in pool.map(per_layer, [(p, "ema", dict(alpha=ALPHA[B]), GRID) for p in paths])
                 for r in part]
@@ -139,9 +198,15 @@ def freeze(args):
 
 
 def evaluate(args):
-    frozen, frozen_sha, _ = load_frozen(args.frozen)
+    frozen, frozen_sha, L = load_frozen(args.frozen)
+    split, split_sha = load_split(getattr(args, "split", SPLIT))
+    dev = {trace_name(p["rid"]) for p in split["prompts"] if p["split"] == "dev"}
+    if set(frozen["dev_docs"]) != dev:
+        raise ValueError("frozen dev_docs do not match the split's dev documents")
     paths = [str(p) for p in sorted(args.traces.glob("*.npz"))]
-    assert not set(Path(p).name for p in paths) & set(frozen["dev_docs"]), "dev doc in held-out set"
+    if set(Path(p).name for p in paths) & set(frozen["dev_docs"]):
+        raise ValueError("a frozen dev document file is in the held-out folder")
+    docs = check_traces(paths, split, "heldout", layers=L)
     args.out.mkdir(parents=True, exist_ok=True)
     pool = Pool(args.procs)
     jobs, keys = [], []
@@ -168,7 +233,8 @@ def evaluate(args):
             keep.append((cfg, rid, l, B, acc, mis, comp))
     with open(args.out / "misses.csv", "w", newline="") as f:
         w = csv.writer(f); w.writerow(["config", "doc", "layer", "B", "accesses", "misses", "compulsory"]); w.writerows(keep)
-    prov = dict(frozen=str(args.frozen), frozen_sha256=frozen_sha, curve=CURVE,
+    prov = dict(frozen=str(args.frozen), frozen_sha256=frozen_sha, split=str(getattr(args, "split", SPLIT)),
+                split_sha256=split_sha, docs=docs, curve=CURVE,
                 configs={str(B): {c: [n, jsonable(kw)] for c, (n, kw) in configs(B, frozen).items()}
                          for B in CURVE},
                 alloc_ema={str(B): dict(alpha=frozen_alpha(frozen, B), alloc=frozen["alloc"][str(B)])
@@ -183,8 +249,11 @@ def main():
     ap.add_argument("traces", type=Path)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--frozen", type=Path)
+    ap.add_argument("--split", type=Path, default=SPLIT)
     ap.add_argument("--procs", type=int, default=8)
     args = ap.parse_args()
+    if args.cmd == "eval" and args.frozen is None:
+        ap.error("eval needs --frozen")
     freeze(args) if args.cmd == "freeze" else evaluate(args)
 
 
