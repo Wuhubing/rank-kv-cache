@@ -78,13 +78,18 @@ def cmd_replay(args):
 
 
 def read(paths):
+    """Miss tables; a (config, B) present in a later file replaces the rows of earlier files (LRU and Belady are in
+    both the replication-v2 table and the new one; they must not be added up)."""
     M = defaultdict(lambda: defaultdict(lambda: np.zeros(3, np.int64)))
     for path in paths:
+        part = defaultdict(lambda: defaultdict(lambda: np.zeros(3, np.int64)))
         op = gzip.open if str(path).endswith(".gz") else open
         with op(path, "rt") as f:
             for r in csv.DictReader(f):
                 cfg = "lru" if r["config"] == "lru_fine" else r["config"]
-                M[cfg, int(r["B"])][r["doc"]] += np.array([int(r["accesses"]), int(r["misses"]), int(r["compulsory"])])
+                part[cfg, int(r["B"])][r["doc"]] += np.array([int(r["accesses"]), int(r["misses"]),
+                                                              int(r["compulsory"])])
+        M.update(part)
     return M
 
 
