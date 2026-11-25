@@ -20,6 +20,10 @@ had only 25 unused documents (all from LongBench's `gov_report_e`), so the floor
 25 documents at 16–32K and 10 at 12–16K. Held-out: 20 GovReport, 1 QMSum. Every 8B document generated the full 1024 tokens
 (stop = length; 8B thinks longer than 0.6B).
 
+**Scope (added in followup-v3, R10).** Because all 35 8B documents (dev and held-out) stopped at the 1024-token cap, every 8B
+result here covers only the first 1 023 decode steps of each document, which are all inside the thinking phase (no 8B
+document reached its answer). Whether the result holds after thinking ends is open (followup-v3 G2).
+
 Frozen on 8B dev (`analysis_v2/freeze_8b.py`): α = 0.4/0.5/**0.6**/0.7/0.95 for B = 72/80/96/128/256 (every LODO fold picked the
 same α); allocation from the 8B dev EMA curves (non-uniform at B = 80–128); DAgger linear coefficients.
 
@@ -29,6 +33,9 @@ same α); allocation from the 8B dev EMA curves (non-uniform at B = 80–128); D
 | (ii) | Documents with EMA < LRU | ≥ 18/21 | **21/21** | yes |
 | (iii) | Alloc+EMA − EMA, ΔG CI | > 0 | **0.252 [0.243, 0.260]** | yes |
 | (iv) | Alloc+EMA vs LRU within the same allocation, G CI lower bound | > 0.15 | **0.273 [0.268, 0.277]** | yes |
+
+How the (iv) threshold was set (added in followup-v3, R10): the threshold 0.15 for (iv) was chosen after the 0.6B
+results (G ≈ 0.28) were known and before the 8B held-out traces were collected; it copies the 0.15 of criterion (i).
 
 **The 8B claim is confirmed.** Sources: `results_v2/ext/8b_heldout/` (`criteria.txt`, `eval/misses.csv`, `alloc_oracle/`,
 `audit.txt`: 7 560 streams, 0 mismatches).
@@ -48,6 +55,17 @@ allocation 0.273; repeat-miss drop vs uniform LRU 21.0 % (EMA alone 10.9 %). On 
 
 Note: `recompute_heldout.py` prints the label "28*96 slots", hard-coded for 0.6B; for 8B it is 36·96. The numbers are correct.
 
+**Post-hoc analysis on the 8B held-out (added in followup-v3, R9).** The preregistration lists the InfLLM baselines with the
+true attention mass and the Spearman ρ as "also reported", but their command (`analysis_v2.explore data/8b_heldout --only
+...`, results in `results_v2/ext/8b_heldout_readouts/`, log `results_v2/provenance/logs/explore_8bh.log`) was not in the list of
+evaluation commands and was run after the evaluation (log written at 10:13Z; evaluation 10:07–10:11Z). They are post-hoc, exploratory readings of fixed
+configurations; nothing was selected from them.
+
+Provenance (followup-v3 A9): manifests without generated text, collector status files, collection and evaluation logs, the
+run scripts that were executed on wulab2 and a re-run of the bit-identity checks are committed in `results_v2/provenance/`. The
+8B held-out collection command was typed by hand; `runs/run_s6_8b_heldout.sh` reconstructs it from the manifests and logs and
+is marked as written after the fact.
+
 ## 2. Exploratory settings (dev only, 14 documents each, LODO-tuned families; `analysis_v2/explore.py`)
 G at B/K = 1.5 (B=96) with document-bootstrap CI; wins = documents with fewer misses than LRU.
 
@@ -64,6 +82,18 @@ Notes:
 - **64K/YaRN** (`splits/longctx64k_v1.json`): a different model configuration, reported separately. 7 NarrativeQA, 4 Multi-News,
   3 GovReport documents (2 middle-truncated to 62K tokens to reach 14). 6 of 14 stopped on the 32-gram loop rule, 5 at
   1024 tokens, 3 at EOS. At B=256 EMA 0.260, current score 0.161.
+- **Degenerate generations (followup-v3 A10).** A stop on the loop rule means the model repeated itself (degenerate output).
+  Separately (families re-tuned LODO inside each subset; `analysis_v2/degenerate_v3.py` → `results_v2/ext/degenerate/summary.csv`):
+
+  | Setting, B=96 | all documents | without loop stops | loop stops only |
+  |---|---|---|---|
+  | 64K: EMA (LODO) | 0.284 [0.281, 0.289] 14/14 | 0.282 [0.277, 0.288] 8/8 | 0.288 [0.283, 0.292] 6/6 |
+  | 64K: current score | 0.257 | 0.252 | 0.264 |
+  | RULER: EMA (LODO) | 0.255 [0.233, 0.292] 14/14 | 0.267 [0.242, 0.292] 8/8 | 0.236 [0.214, 0.306] 6/6 |
+  | RULER: current score | 0.207 | 0.224 | 0.182 |
+
+  At B=128: 64K EMA 0.282 / 0.276 / 0.291; RULER 0.232 / 0.258 / 0.168. Removing the degenerate documents changes the EMA's G by
+  at most 0.012 and leaves every remaining document better than LRU; the conclusions of this section do not depend on them.
 - **RULER** (`splits/ruler16k_v1.json`): cwe, niah_multivalue, niah_multiquery, niah_multikey_3. With thinking on, every document has
   ≥ 172 decode steps (none below the 100-step exclusion rule); 6 of 14 stopped on the loop rule. The CIs are wider (shorter
   traces); at B=256 EMA 0.313, current score 0.105.
@@ -122,7 +152,9 @@ Greedy decoding on the same documents: 0.279. Sampling changes every generated s
 ## Deviations in S6
 - 8B split: floor relaxed to 12K (plan-sanctioned). 25 of 35 documents come from LongBench's `gov_report_e` file (same GovReport
   source, contexts not in longctx_v1); recorded in the split's `rationale`.
-- 64K: 2 documents middle-truncated (LongBench rule) to reach 14; 6 of 14 stopped on the loop rule.
+- 64K: 2 documents middle-truncated (LongBench rule) to reach 14; 6 of 14 stopped on the loop rule (reported separately above).
+- Post-hoc (followup-v3 R9): the 8B held-out InfLLM / ρ read-outs were run after the evaluation with a command not in the
+  preregistered list (see §1).
 - SCBench: contexts middle-truncated to 24K tokens to fit 32K with 5 turns (plan did not specify; recorded in the split).
 - The 8B held-out evaluation, the 0.6B dev read-out collection and the other S6 collections ran on card 0 concurrently with
   each other (up to three processes on the same card). That does not affect traces (selection is deterministic; verified

@@ -1,0 +1,16 @@
+{
+ "split": "splits/scbench_v1.json",
+ "subset": "dev",
+ "total": 1,
+ "done": [
+  "scbench_summary/9"
+ ],
+ "started_at": "2026-11-25T09:06:35.222081+00:00",
+ "last": {
+  "rid": "scbench_summary/9",
+  "steps": 853,
+  "stop": "eos",
+  "seconds": 120.25
+ },
+ "finished_at": "2026-11-25T09:08:38.354238+00:00"
+}

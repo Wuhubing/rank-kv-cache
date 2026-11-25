@@ -9,12 +9,16 @@ throughput:
 - at batch 4–24 (new batched implementation, `gpu_bench_batch.py`, one merged transfer per layer) throughput scales almost linearly
   with the batch (17 → 313 tokens/s on 0.6B), but EMA reaches only 0.90–1.00× LRU's throughput. Its extra unfused GPU work costs about
   as much as the saved transfer. Even Bélády, with 30 % fewer bytes, gains only 0–7 %;
-- **at batch 32 on 0.6B a small, reproducible gain appears**: EMA +3.4 %, allocation + EMA +4.1 %, Bélády +4.8 % tokens/s over LRU
-  (two repeats agree within 0.3 tokens/s). It comes from fewer slow steps (mean step 94.1 vs 97.3 ms; the median step is the same);
+- at batch 32 on 0.6B, EMA, allocation + EMA and Bélády show 3.4 / 4.1 / 4.8 % more tokens/s than LRU, but **this is not a policy
+  effect** (corrected in followup-v3, R4): the median step is the same for LRU, current score and EMA (92.7–93.0 ms); the whole
+  difference is LRU's long tail (step-time std 23.4 ms vs 7.4 ms; p99 175–188 vs 122–126 ms); the current score has 1.1 % more
+  misses than the EMA yet the same throughput; the policies ran in a fixed order with 2 repeats each; and at batch 24 the two LRU
+  repeats differ by 11 %. The difference cannot be attributed to the policy. A re-measurement with randomised order, ≥ 5 rounds
+  and a fixed batched path is followup-v3 part E;
 - at batch 32 on 8B (12K-token prompts) the step is compute-bound (148 ms) and every policy is within the ±2.5 % noise.
 
-The earlier "batch 32 saves 2.3 ms/step" extrapolation is withdrawn: the measured effect at batch 32 is about 3 ms per step on 0.6B
-(+3.4 % throughput), and zero on 8B. A policy gain needs transfer to be a large share of the step (slower links, larger KV per page,
+The earlier "batch 32 saves 2.3 ms/step" extrapolation is withdrawn. The measured batch-32 difference on 0.6B (about 3 ms mean
+step) comes from LRU's long-tail steps with an identical median step and cannot be attributed to the policy; on 8B there is none. A policy gain needs transfer to be a large share of the step (slower links, larger KV per page,
 more pages per step, larger batch on a small model), and the policy's own GPU cost must be fused to near zero.
 
 Setup: wulab2 card 0 (`GPU-a74391df-5c27-152f-d0c0-6b86f8ea07d3`, driver 550.90.12), no other process on the card during the
@@ -80,11 +84,16 @@ stays). 128 decode steps, 8 warm-up excluded, 2 repeats, B=96 per request and la
 | 8 | 119.8 | 0.977 | 0.953 | 0.951 | 1.027 | 0.918 | 0.701 | 69.5 | 4.4 | 14.1 |
 | 16 | 231.3 | 0.935 | 0.971 | 0.973 | 1.020 | 0.916 | 0.700 | 137.6 | 7.6 | 28.2 |
 | 24 | 312.9 | 0.997 | 1.008 | 1.016 | 1.066 | 0.915 | 0.699 | 206.2 | 10.8 | 42.4 |
-| 32 | 329.0 | **1.034** | 1.033 | **1.041** | **1.048** | 0.915 | 0.698 | 271.7 | 14.1 | 56.5 |
+| 32 | 329.0 | 1.034* | 1.033* | 1.041* | 1.048* | 0.915 | 0.698 | 271.7 | 14.1 | 56.5 |
 
 (Batch 24 and 32 come from a separate run, `batch_06b_r32/`, over the first 32 of the 33 longctx_v1 prompts with ≥ 16 384 tokens;
 the batch-1–16 rows use the first 31 such prompts among the first 32 documents. At batch 24 the two LRU repeats disagree, 330 vs 296
 tokens/s, so that row is not conclusive. At batch 32 every policy's two repeats agree within 1.5 tokens/s.)
+\* Batch 32 (followup-v3, R4): the ratios come from LRU's slow steps, not from a shorter typical step. Median step: LRU 92.7 / 92.9,
+current score 92.9 / 92.9, EMA 93.0 / 92.9, allocation + EMA 92.1 / 92.1, Bélády 88.1 / 88.2 ms (two repeats); step std: LRU 23.4 /
+23.8, the others 7.1–7.5 (Bélády 24–29) ms. The current score has more misses than the EMA (514 772 vs 509 019) and the same
+throughput. Policies ran in a fixed order (LRU first) with 2 repeats. These numbers do not show a policy effect
+(`results_v2/gpu/batch_06b_r32/runs.json`; the bench driver's fixed order is `analysis_v2/s7_bench.py:178`).
 
 **Where the batched step goes** (`batch_06b_timed/`, CUDA events, 64 steps, 1 repeat; GPU ms per step summed over 28 layers):
 | Batch | Policy | append | select | policy | fetch (gather + H2D + scatter) | attention | step (ms) |
@@ -104,8 +113,9 @@ outlier, with fetch 30.6 ms in a single repeat, and is not used.)
   absolute numbers are a lower bound on what an optimised system gets. The comparison between policies inside it is fair for transfer
   (same code path) and pessimistic for EMA (more unfused ops than LRU). Bélády has the same op count as LRU, so its column isolates
   the transfer effect: 30 % fewer bytes give +2–3 % throughput at batch 8–16.
-- Step time grows only from 58 ms (batch 1) to 68 ms (batch 16) while bytes per step grow 16×; at batch 32 it reaches 93 ms and the
-  byte saving starts to show in throughput (+3–5 %).
+- Step time grows only from 58 ms (batch 1) to 68 ms (batch 16) while bytes per step grow 16×; at batch 32 it reaches 93 ms
+  (median, the same for LRU, current score and EMA; the throughput differences at batch 32 come from LRU's long tail, see the note
+  under the table).
 - **Correctness:** every request's LRU and Bélády misses inside the batch equal the simulator on that request's ranks (all batch
   sizes); ranks and tokens are identical across policies within a batch. **Batch vs alone:** the 4 requests of batch 4, run
   alone, generate the same first 19–105 tokens and then diverge for 3 of 4 (55 % of tokens equal over 128 steps; the ranks differ from
@@ -177,7 +187,8 @@ The miss and byte savings of a better replacement policy turn into latency or th
 share of the decode step**. On a PCIe 4.0 RTX 6000 Ada, with 0.6B and 8B Qwen3, 16–32K contexts, B/K = 1.25–4 and batch 1–24, it
 is not. At batch 1 the step is bound by kernel dispatch (the whole offloading path costs 4–6 ms per token, of which transfer is a
 fraction), and with batching the step time grows far more slowly than the bytes; even the optimal policy (Bélády, 18–40 % fewer
-bytes) is within a few % of LRU. The first measurable gain appears at **batch 32 on the 0.6B model** (EMA +3.4 %, allocation + EMA
-+4.1 %, Bélády +4.8 % throughput), where 272 MiB move per step; on 8B the larger compute hides it again. Conditions under which this could change, none of which we measured: a slower or
+bytes) is within a few % of LRU. At batch 32 on the 0.6B model (272 MiB per step) the
+EMA / allocation + EMA / Bélády show +3.4 / +4.1 / +4.8 % throughput, but the median step is the same as LRU's and the difference
+is LRU's long tail, so it is not attributed to the policy (fixed order, 2 repeats; R4); on 8B there is none. Conditions under which this could change, none of which we measured: a slower or
 contended host link, much larger KV per page (MHA instead of 8-head GQA, larger head dim), many more pages fetched per step (larger
 K, smaller B/K), or a fully fused/asynchronous offload path whose remaining cost *is* the transfer.

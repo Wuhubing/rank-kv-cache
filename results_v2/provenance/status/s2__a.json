@@ -1,0 +1,16 @@
+{
+ "split": "splits/longctx_v1.json",
+ "subset": "dev",
+ "total": 1,
+ "done": [
+  "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259"
+ ],
+ "started_at": "2026-11-25T06:41:11.228061+00:00",
+ "last": {
+  "rid": "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259",
+  "steps": 950,
+  "stop": "eos",
+  "seconds": 26.92
+ },
+ "finished_at": "2026-11-25T06:42:08.251855+00:00"
+}

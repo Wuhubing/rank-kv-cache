@@ -7,9 +7,9 @@ RTX 6000 Ada, and every number lands within 0.004 of the L4 original.**
 | Event | Time (UTC) | Source |
 |---|---|---|
 | Preregistration `docs/replication_v2.md` committed **and pushed** | **2026-11-25T06:58:09Z** | commit `86f1166` |
-| First held-out trace collection started | **2026-11-25T06:58:24.83Z** | `started_at` in the manifest of the first held-out document (`data/heldout/*.json` on wulab2) |
+| First held-out trace collection started | **2026-11-25T06:58:24.83Z** | `started_at` in the manifest of the first held-out document (`data/heldout/*.json` on wulab2; committed copy without the generated text: `results_v2/provenance/manifests/heldout.jsonl`) |
 | Last held-out trace finished | 2026-11-25T07:16:02.94Z | manifests |
-| Evaluation (steps 2–5, run once) | 2026-11-25T07:20–07:22Z | `logs/s5.log` on wulab2 |
+| Evaluation (steps 2–5, run once) | 2026-11-25T07:20–07:22Z | `logs/s5.log` on wulab2 (copy: `results_v2/provenance/logs/s5.log`) |
 
 The push finished before the collection command was started (same shell, run one after the other). The frozen file
 `splits/heldout_frozen_v1.json` is unchanged (it was fitted on the L4 dev traces). Nothing from S3–S4 was used.
@@ -70,7 +70,12 @@ and replacement add up**: allocation lowers both anchors, and EMA closes the sam
   are broken by the LRU key. Kept as is, for comparability with the original.
 
 ## Deviations
-None from the preregistered commands. Steps 2–5 were run once, in order, with the arguments as written; step 1
+**Post-hoc analysis (added in followup-v3, R9).** The float16 tie share above was listed in the preregistration as "also
+reported", but its command was not among the preregistered evaluation commands; it was written and run after the evaluation
+(`results_v2/heldout/ties.csv`, 07:23Z, after steps 2–5 at 07:20–07:22Z). It is a post-hoc, descriptive reading and took no
+part in any criterion or decision.
+
+Otherwise none from the preregistered commands. Steps 2–5 were run once, in order, with the arguments as written; step 1
 ran once without interruption (no document collected twice). The GPU stayed the same (card 0) throughout.
 Notes that are not deviations: the held-out collection ran in parallel with the CPU-only S4 analyses on dev (S4
 results were not used, and the frozen file was not touched); after the evaluation, the result files were moved on

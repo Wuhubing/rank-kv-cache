@@ -15,8 +15,9 @@ statement below cites the step that supports it. Confirmatory = preregistered he
 >    models (Qwen3-0.6B, Qwen3-8B) and two GPUs. Per-layer budgets add to it: at equal total slots, 16 % (0.6B) / 21 % (8B) fewer
 >    repeat misses than LRU, and 35 % / 43 % of the gap at the same allocation.
 > 2. On a current PCIe GPU these savings (8–14 % fewer host→GPU bytes) **do not become latency** at batch 1, and become throughput
->    only marginally and only at large batch on a small model (+3–4 % at batch 32 on 0.6B, none on 8B), because transfer is a small
->    part of the decode step. We characterise this.
+>    not with batching either (at batch 32 on 0.6B the observed difference comes from LRU's long-tail steps with the same median
+>    step, so it cannot be attributed to the policy; none on 8B), because transfer is a small part of the decode step. We
+>    characterise this.
 
 ## Point 1: supported, with sharpened wording
 | Claim | Status | Evidence |
@@ -37,13 +38,19 @@ statement below cites the step that supports it. Confirmatory = preregistered he
 |---|---|---|
 | Byte savings exist on real hardware | **Supported** | EMA −8 to −11 % bytes, allocation + EMA −11 to −20 %, Bélády −18 to −40 %; LRU/Bélády measured misses equal the simulator exactly (S7) |
 | They do not become latency at batch 1 | **Supported** | 0.6B: all tiered policies 30.1–31.0 ms/token across B = 80–256; 8B: 40.6 ms; ties within the repeat spread (S7 §1, §3) |
-| They barely become throughput with batching | **Supported with a nuance (new measurement)** | Batch 1–24: EMA 0.90–1.00× LRU throughput in an unfused batched implementation, Bélády +0–7 %. Batch 32: 0.6B EMA +3.4 %, alloc+EMA +4.1 %, Bélády +4.8 % (reproducible); 8B within ±2.5 % noise (S7 §2, §3) |
+| They do not become throughput with batching | **Supported (corrected in followup-v3, R4)** | Batch 1–24: EMA 0.90–1.00× LRU throughput in an unfused batched implementation, Bélády +0–7 %. Batch 32 on 0.6B: the observed difference comes from LRU's long-tail steps; the median step is the same (92.7–93.0 ms for LRU, current score, EMA), so it cannot be attributed to the policy (fixed run order, 2 repeats). 8B within ±2.5 % noise (S7 §2, §3) |
 | "Batch 32 would save 2.3 ms/step" | **Removed** | Was a linear extrapolation; replaced by measurement (`docs/gpu_benchmark.md`, STATUS_REPORT) |
 | When it would pay off | **Stated as conditions, not measured** | Slower/contended host link, larger KV per page (MHA), more pages per step, fully fused offload path (S7 §4) |
 
 ## Limitations that the paper must carry
 - One selector family (Quest upper bound, page-level, K=64 by default), one model family (Qwen3), one GPU type in this replication
   (plus L4 in the original).
-- 8B documents are partly 12–16K (the 16–32K pool was exhausted); the 8B decodes all hit the 1024-token cap.
-- 64K uses YaRN on a 0.6B model, and 6 of 14 documents stopped on the loop rule; RULER and SCBench are dev-only and exploratory.
+- 8B documents are partly 12–16K (the 16–32K pool was exhausted); the 8B decodes all hit the 1024-token cap, so the 8B result
+  covers only the first 1 023 decode steps, all in the thinking phase. The 8B criterion (iv) threshold (0.15) was set after the
+  0.6B result was known (before the 8B held-out was collected).
+- 64K uses YaRN on a 0.6B model, and 6 of 14 documents stopped on the loop rule (as on RULER); without them the EMA's G is
+  0.282 (64K) and 0.267 (RULER) instead of 0.284 and 0.255 (`results_v2/ext/degenerate/`). RULER and SCBench are dev-only and
+  exploratory.
+- Post-hoc readings after held-out evaluation (8B InfLLM / ρ read-outs, S5 float16 ties) are listed as deviations, not evidence for
+  a criterion.
 - Batched systems numbers come from an unfused implementation (lower bound on what an optimised system would see).

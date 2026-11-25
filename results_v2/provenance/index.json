@@ -1,0 +1,262 @@
+[
+ {
+  "folder": "data/64k_dev",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 3,
+   "loop": 6,
+   "length": 5
+  }
+ },
+ {
+  "folder": "data/8b_dev",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "length": 14
+  }
+ },
+ {
+  "folder": "data/8b_dev_digest",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "length": 14
+  }
+ },
+ {
+  "folder": "data/8b_heldout",
+  "traces": 21,
+  "manifests": 21,
+  "stops": {
+   "length": 21
+  }
+ },
+ {
+  "folder": "data/dev",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 13,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/dev_arkvale_sel",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 14
+  }
+ },
+ {
+  "folder": "data/dev_attn",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 13,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/dev_digest",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 13,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/heldout",
+  "traces": 21,
+  "manifests": 21,
+  "stops": {
+   "eos": 18,
+   "length": 2,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/ruler_dev",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "loop": 6,
+   "length": 1,
+   "eos": 7
+  }
+ },
+ {
+  "folder": "data/s2/a",
+  "traces": 1,
+  "manifests": 1,
+  "stops": {
+   "eos": 1
+  }
+ },
+ {
+  "folder": "data/s2/b",
+  "traces": 1,
+  "manifests": 1,
+  "stops": {
+   "eos": 1
+  }
+ },
+ {
+  "folder": "data/s2/rec",
+  "traces": 1,
+  "manifests": 1,
+  "stops": {
+   "eos": 1
+  }
+ },
+ {
+  "folder": "data/sample/seed0",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 13,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/sample/seed1",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "length": 1,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/sample/seed2",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 13,
+   "length": 1
+  }
+ },
+ {
+  "folder": "data/scbench_check",
+  "traces": 1,
+  "manifests": 1,
+  "stops": {
+   "eos": 1
+  }
+ },
+ {
+  "folder": "data/scbench_dev",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "loop": 1,
+   "length": 1
+  }
+ },
+ {
+  "folder": "data/sweep/ps16_k128",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "length": 1,
+   "loop": 1
+  }
+ },
+ {
+  "folder": "data/sweep/ps16_k32",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 10,
+   "length": 1,
+   "loop": 3
+  }
+ },
+ {
+  "folder": "data/sweep/ps32_k128",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "length": 3,
+   "eos": 11
+  }
+ },
+ {
+  "folder": "data/sweep/ps32_k32",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "loop": 2
+  }
+ },
+ {
+  "folder": "data/sweep/ps32_k64",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "length": 2
+  }
+ },
+ {
+  "folder": "data/sweep/ps64_k128",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 9,
+   "length": 5
+  }
+ },
+ {
+  "folder": "data/sweep/ps64_k32",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 14
+  }
+ },
+ {
+  "folder": "data/sweep/ps64_k64",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "length": 4,
+   "eos": 10
+  }
+ },
+ {
+  "folder": "data/sweep/ps8_k128",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "length": 2
+  }
+ },
+ {
+  "folder": "data/sweep/ps8_k32",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "loop": 2
+  }
+ },
+ {
+  "folder": "data/sweep/ps8_k64",
+  "traces": 14,
+  "manifests": 14,
+  "stops": {
+   "eos": 12,
+   "length": 1,
+   "loop": 1
+  }
+ }
+]
