@@ -95,8 +95,28 @@ Spearman ρ between the Quest page scores and the true dense attention mass of e
 
 The upper bound is a reasonably good but far from perfect proxy for attention. That matters for the noise sensitivity in S4.8.
 
-## 4. Page size and K (0.6B dev): (pending)
-## 5. Sampled decoding (0.6B dev, T=0.6, top-k 20, top-p 0.95, 3 seeds): (pending)
+## 4. Page size and K (0.6B dev, 14 documents per cell; 11 new collections + the S3 traces for page 16 / K 64)
+G at B/K = 1.5 (`results_v2/ext/sweep/sweep_table.csv` has B/K = 1.25, 1.5, 2, 4 with CIs; `analysis_v2/sweep_table.py`):
+| page \ K | 32 | 64 | 128 |
+|---|---|---|---|
+| 8 | EMA 0.269 · score 0.233 · allrank 0.256 (LRU 7.63 %) | 0.280 · 0.247 · 0.270 (7.27 %) | 0.291 · 0.263 · 0.285 (6.39 %) |
+| 16 | 0.266 · 0.225 · 0.254 (6.40 %) | **0.279** · 0.240 · 0.270 (6.04 %) | 0.296 · 0.263 · 0.291 (4.82 %) |
+| 32 | 0.271 · 0.235 · 0.262 (5.58 %) | 0.291 · 0.257 · 0.286 (4.54 %) | 0.306 · 0.270 · 0.303 (2.85 %) |
+| 64 | 0.286 · 0.251 · 0.280 (4.39 %) | 0.307 · 0.269 · 0.303 (2.67 %) | 0.314 · 0.265 · 0.310 (1.00 %) |
+
+The EMA beats LRU on 14/14 documents in all 12 cells; its G rises slightly with larger pages and larger K (0.27 → 0.31), and its
+lead over the current score (0.03–0.05) and the all-page rank's closeness to it (within 0.013) hold everywhere. Each cell is its
+own collection (the selector changes, so the generated text changes too); collection stops: mostly EOS.
+
+## 5. Sampled decoding (0.6B dev, T=0.6, top-k 20, top-p 0.95, 3 seeds)
+| Seed | LRU miss % | current score G | EMA (LODO) G [CI] | all-page rank EMA G | EMA wins |
+|---|---|---|---|---|---|
+| 0 | 5.99 | 0.245 | 0.281 [0.276, 0.285] | 0.273 | 14/14 |
+| 1 | 5.95 | 0.242 | 0.280 [0.275, 0.284] | 0.271 | 14/14 |
+| 2 | 5.90 | 0.247 | 0.282 [0.277, 0.286] | 0.274 | 14/14 |
+
+Greedy decoding on the same documents: 0.279. Sampling changes every generated sequence, but not the result (spread across seeds 0.002).
+`results_v2/ext/sampling/sampling_table.csv`.
 
 ## Deviations in S6
 - 8B split: floor relaxed to 12K (plan-sanctioned). 25 of 35 documents come from LongBench's `gov_report_e` file (same GovReport
