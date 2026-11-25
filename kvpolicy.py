@@ -436,9 +436,10 @@ def future_uses(ranked):
     return fut
 
 
-def simulate(ranked, scores, B, name, *, on_evict=None, **params):
+def simulate(ranked, scores, B, name, *, on_evict=None, per_step=None, **params):
     """Replay one layer stream. ranked: [T, K] ints; scores: [T, P] or None.
-    Returns dict(accesses, misses, compulsory). on_evict(t, victims, policy) is optional."""
+    Returns dict(accesses, misses, compulsory). on_evict(t, victims, policy) is optional;
+    per_step, if a list, receives each step's miss count."""
     rows = [tuple(int(p) for p in r if p >= 0) for r in np.asarray(ranked)]
     K = max(len(r) for r in rows)
     if B < K:
@@ -472,6 +473,8 @@ def simulate(ranked, scores, B, name, *, on_evict=None, **params):
         assert len(res) <= B
         acc += len(sel)
         miss += len(misses)
+        if per_step is not None:
+            per_step.append(len(misses))
         seen |= sel
     return dict(accesses=acc, misses=miss, compulsory=len(seen))
 
