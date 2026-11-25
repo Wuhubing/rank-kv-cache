@@ -1,4 +1,4 @@
-# 在 wulab2 上从头重跑：目标、指标、基线和执行步骤
+# 从头重跑：目标、指标、基线和执行步骤
 
 写于 2026-11-25。**本文是交给 mac mini 上的 Claude 自主执行的完整任务说明**（用 `/goal` 盯到完成），执行过程中不需要人工审查。配套文档：[README.md](README.md)（投稿准备）和 [papers/](papers/)（论文阅读笔记）。
 
@@ -30,18 +30,17 @@
 | 全 page 百分位对照还没结果 | 决定第 1.2 节第 1 点该说"分数大小"还是"全局排序" | 执行步骤 S4 |
 | 按层分配缺少相同分配的 oracle | 不然不能说"补上了多少差距" | 执行步骤 S4 |
 | 只有 1 个模型、1 种 GPU、batch 1 | workshop 审稿人会质疑泛化 | 执行步骤 S3、S5、S6 |
-| proposal 和蓝图原文不在仓库 | 无法逐条核对最初承诺的目标和成功标准 | 请把 proposal 放进 `docs/`；没有的话，以 `splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
 | 投稿目标和截止时间未定 | 影响篇幅、要不要做系统部分 | 团队决定；ICBINB 2027 届的消息在 2026-12-07 后才有 |
 | 团队对 thesis 的共识 | 两条研究线由不同的人推进过 | 团队过一遍第 1.2 节 |
 
 ---
 
 ## 2. 不能违反的规则
-1. **冻结的东西不改**：`splits/heldout_frozen_v1.json`、`splits/longctx_v1.json`、已提交的结果文件都保持原样（其他已冻结文件也一样不动）。新结果只写进 `results_wulab2/`。
+1. **冻结的东西不改**：`splits/heldout_frozen_v1.json`、`splits/longctx_v1.json`、已提交的结果文件都保持原样（其他已冻结文件也一样不动）。新结果只写进 `results_v2/`。
 2. **原有 held-out 只再评估一次**：用冻结参数在新 GPU 上重新采集，按事先提交的复现预注册评估一次。不在新的 held-out 上调任何参数。
 3. **探索只在 dev 上做**：全 page 百分位对照、预算扫描、各种消融都只用 dev。
 4. **新模型或新任务的确认性结论要用新的 held-out**：另抽文档，先写预注册再采集。
-5. **一个分支只让一台机器写**：`rerun/wulab2` 只从 mini 提交和推送（wulab2 上没有 GitHub 凭据）。wulab2 只负责跑，代码通过 `git pull` 从 GitHub 同步过去（仓库是公开的），小结果文件用 `rsync` 拉回 mini 再提交。
+5. **一个分支只让一台机器写**：`replication-v2` 只从 mini 提交和推送（wulab2 上没有 GitHub 凭据）。wulab2 只负责跑，代码通过 `git pull` 从 GitHub 同步过去（仓库是公开的），小结果文件用 `rsync` 拉回 mini 再提交。
 6. **不备份到 Drive**：原始 trace 只放在 `/data/weibing`；仓库里只提交小的结果文件和带 sha256 的 manifest。
 7. **只用一张卡**：开跑前用 `nvidia-smi` 挑一张空闲的卡，用 `CUDA_VISIBLE_DEVICES` 固定。全部采集和 benchmark 都在这张卡上做，卡号和 GPU UUID 写进 manifest。长任务放在 tmux 里跑。
 
@@ -61,10 +60,14 @@
 | # | 决定 | 内容 |
 |---|---|---|
 | D1 | 原 held-out | 冻结参数做跨硬件复现，评估一次（S5） |
-| D2 | 代码基线 | 不等 PR 合并。从 `origin/review-fixes/efficient-policy`（PR #7，已包含 #5）开 `rerun/wulab2`。不合并、不关闭任何 PR |
+| D2 | 代码基线 | 从 `origin/efficient-policy` 开 `replication-v2`。PR #4、#5、#7 都已合并进去（2026-11-25 时为 `7519860`）。不合并、不关闭任何 PR |
 | D3 | 第二个模型 | Qwen3-8B |
 | D4 | thesis | 按第 1.2 节执行；S4 第 2 项出结果后，按结果把第 1.2 节第 1 点改成"分数大小"或"全局排序"，并在 `docs/rerun/thesis.md` 写明依据 |
-| D5 | 第 1.3 节的缺口 | proposal 原文和投稿目标暂时缺失，不阻塞执行；以 `splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
+| D5 | 目标依据 | 不使用 proposal；以本文第 1.2 节、`splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
+| D6 | 新设置的确认性评估 | **只给 Qwen3-8B 做**：另抽 21 篇新的 held-out，先预注册再评估一次。64K、SCBench、RULER、page 大小和 K、采样解码只在 dev 上做，结果标为探索性 |
+| D7 | 系统部分 | **要做 batch > 1**：实现多请求的分层缓存并实测吞吐（S7） |
+| D8 | 原 L4 trace | **不从 Drive 下载**。需要 L4 数据时，用 mini 上的 Colab CLI 申请 L4，用同一个采集脚本重新采集（S3） |
+| D9 | 扩展实验的样本量 | 每个新设置的 dev 至少 14 篇（与现有长文档 dev 相同）；8B 的 held-out 21 篇 |
 
 ---
 
@@ -152,12 +155,12 @@
 ## 7. 执行步骤（按依赖顺序，一口气做完）
 
 ### S0：准备分支
-1. 在 mini 的 `~/work/rank-kv-cache` 克隆或更新仓库，按 D2 建 `rerun/wulab2` 并推送。
+1. 在 mini 的 `~/work/rank-kv-cache` 克隆或更新仓库，按 D2 建 `replication-v2` 并推送。
 2. 把本文和 `docs/workshop/` 复制进这个分支（来自 `docs/workshop-readiness`），建立 `docs/rerun/STATUS.md`（见第 10 节格式）。
 - 检查：分支已推送；本地单元测试在 mini 上通过（mini 只有 Python 3.9，用 `uv` 建 3.10 以上的环境）。
 
 ### S1：环境
-1. 在 wulab2 的 `/data/weibing/projects/rank-kv-cache` 用 https 克隆仓库，切到 `rerun/wulab2`。
+1. 在 wulab2 的 `/data/weibing/projects/rank-kv-cache` 用 https 克隆仓库，切到 `replication-v2`。
 2. 设置 `HF_HOME=/data/weibing/hf` 和 `TMPDIR=/data/weibing/tmp`。
 3. 用 uv 建环境：`transformers==4.53.3`，cu124 的 torch（版本写进 `docs/rerun/environment.md`），numpy、pytest、`rouge==1.0.1`。
 4. 按 split 文件里固定的 revision 下载 Qwen3-0.6B 和 LongBench；后面 S6 再下 Qwen3-8B。
@@ -175,8 +178,13 @@
 
 ### S3：重采 dev
 1. 14 篇 dev（`splits/longctx_v1.json`），最多 1024 步，thinking 开启。
-2. 与原 L4 结果对比：LRU/Bélády 差距、各策略的 G，是否落在原来的 CI 附近。如果能拿到 L4 原始 trace，再比较逐层逐步的选择一致率，以及翻转的 page 是否集中在 top-K 边界。
-- 输出：`results_wulab2/dev/`，`docs/rerun/s3_dev_vs_l4.md`。
+2. 与原 L4 结果对比：LRU/Bélády 差距、各策略的 G，是否落在原来的 CI 附近。
+3. **在 Colab L4 上重采同样的 14 篇 dev**（按 D8，不从 Drive 下载）：
+   - 在 mini 上用 `colab new -s l4dev --gpu L4` 申请，用 `colab upload` 传代码，用与原实验相同的 torch 2.14.1+cu130 和 transformers 4.53.3 跑 `collect/long.py`，用 `colab download` 取回 trace，再 rsync 到 wulab2 的数据目录。
+   - **跑完立刻 `colab stop -s l4dev`，并用 `colab usage` 确认 `Active assignments: 0`**。账户约 100 units，L4 约 1.94 units/小时。
+   - 先核对新的 L4 trace 能否复现已提交的原结果（`docs/results/longctx_dev/misses.csv` 中的 LRU 和 Bélády miss 数）。能复现，说明采集脚本移植正确；不能复现，先查原因。
+   - 再比较 L4 与 RTX 6000 Ada：逐层逐步选出同一组 page 的比例、排序完全相同的比例，以及翻转的 page 是否集中在 top-K 边界附近（用分数与第 K 名分数的差距衡量）。
+- 输出：`results_v2/dev/`、`results_v2/dev_l4/`，`docs/rerun/s3_dev_vs_l4.md`。
 - 检查：所有文档完整、校验通过；对比小结写好。如果和 L4 差异很大，先停下分析原因，再往下走。
 
 ### S4：dev 上的全部基线和分析（CPU 回放）
@@ -189,44 +197,56 @@
 6. CO2 式析因、lazy 刷新、Holt、幂律衰减。
 7. 第 5.2 节的预测质量指标。
 8. 第 5.4 节的统计和噪声注入。
-- 输出：`results_wulab2/dev/<实验名>/`，每项一页结论放在 `docs/rerun/s4/`。
+- 输出：`results_v2/dev/<实验名>/`，每项一页结论放在 `docs/rerun/s4/`。
 - 检查：所有回放的 LRU 和 Bélády 计数与独立实现一致（`validation/audit.py`）；第 2 项的结论写进 thesis（"分数大小"还是"全局排序"）。
 
 ### S5：跨硬件复现（先提交预注册，再采 held-out）
-1. 写 `docs/replication_wulab2.md` 并**提交、推送后**才能进行下一步。内容：
+1. 写 `docs/replication_v2.md` 并**提交、推送后**才能进行下一步。内容：
    - 所有参数原样沿用两份冻结配置，不允许用 S3–S4 的结果改动。
    - 判定标准：EMA 的 G 及其 CI、21 篇中胜过 LRU 的篇数、按层分配后的降幅（同时报告同分配 oracle 的版本）。
    - 评估命令、偏离的定义、复现失败时报告什么。
 2. 采 21 篇长 held-out。
 3. 按预注册的命令各跑一次。
-- 输出：`results_wulab2/heldout/`，`docs/rerun/s5_replication.md`（与 L4 结果并排对比，列出全部偏离）。
+- 输出：`results_v2/heldout/`，`docs/rerun/s5_replication.md`（与 L4 结果并排对比，列出全部偏离）。
 - 检查：预注册的提交时间早于第一篇 held-out 的采集时间（看 git 记录和 manifest 时间戳）。
 
 ### S6：扩展（第二个模型、长上下文、更多任务）
-1. 从 LongBench 和 RULER 为新设置另抽文档，写新的 split 文件（dev 和 held-out 分开，按源文档划分）。
+1. 为新设置另抽文档，写新的 split 文件，按源文档划分，**不使用 `splits/longctx_v1.json` 里已有的文档**：
+   - 8B：GovReport 和 QMSum，16–32K token，14 篇 dev 加 21 篇 held-out。如果符合长度的文档不够，把长度下限放宽到 12K，并在 split 文件和报告里写明。
+   - 0.6B 的 64K 档、SCBench 多轮、RULER：每个设置 14 篇 dev，不设 held-out。
+   - 用固定 seed 抽样，抽样脚本和 split 文件一起提交。
 2. 采集时打开 `--record-attn-mass` 和 `--record-true-attn-rank`。
 3. Qwen3-8B 在原长文档任务上采 dev。64K 上下文下权重约 16 GB、KV 约 9.4 GB，单卡放得下。
 4. 0.6B 上加一档 64K 上下文，以及 SCBench 多轮。
 5. page 大小 ∈ {8, 16, 32, 64}、K ∈ {32, 64, 128} 的扫描（0.6B，dev）。
 6. 采样解码：temperature > 0，3 个 seed（0.6B，dev）。
 7. 用真实注意力质量重跑两个 InfLLM 基线；报告 Quest 分数与真实注意力的秩相关。
-8. 如果要对新设置下确认性结论：先提交预注册，再采对应的 held-out，评估一次。
-- 输出：`results_wulab2/ext/`，`docs/rerun/s6_extensions.md`。
-- 检查：每个新设置都有 dev 结论；确认性结论都有预注册在先。
+8. **8B 的确认性评估**（按 D6）：
+   - 在 8B 的 14 篇 dev 上按原来的流程（LODO）选出 α 和按层分配方案。
+   - 写 `docs/preregistration_8b.md` 和 `splits/heldout_frozen_8b.json`：冻结参数、判据（与 `heldout_frozen_v1.json` 相同的三条，外加同分配 oracle 版本的降幅）、评估命令、偏离定义。**提交并推送之后**才能采 8B 的 held-out。
+   - 采 21 篇 8B held-out，评估一次。
+   - 其余设置只报告 dev 结果，标为探索性。
+- 输出：`results_v2/ext/`，`docs/rerun/s6_extensions.md`。
+- 检查：每个新设置都有 dev 结论；8B 预注册的提交时间早于第一篇 8B held-out 的采集时间。
 
 ### S7：系统测量
 1. 用 #7 修好的 `gpu_bench.py`（warmup 生效，显存按阶段报告）在同一张卡上测，测之前确认卡上没有别人的任务。
 2. 策略：LRU、当前分数、EMA、按层分配 + EMA、Bélády（用 trace 的未来信息）。
 3. 报告第 5.3 节的全部指标：TPOT 分布（多次重复）、延迟分解、策略开销 µs、关掉 host 取数的对照、显存分阶段、PCIe 字节、FLOPs/MACs 表的实测部分。
 4. 验证所有策略的输出逐 token 一致。
-5. 刻画收益区间：B/K、上下文长度、0.6B 与 8B；能实现的话再加 batch > 1。
-- 输出：`results_wulab2/gpu/`，`docs/rerun/s7_systems.md`。
+5. 刻画收益区间：B/K、上下文长度、0.6B 与 8B。
+6. **batch > 1**（按 D7）：
+   - 在 `gpu_bench.py` 里实现多请求的分层缓存：每个请求、每层各有 B 个槽位；选择器对 batch 内每个请求分别取 top-K；host 取数按 batch 合并成一次传输；替换策略对每个请求独立执行。
+   - 正确性：每个请求在 batch 里的 miss 数必须和单独模拟时完全一致；贪心生成的 token 与 batch=1 时一致，不一致时报告不一致的比例和原因（数值差异会改变选择）。
+   - 测 batch ∈ {1, 4, 8, 16, 32}（显存不够就到能放下的最大值）：吞吐（tokens/s）、TPOT 分布、PCIe 字节、显存，比较 LRU、当前分数、EMA、按层分配 + EMA。
+   - 目标是回答：batch 增大后，替换策略省下的字节能不能变成吞吐收益。删掉原文档里"batch=32 线性外推"的数字，换成实测。
+- 输出：`results_v2/gpu/`，`docs/rerun/s7_systems.md`。
 - 检查：LRU 和 Bélády 的实测 miss 与模拟器完全一致。
 
 ### S8：汇总
 1. 更新 README、STATUS_REPORT 和 workshop README 中的数字和图，原 L4 结果保留并并排展示。
 2. 按第 1.2 节（或团队修改后）的 thesis 逐条核对：每一条都有对应的结果和图，没有证据的说法删掉或改弱。
-3. 开 PR（`rerun/wulab2` → `efficient-policy`），说明做了什么、结果是什么、和原结果的差异、所有偏离。不合并。
+3. 开 PR（`replication-v2` → `efficient-policy`），说明做了什么、结果是什么、和原结果的差异、所有偏离。不合并。
 
 ---
 
@@ -241,9 +261,9 @@
 | 原始 trace 只有一份 | manifest 记录 sha256；丢失后按同一配置重采 |
 
 ## 9. 交付物
-- `rerun/wulab2` 分支和对应的 PR：采集脚本、新基线和分析脚本、`results_wulab2/` 下的小结果文件。
+- `replication-v2` 分支和对应的 PR：采集脚本、新基线和分析脚本、`results_v2/` 下的小结果文件。
 - `docs/rerun/`：决定记录、环境、每一步的结论、复现报告、扩展和系统测量报告。
-- `docs/replication_wulab2.md`：复现预注册（S5 之前提交）。
+- `docs/replication_v2.md`：复现预注册（S5 之前提交）。
 - 更新后的 README、STATUS_REPORT 和 workshop 文档。
 
 ---
@@ -258,7 +278,7 @@
 
 - wulab2：Ubuntu，Python 3.10，`uv` 在 `~/.local/bin`，tmux 3.2a，**没有 gh、没有 git 身份和凭据**。
 - 原始 trace 放在 `/data/weibing/projects/rank-kv-cache/data/`（加进 `.gitignore`），**不提交、不上传 Drive**。
-- 代码同步：mini 推送后，在 wulab2 上 `git pull`。结果同步：`rsync -a wulab2:/data/weibing/projects/rank-kv-cache/results_wulab2/ ~/work/rank-kv-cache/results_wulab2/`，只同步 CSV、JSON、TXT、PNG 等小文件。
+- 代码同步：mini 推送后，在 wulab2 上 `git pull`。结果同步：`rsync -a wulab2:/data/weibing/projects/rank-kv-cache/results_v2/ ~/work/rank-kv-cache/results_v2/`，只同步 CSV、JSON、TXT、PNG 等小文件。
 
 ### 10.2 必须遵守
 1. 第 2 节的规则全部有效。特别是：不改冻结文件；held-out 只在 S5 预注册提交之后采集、只评估一次；探索只用 dev。
