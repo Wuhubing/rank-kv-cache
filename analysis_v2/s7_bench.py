@@ -178,12 +178,18 @@ def cmd_batch(a):
             for name, mode, budgets, al in pols + [("belady", "belady", B, 0.0)]:
                 for rep in range(a.repeats):
                     nxt = gbb.next_use_batch(ref["ranks"]) if mode == "belady" else None
-                    r = gbb.run(model, reqs, mode, a.steps, budgets, alpha=al, nxt=nxt, warmup=a.warmup)
+                    r = gbb.run(model, reqs, mode, a.steps, budgets, alpha=al, nxt=nxt, warmup=a.warmup,
+                                timing=a.timing)
                     if ref is None:
                         ref = r
                     lat = r["lat"][a.warmup:]
-                    m_steady = None
-                    rows.append(dict(R=R, B=B, policy=name, rep=rep, tokens_per_s=R * len(lat) / lat.sum(),
+                    bd = {}
+                    if r["breakdown"] is not None:
+                        m = r["breakdown"][a.warmup:].mean(0)
+                        bd = {f"bd_{k}_ms": float(v) for k, v in
+                              zip(("append", "select", "policy", "fetch", "attention"), m)}
+                    rows.append(dict(R=R, B=B, policy=name, rep=rep, timed=bool(a.timing), **bd,
+                                     tokens_per_s=R * len(lat) / lat.sum(),
                                      **lat_summary(r["lat"], a.warmup), misses=int(r["misses"].sum()),
                                      pcie_bytes_per_step=r["bytes"] / a.steps, host_tier_bytes=r["host_bytes"],
                                      peak_prefill=r["peak_prefill"], mem_start=r["mem_start"],
@@ -197,7 +203,7 @@ def cmd_batch(a):
                         checks.append(dict(R=R, policy=name, per_request_misses_equal_simulator=ok))
                     del r
                     torch.cuda.empty_cache()
-            if R == 4:  # batch vs alone
+            if R == 4 and not a.timing:  # batch vs alone
                 same, tot, rk = 0, 0, 0
                 for q in range(R):
                     alone = gbb.run(model, [reqs[q]], "lru", a.steps, B)
@@ -265,6 +271,7 @@ def main():
     ap.add_argument("--trace-dir")
     ap.add_argument("--host-cap-gb", type=float, default=80)
     ap.add_argument("--cut", type=int, help="single: cut prompts to this many tokens (context-length variation)")
+    ap.add_argument("--timing", action="store_true", help="batch: CUDA-event breakdown per phase (adds overhead)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     if a.cmd != "flops":

@@ -79,7 +79,8 @@ def batch(d):
                         peak_decode_GiB=float(np.mean([r["peak_decode"] for r in rs])) / 2**30,
                         host_tier_GiB=rs[0]["host_tier_bytes"] / 2**30,
                         ranks_equal_lru=all(r["ranks_equal_lru"] for r in rs),
-                        tokens_equal_lru=all(r["tokens_equal_lru"] for r in rs)))
+                        tokens_equal_lru=all(r["tokens_equal_lru"] for r in rs),
+                        **{k: float(np.mean([r[k] for r in rs])) for k in rs[0] if k.startswith("bd_")}))
     lru = {r["R"]: r for r in out if r["policy"] == "lru"}
     for r in out:
         l = lru[r["R"]]
