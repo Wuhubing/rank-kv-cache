@@ -87,14 +87,14 @@ def load_digest(path, name):
 
 
 def run_job(job):
-    path, stream, cfg, e2e = job
+    path, stream, cfg, e2e, std_budgets, do_eq = job
     R, S, rid = load(path)
     sink, recent = STREAMS[stream]
     pol, kw = configs(e2e)[cfg]   # every digest config is in the full set
     D = load_digest(path, kw["digest"]) if pol == "ark" and kw["digest"] not in ("quest", "own") else None
     T, L, P = S.shape
-    budgets = [("std", B, B) for B in BUDGETS]
-    for nb in EQ_NOMINAL:
+    budgets = [("std", B, B) for B in std_budgets]
+    for nb in (EQ_NOMINAL if do_eq else []):
         b = k2.unlimited_budget(nb, L, L_UNLIMITED, P)
         if b >= K + sink + recent:
             budgets.append(("eq", nb, b))
@@ -128,7 +128,7 @@ def cmd_replay(args):
     paths = sorted(str(p) for p in args.traces.glob("*.npz"))
     streams = ["page"] if args.e2e else (args.streams or list(STREAMS))
     C = configs(args.e2e, args.digests)
-    jobs = [(p, st, c, args.e2e) for p in paths for st in streams for c in C]
+    jobs = [(p, st, c, args.e2e, args.budgets or BUDGETS, not args.no_eq) for p in paths for st in streams for c in C]
     args.out.mkdir(parents=True, exist_ok=True)
     n = 0
     with Pool(args.procs) as pool, open(args.out / "misses.csv", "w", newline="") as f:
@@ -176,7 +176,8 @@ def audit_doc(job):
 def cmd_audit(args):
     ref = {}
     need = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
-    with open(args.out / "misses.csv") as f:
+    for path in misses_files(args.out):
+      with open(path) as f:
         for r in csv.DictReader(f):
             if r["config"] in ("lru", "belady"):
                 key = (r["doc"], int(r["layer"]), r["stream"], r["config"], int(r["B"]))
@@ -248,11 +249,12 @@ def cmd_compare(args):
 
 # ------------------------------------------------------------------------------------------ summarize
 
-def read(path):
+def read(paths):
     """M[(stream, kind, nominal, config, scope)][doc] = [accesses, misses, compulsory]; scope 'all' = every
     layer (std only), 'a' = layers >= 2 (std), 'b' = layers >= 2 at the equal-slots budget (eq rows)."""
     M = defaultdict(lambda: defaultdict(lambda: np.zeros(3, np.int64)))
-    with open(path) as f:
+    for path in paths:
+      with open(path) as f:
         for r in csv.DictReader(f):
             v = np.array([int(r["accesses"]), int(r["misses"]), int(r["compulsory"])])
             key = (r["stream"], int(r["nominal_B"]), r["config"])
@@ -265,13 +267,18 @@ def read(path):
     return M
 
 
+def misses_files(out):
+    """misses.csv plus any misses_*.csv (extra replays with other budgets) in the folder."""
+    return [out / "misses.csv"] + sorted(out.glob("misses_*.csv"))
+
+
 def g_of(lru, pol, opt):
     d = lru - opt
     return (lru - pol) / d if d else float("nan")
 
 
 def cmd_summarize(args):
-    M = read(args.out / "misses.csv")
+    M = read(misses_files(args.out))
     present = {k[0] for k in M}
     streams = [s for s in (["page"] if args.e2e else list(STREAMS)) if s in present]
     have = {k[2] for k in M}
@@ -280,7 +287,7 @@ def cmd_summarize(args):
     rows, contrasts, choices = [], [], []
     for stream in streams:
         for scope in ("all", "a", "b"):
-            for nb in (EQ_NOMINAL if scope == "b" else BUDGETS):
+            for nb in sorted({k[1] for k in M if k[0] == stream and k[3] == scope}):
                 base = (stream, nb)
                 if not M.get(base + ("lru", scope)):
                     continue
@@ -343,6 +350,27 @@ def cmd_summarize(args):
             w = csv.DictWriter(f, fieldnames=list(data[0]))
             w.writeheader()
             w.writerows(data)
+    # (b) against the plain all-layer budget: total misses over every layer (layers 0-1 have none under (b))
+    eqs = []
+    for stream in streams:
+        for nb in sorted({k[1] for k in M if k[0] == stream and k[3] == "b"}):
+            if not M.get((stream, nb, "lru", "all")):
+                continue
+            docs = sorted(d for d in M[stream, nb, "lru", "b"] if all(d in M[stream, nb, c, "b"] for c in C))
+            for c in C:
+                if not M.get((stream, nb, c, "all")):
+                    continue
+                mb = sum(M[stream, nb, c, "b"][d][1] for d in docs)
+                ms = sum(M[stream, nb, c, "all"][d][1] for d in docs)
+                acc = sum(M[stream, nb, "lru", "all"][d][0] for d in docs)
+                eqs.append(dict(stream=stream, nominal_B=nb, policy=c, docs=len(docs), misses_unlimited_eq=mb,
+                                misses_all_layers_B=ms, accesses_all_layers=acc, miss_rate_unlimited_eq=mb / acc,
+                                miss_rate_all_layers_B=ms / acc, ratio=mb / ms if ms else float("nan")))
+    if eqs:
+        with open(args.out / "eq_vs_std.csv", "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(eqs[0]))
+            w.writeheader()
+            w.writerows(eqs)
     with open(args.out / "lodo_choices.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["stream", "scope", "nominal_B", "family", "doc", "chosen"])
@@ -429,7 +457,8 @@ def cmd_tables(args):
     else:
         pols = ["lru", "score", "ema_z(lodo)", "ema_allrank(lodo)", "powerlaw(lodo)", "arkvale_simple", "ark:quest:1",
                 "ark:quest:0", "ark:cuboid_mean:1", "ark:cuboid_mean:0", "ark:digest(lodo):1", "belady"]
-    for sc, budgets in (("all", BUDGETS), ("a", BUDGETS), ("b", EQ_NOMINAL)):
+    for sc in ("all", "a", "b"):
+        budgets = sorted({k[2] for k in S if k[1] == sc})
         for st in streams:
             if not any((st, sc, B, "lru") in S for B in budgets):
                 continue
@@ -472,6 +501,8 @@ def main():
         p.add_argument("--procs", type=int, default=32)
         p.add_argument("--streams", nargs="+", choices=list(STREAMS), help="replay only these streams")
         p.add_argument("--digests", nargs="+", choices=DIGESTS, help="replay only these digests")
+        p.add_argument("--budgets", nargs="+", type=int, help="all-layer budgets (default BUDGETS)")
+        p.add_argument("--no-eq", action="store_true", help="skip the equal-slots (unlimited layers) rows")
     t = sub.add_parser("tables")
     t.add_argument("--out", type=Path, required=True)
     t.add_argument("--e2e", action="store_true")
