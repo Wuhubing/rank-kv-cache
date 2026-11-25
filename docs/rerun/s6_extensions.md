@@ -21,8 +21,11 @@ had only 25 unused documents (all from LongBench's `gov_report_e`), so the floor
 (stop = length; 8B thinks longer than 0.6B).
 
 **Scope (added in followup-v3, R10).** Because all 35 8B documents (dev and held-out) stopped at the 1024-token cap, every 8B
-result here covers only the first 1 023 decode steps of each document, which are all inside the thinking phase (no 8B
-document reached its answer). Whether the result holds after thinking ends is open (followup-v3 G2).
+result here covers only the first 1 023 decode steps of each document. These steps contain the whole thinking phase and the
+beginning of the answer: the thinking block ends (token `</think>`) at decode step 458–843 on dev and 396–822 on held-out
+(read from the committed manifests' token lists), so 180–627 answer steps per document are included, and the rest of the answer
+was cut by the cap. (A first version of this note said "all inside the thinking phase"; that was wrong and was corrected after
+followup-v3 G2 re-ran 8B dev with a 4096-token cap, in which every document ends at EOS after 1 503–2 018 steps.)
 
 Frozen on 8B dev (`analysis_v2/freeze_8b.py`): α = 0.4/0.5/**0.6**/0.7/0.95 for B = 72/80/96/128/256 (every LODO fold picked the
 same α); allocation from the 8B dev EMA curves (non-uniform at B = 80–128); DAgger linear coefficients.
