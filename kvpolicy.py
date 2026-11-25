@@ -439,7 +439,11 @@ def future_uses(ranked):
 def simulate(ranked, scores, B, name, *, on_evict=None, **params):
     """Replay one layer stream. ranked: [T, K] ints; scores: [T, P] or None.
     Returns dict(accesses, misses, compulsory). on_evict(t, victims, policy) is optional."""
-    rows = [tuple(int(p) for p in r if p >= 0) for r in np.asarray(ranked)]
+    R = check_ranked(ranked)
+    if scores is not None:
+        scores = np.asarray(scores)
+        check_scores(R, scores)
+    rows = [tuple(int(p) for p in r if p >= 0) for r in R]
     K = max(len(r) for r in rows)
     if B < K:
         raise ValueError("budget below K")
@@ -476,9 +480,72 @@ def simulate(ranked, scores, B, name, *, on_evict=None, **params):
     return dict(accesses=acc, misses=miss, compulsory=len(seen))
 
 
+def check_ranked(ranked):
+    """Validate one layer's selections ([T, K] page ids, -1 = padding) and return them as int64.
+    Raises ValueError for non-2-D input, fractional or non-finite ids, ids below -1, empty rows
+    and duplicate pages within a step (simulate() would otherwise collapse them silently)."""
+    R = np.asarray(ranked)
+    if R.ndim != 2 or R.shape[0] == 0 or R.shape[1] == 0:
+        raise ValueError(f"ranked must be a non-empty [T, K] array, got shape {R.shape}")
+    if R.dtype.kind == "f":
+        if not np.isfinite(R).all() or (R != np.round(R)).any():
+            raise ValueError("ranked contains non-integer page ids")
+    elif R.dtype.kind not in "iu":
+        raise ValueError(f"ranked must hold integer page ids, got dtype {R.dtype}")
+    R = R.astype(np.int64)
+    if (R < -1).any():
+        raise ValueError("ranked contains page ids below -1 (only -1 is padding)")
+    valid = R >= 0
+    if not valid.any(axis=1).all():
+        raise ValueError("ranked has a step with no selected pages")
+    srt = np.sort(np.where(valid, R, -1), axis=1)
+    if ((srt[:, 1:] == srt[:, :-1]) & (srt[:, 1:] >= 0)).any():
+        raise ValueError("ranked selects the same page twice in one step")
+    return R
+
+
+def check_scores(R, S):
+    """Validate one layer's scores [T, P] against validated selections R [T, K]: same T, every id
+    < P, and a finite score for every eligible page, i.e. every page from the step it is first
+    selected onwards (selected pages and all residents the score policies read)."""
+    if S.ndim != 2 or S.shape[0] != R.shape[0]:
+        raise ValueError(f"scores shape {S.shape} does not match ranked shape {R.shape}")
+    P = S.shape[1]
+    if R.max() >= P:
+        raise ValueError(f"page id {int(R.max())} out of range for {P} scored pages")
+    first = np.full(P, R.shape[0], dtype=np.int64)
+    t, k = np.nonzero(R >= 0)
+    np.minimum.at(first, R[t, k], t)
+    eligible = np.arange(R.shape[0])[:, None] >= first[None, :]
+    if not np.isfinite(S[eligible]).all():
+        raise ValueError("non-finite score for a selected or previously selected page")
+
+
 def load(path):
-    z = np.load(path, allow_pickle=False)
-    return z["ranked"], z["scores"].astype(np.float32), str(z["rid"])
+    """Read one trace npz: ranked [T, L, K] ints, scores [T, L, P] floats, rid (str). The schema
+    is checked here, at the ingestion boundary, before any simulation (see check_ranked/scores)."""
+    with np.load(path, allow_pickle=False) as z:
+        missing = {"ranked", "scores", "rid"} - set(z.files)
+        if missing:
+            raise ValueError(f"{path}: missing arrays {sorted(missing)}")
+        R, S, rid = z["ranked"], z["scores"], z["rid"]
+    if rid.ndim != 0 or rid.dtype.kind not in "US" or not str(rid):
+        raise ValueError(f"{path}: rid must be a non-empty scalar string")
+    rid = str(rid)
+    if R.ndim != 3 or S.ndim != 3 or R.shape[:2] != S.shape[:2]:
+        raise ValueError(f"{path}: expected ranked [T, L, K] and scores [T, L, P] with equal T, L; "
+                         f"got {R.shape} and {S.shape}")
+    if S.dtype.kind != "f":
+        raise ValueError(f"{path}: scores must be floating point, got {S.dtype}")
+    if R.dtype.kind not in "iu":
+        raise ValueError(f"{path}: ranked must hold integer page ids, got dtype {R.dtype}")
+    S = S.astype(np.float32)
+    for l in range(R.shape[1]):
+        try:
+            check_scores(check_ranked(R[:, l]), S[:, l])
+        except ValueError as e:
+            raise ValueError(f"{path} ({rid}), layer {l}: {e}") from None
+    return R, S, rid
 
 
 def doc_counts(ranked, scores, budgets, name, layers=None, **params):
