@@ -99,7 +99,8 @@ Each held-out set was collected once and evaluated once with the preregistered c
     float16 tie analysis (`results_v2/heldout/ties.csv`) was also run after the evaluation without a preregistered command. Both
     are post-hoc, exploratory readings of fixed configurations; nothing was selected from them.
 12. **Scope of the 8B result (R10).** All 35 8B documents stopped at the 1024-token cap, so the 8B confirmation covers only the
-    first 1 023 decode steps, all inside the thinking phase. The (iv) threshold 0.15 was set after the 0.6B results (G ≈ 0.28) were
+    first 1 023 decode steps: the whole thinking phase (it ends at step 396–843) and the first 180–627 steps of the answer, whose
+    remainder was cut. The (iv) threshold 0.15 was set after the 0.6B results (G ≈ 0.28) were
     known and before the 8B held-out was collected.
 13. **Provenance (R11).** Manifests (without generated text), collector status files, logs, the executed run scripts and a re-run
     of the bit-identity checks are now in `results_v2/provenance/`; `runs/run_s6_8b_heldout.sh` is reconstructed after the fact.

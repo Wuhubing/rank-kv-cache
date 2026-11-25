@@ -46,7 +46,8 @@ statement below cites the step that supports it. Confirmatory = preregistered he
 - One selector family (Quest upper bound, page-level, K=64 by default), one model family (Qwen3), one GPU type in this replication
   (plus L4 in the original).
 - 8B documents are partly 12–16K (the 16–32K pool was exhausted); the 8B decodes all hit the 1024-token cap, so the 8B result
-  covers only the first 1 023 decode steps, all in the thinking phase. The 8B criterion (iv) threshold (0.15) was set after the
+  covers only the first 1 023 decode steps (the whole thinking phase, which ends at step 396–843, plus the first 180–627 answer
+  steps; the rest of the answer was cut). The 8B criterion (iv) threshold (0.15) was set after the
   0.6B result was known (before the 8B held-out was collected).
 - 64K uses YaRN on a 0.6B model, and 6 of 14 documents stopped on the loop rule (as on RULER); without them the EMA's G is
   0.282 (64K) and 0.267 (RULER) instead of 0.284 and 0.255 (`results_v2/ext/degenerate/`). RULER and SCBench are dev-only and
