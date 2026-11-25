@@ -201,15 +201,19 @@ def gap_by_group(streams, budget):
     return totals
 
 
-def build_dataset(streams, prompts, budget):
-    """Features, next-use distance and document index for every LRU candidate."""
+def build_dataset(streams, prompts, budget, with_time=False):
+    """Features, next-use distance and document index for every LRU candidate.
+
+    with_time=True also returns, per row, the decision step t and the stream length,
+    so callers can find right-censored labels (see censored_labels).
+    """
     import numpy as np
     docs = sorted({request for request, _ in streams})
-    blocks, distances, doc_ids, victim_flags = [], [], [], []
+    blocks, distances, doc_ids, victim_flags, times, lengths = [], [], [], [], [], []
     for (request, layer), steps in sorted(streams.items()):
         uses = next_uses(steps)
         history = History(layer, prompts[request])
-        rows, dist, victim = [], [], []
+        rows, dist, victim, when = [], [], [], []
 
         def on_decision(t, candidates, victims):
             chosen = set(victims)
@@ -217,6 +221,7 @@ def build_dataset(streams, prompts, budget):
                 rows.append(history.features(page, t))
                 dist.append(next_use(uses, page, t) - t)
                 victim.append(page in chosen)
+                when.append(t)
 
         replay_scored(steps, budget, history, on_decision=on_decision)
         if rows:
@@ -224,8 +229,23 @@ def build_dataset(streams, prompts, budget):
             distances.append(np.asarray(dist, dtype=np.float64))
             victim_flags.append(np.asarray(victim, dtype=bool))
             doc_ids.append(np.full(len(rows), docs.index(request)))
-    return (np.concatenate(blocks), np.concatenate(distances), np.concatenate(doc_ids),
-            np.concatenate(victim_flags), docs)
+            times.append(np.asarray(when))
+            lengths.append(np.full(len(rows), len(steps)))
+    result = (np.concatenate(blocks), np.concatenate(distances), np.concatenate(doc_ids),
+              np.concatenate(victim_flags), docs)
+    if with_time:
+        result += (np.concatenate(times), np.concatenate(lengths))
+    return result
+
+
+def censored_labels(distance, t, length, horizon):
+    """Rows labelled negative only because the trace ends before step t + horizon.
+
+    The label is distance <= horizon. A row with no reuse up to the last step
+    (length - 1) but t + horizon >= length was never observed for the full window;
+    its true label is unknown, yet training counts it as negative.
+    """
+    return (distance > horizon) & (t + horizon >= length)
 
 
 def auc(score, label):

@@ -5,11 +5,11 @@ A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2
 We test whether a page's sparse-attention top-K selection rank predicts reuse beyond
 recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, GovReport).
 
-**Current status (2026-11-22):** see [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) for the full log, data and how each conclusion was reached. On eight dev documents, rank does not close the LRU–Bélády gap; result summaries are in [docs/results/](docs/results/).
+**Current status (2026-11-25):** see [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) for the full log, data and how each conclusion was reached. The preregistered held-out evaluation (40 documents, evaluated once; [docs/preregistration.md](docs/preregistration.md)) is negative. At the primary budget B=128, the full rank policy (δ=8, β=2) cuts repeat misses by only 0.39% [0.20%, 0.57%] against LRU, far below the 10% target (S1 not met), while Bélády removes 65%. S2 is met as preregistered (the full policy saves 330 [83, 600] repeat misses against R+F, 0.22%), but R+F uses β=4, so S2 changes β as well as adding rank. A post-hoc, non-preregistered comparison with β held at 2 puts the rank term alone at 213 [96, 341] repeat misses (0.14%). Rank carries a real but tiny signal; a dev-trained logistic model closes 11.9% of the LRU–Bélády gap, mostly from repeated MultiFieldQA answers. Result summaries are in [docs/results/](docs/results/).
 
 ## Team
 
-Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Jimmy Yu
+Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Xihang Yu
 
 ## Collecting traces
 
@@ -103,8 +103,8 @@ python3 analysis.py path/to/trace.jsonl --samples selected candidate lru --lru-b
 | Sample | Pages observed at step t | Role |
 | --- | --- | --- |
 | `selected` (H1-selected) | Pages selected at t | Contrast only. These pages are protected anyway, so they never face eviction. |
-| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. These are the pages any replacement policy chooses among, and the set does not depend on the policy. |
-| `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU really chooses among. |
+| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. The set does not depend on the policy. It is a superset of the pages a replacement policy chooses among: it also contains pages a finite cache has already evicted, and steps at which nothing is evicted. |
+| `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU chooses among when it must evict (steps without an eviction are included). |
 
 Each observation records:
 - its last rank, the rank at its most recent selection τ (τ = t for `selected`);
@@ -123,7 +123,7 @@ The effect compares the top quartile (last rank ≤ ⌈n/4⌉) with the bottom q
 - With a single request, the interval is reported as n/a. `--cluster stream` resamples (request, layer) pairs instead, which is useful for a pilot but ignores correlation across layers. Intervals over sparse strata, such as small layer groups, can be lopsided.
 
 Outputs in `--out`:
-- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <prefix>`, `band <band>`, `cell <task/band>` or `layers a-b`), `horizon`, `observations`, `top_share` and `bottom_share` (fractions of observations whose last rank is in the top or bottom quartile; for `candidate` this is how often a top-quartile rank bonus could apply), `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
+- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <prefix>`, `band <band>`, `cell <task/band>` or `layers a-b`), `horizon`, `observations`, `top_share` and `bottom_share` (fractions of observations whose last rank is in the top or bottom quartile; for `lru` this is close to how often a top-quartile rank bonus could apply; `candidate` also counts pages no longer resident), `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
 - `rank_curve.csv` gives `sample`, `horizon`, `rank_decile` (1 is best), `observations` and `reuse_rate`.
 - `features.csv` is written with `--features`. It has one row per observation: `sample`, `request_id`, `task`, `layer_id`, `decode_step`, `page_id`, `rank`, `n_selected`, `quartile`, `recency`, `recency_bin`, `frequency` and `reuse_h`.
 - `h1.png` plots, for each sample, reuse by last-rank decile and the raw, recency-only and frequency × recency effects against horizon.
@@ -147,6 +147,13 @@ python3 longbench_score.py results/heldout --out results/heldout/longbench
 - `policies_by_group.csv` (task, band) and `policies_by_doc.csv`;
 - `success.json` with S1 and S2;
 - the H1 outputs of `analysis.py`.
+
+Post-hoc analyses, added after the held-out evaluation and not part of the preregistration, write to new `posthoc_*` folders and never overwrite the preregistered outputs. `posthoc_rank_increment.py` compares `score:8:2` with `score:0:2` (β fixed) and splits S2 into the rank term and the β change, with the same paired document bootstrap. `posthoc_censoring.py` (numpy) counts logistic training labels that are right-censored at the trace end:
+
+```bash
+python3 posthoc_rank_increment.py results/heldout/trace.jsonl --out docs/results/heldout/posthoc_rank_increment
+python3 posthoc_censoring.py results/dev_full --out docs/results/dev_full/posthoc_censoring
+```
 
 `longbench_score.py` scores the sparse reference generations and the dense generations in the manifests with LongBench's own metrics. The notebook collects dense generations when `DENSE_REFERENCE = True`. Results are summarized in [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §4.7.
 

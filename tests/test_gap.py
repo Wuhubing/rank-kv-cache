@@ -48,6 +48,28 @@ class GapTests(unittest.TestCase):
         self.assertEqual(victim_bins, {"1": 1, "never": 1})
         self.assertEqual(bad_bins, {"1": 1})
 
+    def test_censored_labels_scalar(self):
+        from gap_analysis import censored_labels
+        inf = float("inf")
+        # length 20, horizon 16: a no-reuse row at t=3 is fully observed, at t=4 it is not.
+        self.assertFalse(censored_labels(inf, 3, 20, 16))
+        self.assertTrue(censored_labels(inf, 4, 20, 16))
+        self.assertFalse(censored_labels(2, 10, 20, 16))  # positive labels are never censored
+
+    @unittest.skipIf(np is None, "numpy is not installed")
+    def test_build_dataset_censoring(self):
+        from gap_analysis import build_dataset, censored_labels
+        streams = {("doc/4-8k/a", 0): [(0,), (1,), (2,), (0,)]}
+        X, distance, _, _, _, t, length = build_dataset(streams, {"doc/4-8k/a": 0}, 2,
+                                                        with_time=True)
+        self.assertEqual(sorted(zip(t.tolist(), distance.tolist())),
+                         [(2, 1), (2, float("inf")), (3, float("inf")), (3, float("inf"))])
+        self.assertEqual(length.tolist(), [4] * 4)
+        mask = censored_labels(distance, t, length, 1)
+        self.assertEqual(sorted(zip(t.tolist(), mask.tolist())),
+                         [(2, False), (2, False), (3, True), (3, True)])
+        self.assertEqual(len(build_dataset(streams, {"doc/4-8k/a": 0}, 2)), 5)
+
     @unittest.skipIf(np is None, "numpy is not installed")
     def test_models(self):
         from gap_analysis import Logistic, Tree, auc

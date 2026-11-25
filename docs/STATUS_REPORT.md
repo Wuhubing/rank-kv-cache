@@ -2,6 +2,8 @@
 
 **截至 2026-11-22 · 分支 `stage1-2` · 已完成 proposal 规定的正式检验：20 篇 dev 调参并预注册（`2f6a9bd`），40 篇 held-out 采集一次、评估一次**
 
+**2026-11-25 补充（事后分析，非预注册）**：S2 的 β 混杂与干净 rank 增量（§4.7）、H1 `candidate` 口径的准确描述（§4.7）、逻辑回归标签的右删失（§6）。所有预注册结果和判定不变。
+
 本文汇总从 proposal 到现在做过的全部工作：每一步做了什么、用什么实现、得到什么数据，以及每条结论是怎么推出来的。所有数字都能在 [`docs/results/`](results/) 下的 CSV/TXT 中找到原始输出，文末给出复现命令。
 
 ---
@@ -13,8 +15,9 @@
 1. **缓存确实有改进空间。** held-out 上 B=128 时 LRU 的 miss rate 是 4.05%，Bélády 是 2.97%，绝对差 1.08 pp、相对差 26.7%；Bélády 比 LRU 少 65% 的 repeat miss。dev 上是 4.13% 对 3.01%，几乎一样。
 2. **两条成功标准（B=128，held-out）：**
    - **S1 不满足**：完整策略（dev 调出 δ=8、β=2）只比 LRU 少 **0.39%** 的 repeat miss，CI [0.20%, 0.57%]，目标是 10%。
-   - **S2 在统计上满足，但效应极小**：完整策略比 R+F 少 330 次 repeat miss，配对 CI [83, 600] 整体大于 0，只占 R+F repeat miss 的 0.22%。rank 项确实有作用，只是小到没有实际意义。
-3. **H1：rank 对驱逐候选有真实但很小的增量信号。** 控制 frequency × recency 后，驱逐候选上 top 与 bottom 四分位的复用率差为 +3.1 pp（1 步内）到 +10.8 pp（8 步内），40 个文档 cluster 的 CI 都在 0 以上。但候选中 top 四分位只占 0.73%，所以 rank 加分几乎改变不了驱逐决策。
+   - **S2 在统计上满足，但效应极小**：完整策略比 R+F 少 330 次 repeat miss，配对 CI [83, 600] 整体大于 0，只占 R+F repeat miss 的 0.22%。**注意 S2 有混杂**：完整策略是 δ=8、β=2，R+F 是 δ=0、β=4，两者同时改变了 β 和 rank 项，所以 S2 并不单独衡量 rank 项（预注册文件中"S2 isolates the rank term"的说法不准确）。S2 的预注册判定照原样保留为"满足"。
+   - **事后（post-hoc，非预注册）的干净 rank 增量**：固定 β=2，只比较 δ=8 与 δ=0，held-out 上 rank 项节省 213 次 repeat miss，配对 CI [96, 341]，占基线的 0.14%；其余 117 次 [−118, 394] 来自 β 从 4 改到 2。rank 项有作用，但小到没有实际意义。
+3. **H1：rank 对驱逐候选有真实但很小的增量信号。** 控制 frequency × recency 后，在 candidate 口径（t 之前被选中过、本步未选中的 page）上，top 与 bottom 四分位的复用率差为 +3.1 pp（1 步内）到 +10.8 pp（8 步内），40 个文档 cluster 的 CI 都在 0 以上。但上一次被选中时排在 top 四分位、本步未被选中的 page 非常少：在 B=128 的 LRU 缓存实际驻留、本步未选中的 page 中只占 0.74%（`candidate` 口径为 0.73%，但该口径包括已被驱逐的 page 和没有发生驱逐的步，不是"实际驱逐候选"），所以 rank 加分几乎改变不了驱逐决策。
 4. **非 rank 特征能挽回的也有限。** 在 dev 上训练、系数固定的逻辑回归在 held-out 上 G = **11.9%** [6.7%, 17.2%]，repeat miss 少 7.8%。收益几乎全部来自 MultiFieldQA（G 26%，GovReport 只有 2.4% 且 CI 跨 0）；截断 MFQA 的重复回答后，G 降到 2.4% [−1.2%, 6.0%]。
 5. **LongBench sanity check：** 稀疏参考运行比 dense 略差（GovReport ROUGE-L 17.4 对 18.7；MFQA F1 11.6 对 12.4），说明稀疏 trace 是 dense 解码的合理近似。
 6. **对照蓝图的决策关口：** Gate A 通过；Gate B 通过（信号真实，但弱且罕见）；**Gate C 不通过**。结论应按蓝图预设的负面结论加现象刻画来写。
@@ -241,7 +244,7 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 
 （完整 5×5 表见 [`tuning.csv`](results/dev_full/tuning.csv)。）
 
-- 选出的参数：完整策略 δ=8、β=2；R+F 的 β=4；R+rank 的 δ=4。
+- 选出的参数：完整策略 δ=8、β=2；R+F 的 β=4；R+rank 的 δ=4。R+F 的 β 是在 δ=0 的约束下单独选的，所以它与完整策略的 β 不同（见下文 S2 的混杂）。
 - 最好的组合也只比 δ=β=0（即 LRU）少 0.16% 的 miss。
 - 逻辑回归在 20 篇 dev 的 LRU 驱逐候选上训练，系数固定；权重最大的是 freq32（+0.53）和 recency（−0.41）。
 
@@ -274,17 +277,33 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 | 标准 | 结果 | 是否满足 |
 |---|---|---|
 | S1：完整策略比 LRU 少 ≥10% repeat miss | 少 **0.39%**，CI [0.20%, 0.57%] | **不满足** |
-| S2：完整策略相对 R+F 节省的 repeat miss，配对 95% CI 整体大于 0 | 节省 330 次，CI [83, 600]，占 R+F 的 0.22% | **满足**（但效应极小） |
+| S2：完整策略相对 R+F 节省的 repeat miss，配对 95% CI 整体大于 0 | 节省 330 次，CI [83, 600]，占 R+F 的 0.22% | **满足**（但效应极小；有 β 混杂，见下） |
+
+**S2 的混杂与事后的干净 rank 增量（post-hoc / exploratory，非预注册）。** S2 比较的是完整策略（δ=8、β=2）和 R+F（δ=0、β=4）。两者的差别不只是加了 rank 项，β 也从 4 变成了 2，所以 S2 衡量的是"rank 项 + β 改变"的合计，[`preregistration.md`](preregistration.md) 中"S2 isolates the rank term"的说法不成立。预注册文件已冻结，不修改；S2 的判定按预注册照原样记为"满足"，这里只修正它的解读。
+
+为了单独看 rank 项，我们在看到 held-out 结果之后另写了 [`posthoc_rank_increment.py`](../posthoc_rank_increment.py)：固定 β=2，比较 `score:8:2`（即完整策略）与 `score:0:2`（去掉 rank 项），并把 S2 的差拆成两部分：R+F − 完整策略 =（R+F − score:0:2）+（score:0:2 − 完整策略）。统计方法与 `evaluate.py` 相同（逐文档 repeat miss，配对文档 bootstrap，2000 次，seed 0）。**这是事后分析，不是预注册检验，不能用来重新判定 S2。**
+
+| 事后分析，B=128 | held-out 原样 | held-out 截断 | dev 原样 | dev 截断 |
+|---|---|---|---|---|
+| 干净 rank 增量：score:0:2 − 完整策略 | **213 [96, 341]**，0.14% | 71 [6, 146]，0.07% | 121 [59, 192]，0.16% | 58 [19, 105]，0.11% |
+| β 改变：R+F − score:0:2 | 117 [−118, 394]，0.08% | 210 [−3, 475]，0.22% | −17 [−161, 147]，−0.02% | 17 [−126, 181]，0.03% |
+| 合计 = S2（复现预注册数字） | 330 [83, 600] | 281 [66, 551] | 104 [−33, 268] | 75 [−50, 228] |
+
+（百分比相对各行的基线策略。B=256 时 β 改变的贡献为 0，干净 rank 增量在 held-out 上是 7 [−6, 23]，CI 跨 0。原始输出见 [`heldout/posthoc_rank_increment/`](results/heldout/posthoc_rank_increment/)、[`heldout/posthoc_rank_increment_truncated/`](results/heldout/posthoc_rank_increment_truncated/) 和 dev 下的同名目录。）
+
+**推导**：在四条 trace 上，固定 β 后 rank 项的节省 CI 都在 0 以上，所以 rank 项确实有一点作用；但它只占基线 repeat miss 的 0.07%–0.16%，比 S2 的 0.22% 还小。held-out 原样 trace 上 S2 的 330 次里约三分之一来自 β 的改变。结论不变：rank 项的效应真实但可以忽略。
 
 **H1**（控制 frequency × recency 后的 top 减 bottom 复用率差，单位 pp；按文档聚类，40 个 cluster）
 
 | 口径 | 1 步内 | 2 步内 | 4 步内 | 8 步内 | top 四分位占比 |
 |---|---|---|---|---|---|
 | selected | +28.1 [27.2, 28.9] | +18.6 | +11.9 | +7.6 [7.1, 8.1] | 25% |
-| candidate | +3.1 [2.5, 3.9] | +5.0 [4.1, 6.3] | +7.7 [6.3, 9.5] | +10.8 [9.1, 13.0] | **0.73%** |
-| LRU-candidate | +4.5 [3.5, 6.2] | +7.0 [5.2, 10.2] | +9.9 [7.4, 13.7] | +13.0 [10.2, 18.7] | 0.74% |
+| candidate | +3.1 [2.5, 3.9] | +5.0 [4.1, 6.3] | +7.7 [6.3, 9.5] | +10.8 [9.1, 13.0] | 0.73% |
+| LRU-candidate | +4.5 [3.5, 6.2] | +7.0 [5.2, 10.2] | +9.9 [7.4, 13.7] | +13.0 [10.2, 18.7] | **0.74%** |
 
-按组看，驱逐候选口径 8 步内的效应：GovReport +8.7 [7.3, 10.5]，MFQA +16.3 [13.4, 19.5]，4–8K +12.7 [10.0, 16.0]，8–16K +10.4 [8.3, 13.3]。各组 top 四分位占比在 0.51%–0.91% 之间。
+口径说明（[`analysis.py`](../analysis.py)）：`candidate` 是"t 之前被选中过、t 步未被选中"的所有 page，与策略无关；它包括在任何有限缓存里早已被驱逐的 page，也包括 t 步根本没有发生驱逐的情况，因此是驱逐候选的一个上位集合，不是"实际驱逐候选"。`LRU-candidate` 只保留 B=128 的 LRU 缓存在 t−1 步后实际驻留、t 步未选中的 page，更接近真正参与驱逐比较的集合（但同样包括没有发生驱逐的步）。所以"rank 加分能起作用的机会有多少"应引用 LRU-candidate 的 0.74%；两个口径的数字几乎相同，结论不受影响。
+
+按组看，candidate 口径 8 步内的效应：GovReport +8.7 [7.3, 10.5]，MFQA +16.3 [13.4, 19.5]，4–8K +12.7 [10.0, 16.0]，8–16K +10.4 [8.3, 13.3]。各组 top 四分位占比在 0.51%–0.91% 之间。
 
 **分组结果**（B=128，[`policies_by_group.csv`](results/heldout/eval/policies_by_group.csv)）
 
@@ -304,7 +323,7 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 | miss rate | 5.47% | 4.29% | 5.46% | 5.44% |
 | G | 0 | 100% | 0.50% [0.09, 0.91] | 2.4% [−1.2, 6.0] |
 
-截断后 S1 仍不满足（只少 0.31%，CI [0.06%, 0.58%]）；S2 仍满足（节省 281 次，CI [66, 551]）。逻辑回归的优势基本消失，说明它在 MFQA 上的收益主要来自重复输出的周期性。
+截断后 S1 仍不满足（只少 0.31%，CI [0.06%, 0.58%]）；S2 仍满足（节省 281 次，CI [66, 551]），但同样有 β 混杂：事后（非预注册）的干净 rank 增量只有 71 次 [6, 146]，其余 210 次来自 β 改变。逻辑回归的优势基本消失，说明它在 MFQA 上的收益主要来自重复输出的周期性。
 
 **LongBench sanity check**（官方指标，×100；[`longbench_summary.json`](results/heldout/longbench/longbench_summary.json)）
 
@@ -324,35 +343,35 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 | 相对差距 | 27.0% | 26.7% |
 | 完整策略相对 LRU（S1） | −0.38% [0.26, 0.49] | −0.39% [0.20, 0.57] |
 | S2：完整策略相对 R+F 节省 | 104 [−33, 268]，不显著 | 330 [83, 600]，显著 |
+| 事后（非预注册）干净 rank 增量：score:0:2 − 完整策略 | 121 [59, 192] | 213 [96, 341] |
 | 完整策略 G | 0.59% | 0.59% |
 | 逻辑回归 G | 9.8%（样本内） | 11.9%（样本外） |
 | H1-candidate，8 步内 | +9.5 [7.1, 12.6] | +10.8 [9.1, 13.0] |
-| 候选中 top 四分位占比 | 0.76% | 0.73% |
+| top 四分位占比：LRU-candidate（candidate） | 0.75%（0.76%） | 0.74%（0.73%） |
 
-dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著，主要是因为 held-out 的文档数是 dev 的两倍，CI 更窄；效应本身同样极小。
+dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著，主要是因为 held-out 的文档数是 dev 的两倍，CI 更窄，另外 β 改变那部分的点估计在 dev 上约为 0、在 held-out 上为正（但两者的 CI 都跨 0，见上表）；效应本身同样极小。事后的干净 rank 增量在 dev 和 held-out 上都显著且都很小。
 
-**偏离预注册：无。** 策略、参数、系数、budget、指标、bootstrap 设置和 MFQA 规则都没有改；held-out 只采集一次、评估一次；GPU 型号与 dev 相同。唯一的操作差异是 Colab 里 held-out 的结果单元格不做回放（预注册中已写明）。
+**偏离预注册：无。** 策略、参数、系数、budget、指标、bootstrap 设置和 MFQA 规则都没有改；held-out 只采集一次、评估一次；GPU 型号与 dev 相同。唯一的操作差异是 Colab 里 held-out 的结果单元格不做回放（预注册中已写明）。事后分析（干净 rank 增量、§6 的标签删失统计）是在正式评估之后另加的，不改变任何预注册结果，输出放在新的 `posthoc_*` 目录里，不覆盖预注册输出。
 
 ---
 
 ## 5. 总结论与依据
 
-| 问题 | 结论 | 依据 |
-|---|---|---|
 | 问题 | 结论（held-out，40 篇） | 依据 |
 |---|---|---|
 | Gate A：问题有没有被回答过 | **通过**（问题需收窄为增量问题） | §4.1：ArkVale 只用当前分数，HiSparse 只用 LRU |
 | 缓存有没有改进空间 | **有**：B=128 相对差距 26.7%（绝对 1.08 pp），Bélády 消掉 65% 的 repeat miss；B=256 时几乎没有空间 | §4.7 |
-| H1 / Gate B：rank 在驱逐候选上有没有增量信号 | **有，但弱且罕见**：+3.1 到 +10.8 pp（40 个 cluster，CI 都大于 0），top 四分位只占候选的 0.73% | §4.7 |
+| H1 / Gate B：rank 在驱逐候选上有没有增量信号 | **有，但弱且罕见**：candidate 口径 +3.1 到 +10.8 pp（40 个 cluster，CI 都大于 0）；LRU 缓存中驻留且未被选中的 page 只有 0.74% 上次排在 top 四分位 | §4.7 |
 | S1：完整策略比 LRU 少 ≥10% repeat miss | **不满足**：少 0.39% [0.20, 0.57] | §4.7 |
-| S2：完整策略相对 R+F 的节省 CI > 0 | **满足但可忽略**：330 次 [83, 600]，占 0.22% | §4.7 |
+| S2：完整策略相对 R+F 的节省 CI > 0 | **满足但可忽略**：330 次 [83, 600]，占 0.22%。判定按预注册保留；但 S2 同时改变了 β（4→2），不单独衡量 rank 项 | §4.7 |
+| 事后（非预注册）：固定 β=2 的干净 rank 增量 | 213 次 [96, 341]，占 0.14%；rank 项真实但可忽略 | §4.7 |
 | Gate C：rank 策略能否超过强 baseline | **不能（实际意义上）**：完整策略 G = 0.59%，H2D 只省 0.2% | §4.7 |
 | 差距能被简单特征挽回多少 | 固定系数的逻辑回归 G = 11.9%（主要是 MFQA）；截断 MFQA 重复后只有 2.4% 且 CI 跨 0 | §4.6、§4.7 |
 | 稀疏参考运行是否可信 | **基本可信**：相对 dense，ROUGE-L 低 1.3 分，F1 低 0.8 分 | §4.7 |
 
 **拟定的对外说法**（蓝图的负面结论版本，已由预注册的 held-out 检验支持）：
 
-> 在固定 Quest 式选择、Qwen3-0.6B、page 级可召回缓存的设定下，B=2K 时 LRU 与 Bélády 之间有约 27% 的相对差距。sparse-attention selection rank 对驱逐候选的复用有统计上显著的增量预测力，但高排名 page 很少成为驱逐候选（0.7%），因此把 rank 加进 recency+frequency 策略只能减少 0.4% 的 repeat miss（预注册目标 10%）。在 dev 上训练的简单特征模型能挽回约 12% 的差距，但主要来自贪心解码下的重复输出；去掉重复后只剩约 2%。
+> 在固定 Quest 式选择、Qwen3-0.6B、page 级可召回缓存的设定下，B=2K 时 LRU 与 Bélády 之间有约 27% 的相对差距。sparse-attention selection rank 对驱逐候选的复用有统计上显著的增量预测力，但高排名 page 很少出现在驱逐候选中（LRU 缓存里驻留且本步未选中的 page 只有 0.7% 上次排在 top 四分位），因此把 rank 加进 recency+frequency 策略只能减少 0.4% 的 repeat miss（预注册目标 10%）。在 dev 上训练的简单特征模型能挽回约 12% 的差距，但主要来自贪心解码下的重复输出；去掉重复后只剩约 2%。
 
 ---
 
@@ -366,6 +385,7 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 - **文献**：第二轮已补齐大部分未核实条目。仍未核实的是 ArkVale 的 OpenReview 评审（页面有反爬虫验证），以及几处小尾巴（H₂O 附录 D 末尾、HiSparse 代码版本是否与论文评测一致）；Scissorhands 和 H₂O 的引文需对照 PDF 抽查。详见 [`related_work_matrix.md`](related_work_matrix.md) 末尾。
 - **选择器与 Quest 不同**：Quest 按 query head 各自选择，我们把各 head 的上界平均成一个排名，每层共用一个缓存。
 - **缺少 InfLLM 式 baseline**：按注意力加权的衰减频率分数需要每个 page 的注意力质量，trace v1 没有记录。
+- **逻辑回归的训练标签有右删失**：标签是"16 步内再次被选中"。`gap_analysis.build_dataset` 把在 trace 结束前没有再被选中的候选一律记为负例，但 t+16 ≥ 127（trace 长度）的行其实没有观察完整个 16 步窗口，真实标签未知。事后统计（post-hoc，非预注册；[`posthoc_censoring.py`](../posthoc_censoring.py)，[`censoring.json`](results/dev_full/posthoc_censoring/censoring.json)）：在 dev_full 的 30 万行训练样本中，有 **25,678 行（8.6%）** 属于这种删失负例，占全部负例的 21.5%；全部 228.7 万个候选行中的比例相同（8.5%）。我们确认重建的样本能逐位复现冻结的系数。这会让模型低估临近 trace 末尾的复用概率，并可能使系数有偏（方向和对 G 的影响没有检验）；冻结的模型和预注册结果不改，后续若重新训练应丢弃或单独处理这些行。
 - **ArkVale 式 baseline 缺失**：按"当前分数最低"驱逐需要记录未选中 page 的当前分数，trace v1 没有这个字段。
 
 ---
@@ -374,11 +394,11 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 
 已在本轮解决：MFQA 停止规则（主分析按 proposal 生成 128 token 或 EOS，截断版作为次要分析）；held-out 上比较的策略（见预注册）。
 
-1. **按负面结论加现象刻画来写最终报告和 poster**。正式检验支持这个方向：S1 不满足，S2 显著但只有 0.22%。
+1. **按负面结论加现象刻画来写最终报告和 poster**。正式检验支持这个方向：S1 不满足，S2 显著但只有 0.22%。写 S2 时需说明它有 β 混杂，并把事后的干净 rank 增量（0.14%）明确标为 post-hoc。
 2. **layer-level GPU benchmark 是否还做**。完整策略每 token 只省 0.01 MiB 的 H2D（约 0.2%），benchmark 预期测不出可见差异，建议降为可选或不做。
 3. **是否把"选择对 GPU 型号敏感"写进报告**，作为附带发现。
 4. **是否在 trace 中记录未选中 page 的分数**，以便加入 ArkVale 式 baseline。这需要新采集，而 held-out 已经用过一次，只能在 dev 上做探索性分析。
-5. **成员名单**：proposal 写 Xihang Yu，README 写 Jimmy Yu。
+5. ~~**成员名单**~~：已确定为 Xihang Yu（与 proposal 一致），README 已更新。
 
 ---
 
@@ -402,7 +422,18 @@ python3 evaluate.py results/heldout --trace trace_truncated.jsonl --out results/
 python3 longbench_score.py results/heldout --out results/heldout/longbench
 ```
 
-第一条是调参（在预注册之前运行）。`evaluate.py`、`gap_analysis.py` 和 `preregister.py` 需要 numpy；`truncate_trace.py`、`split.py` 和 `longbench_score.py` 需要 transformers（只用 tokenizer），后者还需要 `rouge==1.0.1`。
+第一条是调参（在预注册之前运行）。
+
+事后分析（post-hoc / exploratory，非预注册；`posthoc_censoring.py` 需要 numpy）：
+
+```bash
+python3 posthoc_rank_increment.py results/heldout/trace.jsonl --out docs/results/heldout/posthoc_rank_increment
+python3 posthoc_rank_increment.py results/heldout/trace_truncated.jsonl --out docs/results/heldout/posthoc_rank_increment_truncated
+python3 posthoc_rank_increment.py results/dev_full/trace.jsonl --out docs/results/dev_full/posthoc_rank_increment
+python3 posthoc_rank_increment.py results/dev_full/trace_truncated.jsonl --out docs/results/dev_full/posthoc_rank_increment_truncated
+python3 posthoc_censoring.py results/dev_full --out docs/results/dev_full/posthoc_censoring
+```
+`evaluate.py`、`gap_analysis.py` 和 `preregister.py` 需要 numpy；`truncate_trace.py`、`split.py` 和 `longbench_score.py` 需要 transformers（只用 tokenizer），后者还需要 `rouge==1.0.1`。
 
 探索阶段的命令：
 
