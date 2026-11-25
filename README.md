@@ -56,7 +56,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 | **分数 EMA** | **0.279** | 平滑掉噪声后更好 |
 | 只在 page 被选中时才更新 | EMA 版 −1.596；InfLLM 式 0.028 | 远差于或几乎等于 LRU，说明**必须更新所有驻留 page** |
 | 用 top-K 内排名代替分数（未选中 page 一律记 0） | 0.016 | 几乎没用。但这个变体**同时**去掉了分数大小和未选中 page 之间的排序 |
-| **全部可选 page 的分数百分位排名做 EMA**（`signal="allrank"`，replication-v2 新跑） | **0.271** | 保留排序、去掉大小后仍有 EMA 的 97%：**起作用的是未选中 page 之间的全局排序**，大小只多贡献约 0.008（[s4/02](docs/rerun/s4/02_allrank_control.md)） |
+| **全部可选 page 的分数百分位排名做 EMA**（`signal="allrank"`，replication-v2 新跑） | **0.271** | 保留排序、去掉大小后，以 LRU 为基线仍有 EMA 的 97%；以当前分数（α=0，三种信号此时相同，0.240）为基线，历史带来的收益保留约 80%（0.031 对 0.038）：**排序占历史收益的约 4/5，大小占约 1/5**（followup-v3 R3 更正）（[s4/02](docs/rerun/s4/02_allrank_control.md)） |
 | 衰减计数（只数被选中几次） | 0.044 | 频率信号很弱 |
 | LFU、ARC、LRU-2 等传统策略 | ≤ 0 | 都不如 LRU |
 | 线性回归预测下一次使用时间（学习式） | 0.300 | 只多一点，代价是每页存约 5 个数 |

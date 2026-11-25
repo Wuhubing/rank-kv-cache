@@ -97,3 +97,12 @@ def test_audit_compare_reports_missing_reference_rows():
     assert checked == 2
     assert bad == [(("d", 1, "lru", 96), (10, 5, 2), (10, 4, 2))]
     assert missing == [("d", 2, "lru", 96)]
+
+
+def test_fix_v3_read_later_file_replaces(tmp_path):
+    from analysis_v2.fix_v3 import read
+    hdr = "doc,layer,config,B,accesses,misses,compulsory\n"
+    (tmp_path / "a.csv").write_text(hdr + "d,0,lru,96,10,5,1\nd,1,lru,96,10,5,1\nd,0,score,96,10,4,1\n")
+    (tmp_path / "b.csv").write_text(hdr + "d,0,lru,96,10,5,1\nd,1,lru,96,10,5,1\n")
+    M = read([tmp_path / "a.csv", tmp_path / "b.csv"])
+    assert M["lru", 96]["d"][1] == 10 and M["score", 96]["d"][1] == 4

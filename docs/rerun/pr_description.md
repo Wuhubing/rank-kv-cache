@@ -22,7 +22,8 @@ Each held-out set was collected once and evaluated once with the preregistered c
 - ✅ **Supported, confirmatory on two models and two GPUs**: G ≈ 0.27–0.28 on every held-out set; every document of every
   setting beats LRU (0.6B, 8B, 64K/YaRN, RULER, SCBench multi-turn, page 8–64, K 32–128, sampled decoding).
 - 🔁 **Mechanism reworded** (D4: "score magnitude" vs "global ordering" → **global ordering**). An EMA of each page's percentile
-  rank among all pages keeps 97 % of the gain (0.271 vs 0.279); magnitude adds only 0.0075 [0.0064, 0.0088]. Updating only selected
+  rank among all pages keeps 97 % of the G measured from LRU (0.271 vs 0.279), and about 80 % of the gain the history adds over
+  the current score (0.031 of 0.038; corrected in followup-v3, R3); magnitude adds 0.0075 [0.0064, 0.0088], about 1/5 of that gain. Updating only selected
   pages, or InfLLM's selected-only rules (even with the true attention mass), is ≈ LRU or worse.
 - ✅ **Per-layer budgets**: supported against the correct anchor. Against the same-allocation Bélády, allocation + EMA closes 35 %
   (0.6B) / 43 % (8B) of the gap; within an allocation EMA still closes 28 % / 27 %, so the two add up.

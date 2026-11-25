@@ -1,8 +1,12 @@
 # S4.2 All-page percentile rank control: magnitude or global ordering? (decides thesis point 1, D4)
 
-**Conclusion: the global ordering.** Replacing each page's score by its percentile rank among **all** eligible pages
-(`allrank`, keeps the full ordering, drops magnitude) keeps 97 % of the score EMA's gain: at B=96, G 0.271 [0.266, 0.276]
-vs 0.279 [0.274, 0.283] for the z-score. Keeping only the rank **among the selected pages** (every unselected page gets 0)
+**Conclusion: mostly the global ordering.** Replacing each page's score by its percentile rank among **all** eligible pages
+(`allrank`, keeps the full ordering, drops magnitude) keeps 97 % of the score EMA's G measured from LRU: at B=96, G 0.271
+[0.266, 0.276] vs 0.279 [0.274, 0.283] for the z-score. **Against the right baseline it keeps about 80 %** (corrected in
+followup-v3, R3): at α=0 (no history) the three signals give the same eviction order and all equal the current score (G 0.240),
+so the gain *from the history* is 0.038 for z and 0.031 for allrank (ratio 0.80 at B=96; 0.79 / 0.84 / 0.89 at B=80 / 128 /
+256; `results_v2/dev/fixes/a3_history_gain.csv`). Of what remembering the scores adds, the ordering accounts for about 4/5 and
+the magnitude for about 1/5. Keeping only the rank **among the selected pages** (every unselected page gets 0)
 drops G to 0.017. So what matters is how unselected pages are ordered against each other over time. The score
 magnitude adds a small, consistent extra on top of the ordering: paired ΔG (allrank − z) = −0.0075 [−0.0088, −0.0064], negative at every
 budget.
@@ -24,5 +28,7 @@ All three signals beat LRU on 14/14 documents at B ≤ 128 (rank: 10/14 at B=256
 
 ## Thesis wording that follows (`docs/rerun/thesis.md`)
 Point 1 becomes: *"Keeping an EMA of every resident page's score **ordering** narrows the LRU–Bélády gap. The relative
-order of the pages that are not selected carries almost all of the signal; score magnitude adds about 3 % of the gain."*
-"Score magnitude" is not supported as the mechanism.
+order of the pages that are not selected carries most of the signal: of the gain that the history adds over the current score,
+about 4/5 survives when only the ordering is kept, and the magnitude adds about 1/5."* "Score magnitude" is not supported as
+the main mechanism. (The replication-v2 wording "magnitude adds about 3 % of the gain" measured against LRU, where most of the
+G is already reached by the current score with no history.)
