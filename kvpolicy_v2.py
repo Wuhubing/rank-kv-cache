@@ -372,3 +372,112 @@ class CO2(ScoreEMA):
 
 V2_POLICIES = dict(random=RandomEvict, arkvale=ArkVale, infllm_eq1=InfLLMEq1, infllm_lrus=InfLLMLruS,
                    sieve=SIEVE, s3fifo=S3FIFO, lazy=LazyEMA, holt=Holt, powerlaw=PowerLawDecay, co2=CO2)
+
+
+# ------------------------------------------------------------------ ArkVale, full version
+# Rules from the official code (pku-liang/ArkVale @ 0c3b45e, read-only copy at ~/work/rkv-arkvale/ArkVale);
+# file:line references are to that commit and are listed rule by rule in docs/rerun/s4/09_arkvale_full.md.
+#   * every decoding step the n_sink first pages and the n_win last pages (the last one is the page being
+#     written) take part in attention; top-k runs over the pages in between
+#     (arkvale_cpp/src/select.cu:99-107, kv_cache.py:163-173).
+#   * a selected page that is not on the GPU is recalled into the slot of the resident, non-sink,
+#     non-window page with the LOWEST current estimated score (select.cu:126-143, `!select_min`).
+#   * when a new page starts and the cache is full, the page that leaves the window is dropped from the GPU
+#     whatever its score (kv_cache.py:162-194: slot budget-n_win is overwritten, cc2gp[e_cci] = -1); it can
+#     be recalled later. While the cache has room, pages are appended (kv_cache.py:143-161).
+#   * the first n_unlimited_layers layers have no budget (infer_state.py:57-62; benchmark default 2).
+#   * estimated score of a page = mean over query heads of sum_d max(q_d*bmax_d, q_d*bmin_d) with the
+#     cuboid-mean digest bmax/min = c +- mean_k |c - k| (infer_state.py:448-462, estimate.cu:43,
+#     estimate.cu:551-552 mean over heads with n_groups=1).
+# In our page accounting the page being written (the tail) is outside the cache for every policy, so
+# "n_win window pages" are n_win - 1 completed pages here.
+
+def forced_pages(hp, sink, recent):
+    """Pages that must be resident at a step with hp completed pages: the first `sink` pages and the
+    `recent` most recent completed pages (ascending page ids)."""
+    return sorted(set(range(min(sink, hp))) | set(range(max(0, hp - recent), hp)))
+
+
+def completed_pages(scores):
+    """[T] number of completed pages per step (scores are finite on a prefix, NaN beyond)."""
+    S = np.asarray(scores)
+    return np.isfinite(S).sum(1)
+
+
+def with_forced(ranked, scores, sink, recent):
+    """Access stream with the forced pages merged in: [T, K + sink + recent] int64, -1 = padding.
+
+    Row order is selected[:-1], forced pages not already selected (ascending), selected[-1], so that
+    row[0] and row[-1] are still the selector's top-1 and K-th page: the z signal of ScoreEMA and
+    PowerLawDecay (kvpolicy._z) is computed exactly as on the plain stream, and every policy, LRU and
+    Belady see the same access sets. Use this for the fairness controls (forced pages for everybody)."""
+    R = np.asarray(ranked)
+    hps = completed_pages(scores)
+    T, K = R.shape
+    out = np.full((T, K + sink + recent), -1, dtype=np.int64)
+    for t in range(T):
+        sel = [int(p) for p in R[t] if p >= 0]
+        have = set(sel)
+        extra = [p for p in forced_pages(int(hps[t]), sink, recent) if p not in have]
+        row = sel[:-1] + extra + sel[-1:]
+        out[t, :len(row)] = row
+    return out
+
+
+def simulate_arkvale(ranked, scores, B, *, est=None, sink=1, recent=1, window_exit=True):
+    """ArkVale's eviction on one layer stream (rules above). ranked [T, K]: the selector's pages (forced
+    pages are added here); scores [T, P]: the selector's scores (used for the completed-page count);
+    est [T, P]: the estimated scores that order evictions (default: scores). window_exit drops the page
+    that leaves the recent window as ArkVale does (False = keep it until evicted by score).
+    Returns dict(accesses, misses, compulsory, window_exits) with the same meaning as kvpolicy.simulate."""
+    import kvpolicy as kp
+    R = kp.check_ranked(ranked)
+    S = np.asarray(scores, dtype=np.float64)
+    kp.check_scores(R, S)
+    E = S if est is None else np.asarray(est, dtype=np.float64)
+    if E.shape != S.shape:
+        raise ValueError(f"est shape {E.shape} != scores shape {S.shape}")
+    hps = completed_pages(S)
+    res, seen, last, hit = set(), set(), {}, {}
+    acc = miss = exits = 0
+    prev_win = set()
+    for t, row in enumerate(R):
+        hp = int(hps[t])
+        sel = [int(p) for p in row if p >= 0]
+        sinks = set(range(min(sink, hp)))
+        win = set(range(max(0, hp - recent), hp)) - sinks
+        if window_exit and len(res) >= B:  # kv_cache.py:143 (room left: append) vs :162 (full: overwrite)
+            for p in prev_win - win - sinks:
+                if p in res:
+                    res.discard(p)
+                    del last[p], hit[p]
+                    exits += 1
+        access = set(sel) | sinks | win
+        if len(access) > B:
+            raise ValueError("budget below the access set")
+        misses = access - res
+        n = len(res) + len(misses) - B
+        if n > 0:
+            e = E[t]
+            cands = res - access
+            if any(not math.isfinite(e[p]) for p in cands):
+                raise ValueError("non-finite estimated score for a resident page")
+            for v in heapq.nsmallest(n, cands, key=lambda p: (e[p], last[p], hit[p], -p)):
+                res.discard(v)
+                del last[v], hit[v]
+        res |= access
+        for p in access:
+            last[p] = t
+            hit[p] = p not in misses
+        acc += len(access)
+        miss += len(misses)
+        seen |= access
+        prev_win = win
+    return dict(accesses=acc, misses=miss, compulsory=len(seen), window_exits=exits)
+
+
+def unlimited_budget(B, L, n_unlimited, pages):
+    """Equal-total-slots budget of the limited layers when the first n_unlimited of L layers keep all
+    `pages` completed pages: floor((L*B - n_unlimited*pages) / (L - n_unlimited)); may be < K
+    (infeasible at that budget)."""
+    return (L * B - n_unlimited * pages) // (L - n_unlimited)

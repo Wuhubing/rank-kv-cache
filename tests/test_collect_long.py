@@ -32,6 +32,8 @@ def run_backend(be, steps, *, kvh=2, g=3, dim=8, ps=4, start=9, seed=0, L=2):
         be.ATTN = torch.full((T, L, be.top_k), float("nan"), dtype=torch.float16)
     if getattr(be, "record_true_attn_rank", False):
         be.RHO = torch.full((T, L), float("nan"))
+    if getattr(be, "record_arkvale_digest", False):
+        be.DIGEST = {n: torch.full((T, L, pmax), float("nan"), dtype=torch.float16) for n in cl.DIGESTS}
     keys = torch.randn(L, 1, kvh, start + T, dim, generator=gen)
     vals = torch.randn(L, 1, kvh, start + T, dim, generator=gen)
     outs = []
@@ -135,3 +137,145 @@ def test_spearman():
     assert cl.spearman(a, -a) == pytest.approx(-1)
     # ties: scipy.stats.spearmanr([1,1,2,3],[1,2,3,4]) = 0.9486832980505138
     assert cl.spearman(torch.tensor([1., 1., 2., 3.]), a) == pytest.approx(0.9486832980505138)
+
+
+# ---------------------------------------------------------------- ArkVale digests (--record-arkvale-digest)
+
+def official_cuboid_mean(keys):
+    """Literal port of ArkVale InferState._summarize_keys (infer_state.py:448-462) for one page:
+    keys [page, kvh, d] -> (maxs, mins) [kvh, d]."""
+    maxs = keys.max(dim=0).values
+    mins = keys.min(dim=0).values
+    centers = (maxs + mins) / 2
+    dists = (centers[None] - keys).abs().mean(dim=0)
+    return centers + dists, centers - dists
+
+
+def official_estimate(q, maxs, mins):
+    """ArkVale estimate.cu:43 (o += max(q*k, q*v) with k = maxs, v = mins) for every query head, then
+    the mean over query heads (estimate.cu:551-552 with n_groups = 1). q [H, d]; maxs/mins [kvh, d]."""
+    g = q.shape[0] // maxs.shape[0]
+    per_head = [torch.maximum(q[h] * maxs[h // g], q[h] * mins[h // g]).sum() for h in range(q.shape[0])]
+    return torch.stack(per_head).mean()
+
+
+def paper_bounds(keys, name):
+    """Paper section 5.2, Eqs. 1-4, written out per page. keys [page, kvh, d]. Returns a function of q [H, d]."""
+    lo, hi = keys.min(0).values, keys.max(0).values
+    c = (lo + hi) / 2
+    dev = keys - c[None]
+    if name.startswith("cuboid"):
+        ad = dev.abs()
+        r = ad.mean(0) if name == "cuboid_mean" else (ad.min(0).values + ad.max(0).values) / 2
+        return lambda q: official_estimate(q, c + r, c - r)
+    l2 = dev.norm(dim=-1)                                   # [page, kvh]
+    R = {"sphere_max": l2.max(0).values, "sphere_center": (l2.min(0).values + l2.max(0).values) / 2,
+         "sphere_mean": l2.mean(0)}[name]
+    def f(q):
+        g = q.shape[0] // c.shape[0]
+        return torch.stack([q[h] @ c[h // g] + R[h // g] * q[h].norm() for h in range(q.shape[0])]).mean()
+    return f
+
+
+def test_digest_recording_does_not_change_selection():
+    plain = cl.QuestPages(4, 3)
+    rec = cl.QuestPages(4, 3, record_arkvale_digest=True)
+    oa, _, _ = run_backend(plain, 25, seed=5, start=17)
+    ob, _, _ = run_backend(rec, 25, seed=5, start=17)
+    assert torch.equal(plain.RANK, rec.RANK)
+    assert torch.equal(plain.SCORE.isnan(), rec.SCORE.isnan())
+    assert torch.equal(plain.SCORE.nan_to_num(), rec.SCORE.nan_to_num())
+    for x, y in zip(oa, ob):
+        assert torch.equal(x, y)
+    for n in cl.DIGESTS:  # same layout as scores: finite exactly where scores are
+        assert torch.equal(rec.DIGEST[n].isnan(), rec.SCORE.isnan())
+
+
+def test_digest_values_match_official_code_and_paper():
+    torch.manual_seed(1)
+    kvh, g, dim, ps, length = 2, 3, 8, 4, 23
+    q = torch.randn(1, kvh * g, 1, dim)
+    k = torch.randn(1, kvh, length, dim)
+    v = torch.randn_like(k)
+    be = cl.QuestPages(ps, 2, record_arkvale_digest=True)
+    hp = (length - 1) // ps
+    be.RANK = torch.full((1, 1, 2), -1, dtype=torch.int16)
+    be.SCORE = torch.full((1, 1, hp), float("nan"), dtype=torch.float16)
+    be.DIGEST = {n: torch.full((1, 1, hp), float("nan"), dtype=torch.float16) for n in cl.DIGESTS}
+    be.step = 0
+    be(SimpleNamespace(layer_idx=0), q, k, v, None, scaling=0.5)
+    qh = q[0, :, 0]
+    for p in range(hp):
+        keys = k[0, :, p*ps:(p+1)*ps].transpose(0, 1)            # [page, kvh, d]
+        mx, mn = official_cuboid_mean(keys)
+        ref = official_estimate(qh, mx, mn).item()
+        assert abs(be.DIGEST["cuboid_mean"][0, 0, p].item() - ref) < 2e-2 * max(1, abs(ref))
+        for n in cl.DIGESTS:
+            ref = paper_bounds(keys, n)(qh).item()
+            assert abs(be.DIGEST[n][0, 0, p].item() - ref) < 2e-2 * max(1, abs(ref)), n
+        # cuboid-max (raw AABB) is the Quest score
+        ref = official_estimate(qh, keys.max(0).values, keys.min(0).values).item()
+        assert abs(be.SCORE[0, 0, p].item() - ref) < 2e-2 * max(1, abs(ref))
+
+
+def test_digest_stats_incremental_equals_one_shot():
+    """Pages completed over many steps (stats appended page by page) give the same digest statistics
+    as computing all pages at once."""
+    torch.manual_seed(2)
+    kvh, g, dim, ps, start, T = 2, 2, 8, 4, 9, 30
+    k = torch.randn(1, kvh, start + T, dim)
+    v = torch.randn_like(k)
+    be = cl.QuestPages(ps, 2, record_arkvale_digest=True)
+    pmax = (start + T) // ps + 1
+    be.RANK = torch.full((T, 1, 2), -1, dtype=torch.int16)
+    be.SCORE = torch.full((T, 1, pmax), float("nan"), dtype=torch.float16)
+    be.DIGEST = {n: torch.full((T, 1, pmax), float("nan"), dtype=torch.float16) for n in cl.DIGESTS}
+    for t in range(T):
+        be.step = t
+        n = start + t + 1
+        be(SimpleNamespace(layer_idx=0), torch.randn(1, kvh * g, 1, dim), k[:, :, :n], v[:, :, :n], None,
+           scaling=0.5)
+    hp = (start + T - 1) // ps
+    kk = k[0, :, :hp * ps].reshape(kvh, hp, ps, dim).float()
+    ref = cl.page_digest_stats(kk, kk.amin(2), kk.amax(2))
+    st = be.dstats[0]
+    assert set(st) == {"c", "r_mean", "r_center", "R_max", "R_center", "R_mean"}
+    for name in st:
+        assert st[name].shape[1] == hp
+        torch.testing.assert_close(st[name], ref[name])
+
+
+def test_arkvale_selector():
+    torch.manual_seed(4)
+    kvh, g, dim, ps, length, K = 2, 2, 8, 4, 39, 5
+    q = torch.randn(1, kvh * g, 1, dim)
+    k = torch.randn(1, kvh, length, dim)
+    v = torch.randn_like(k)
+    hp = (length - 1) // ps                                     # 9 completed pages
+    be = cl.QuestPages(ps, K, selector="arkvale-mean", arkvale_sink=1, arkvale_recent=1)
+    be.RANK = torch.full((1, 1, K), -1, dtype=torch.int16)
+    be.SCORE = torch.full((1, 1, hp), float("nan"), dtype=torch.float16)
+    be.step = 0
+    out, _ = be(SimpleNamespace(layer_idx=0), q, k, v, None, scaling=0.5)
+    qh = q[0, :, 0]
+    scores = []
+    for p in range(hp):
+        mx, mn = official_cuboid_mean(k[0, :, p*ps:(p+1)*ps].transpose(0, 1))
+        scores.append(official_estimate(qh, mx, mn).item())
+    forced = [0, hp - 1]
+    cand = [p for p in range(hp) if p not in forced]
+    top = sorted(cand, key=lambda p: -scores[p])[:K - 2]
+    got = be.RANK[0, 0].tolist()
+    assert got[:K - 2] == top and got[K - 2:] == [-1, -1]
+    torch.testing.assert_close(be.SCORE[0, 0].float(), torch.tensor(scores), rtol=2e-3, atol=2e-3)
+    attended = sorted(top + forced)
+    pos = [i for p in attended for i in range(p*ps, p*ps+ps)] + list(range(hp*ps, length))
+    kk = k[:, :, pos].repeat_interleave(g, 1)
+    vv = v[:, :, pos].repeat_interleave(g, 1)
+    ref = ((q @ kk.transpose(-1, -2) * 0.5).softmax(-1) @ vv).transpose(1, 2)
+    torch.testing.assert_close(out, ref)
+
+
+def test_bad_selector():
+    with pytest.raises(ValueError):
+        cl.QuestPages(4, 2, selector="nope")

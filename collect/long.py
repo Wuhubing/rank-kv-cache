@@ -19,6 +19,19 @@ Optional fields (off by default; they never change the selected pages):
                            under the sparse attention actually used (selected pages + recent tail)
   --record-true-attn-rank  per layer and step, Spearman rho between the Quest page scores and the
                            dense attention mass of each complete page (mean over query heads)
+  --record-arkvale-digest  per layer and step, the estimated score of every completed page under
+                           ArkVale's page digests (float16 [T, L, P], same layout as scores):
+                           digest_cuboid_mean (the digest of the official code, infer_state.py:448-462)
+                           and the other bounding volumes of the paper (section 5.2, Eqs. 1-4):
+                           digest_cuboid_center, digest_sphere_max, digest_sphere_center,
+                           digest_sphere_mean. cuboid-max is the Quest score itself (scores).
+
+Exploratory selector (changes the selection and the generation; not for confirmatory runs):
+  --selector arkvale-mean  ArkVale's selection: the first --arkvale-sink pages and the
+                           --arkvale-recent most recent completed pages always take part in attention;
+                           top-(K - forced) of the other pages by the cuboid-mean digest score. ranked
+                           holds only the top-(K - forced) pages (forced pages are added at replay), scores
+                           holds the digest score of every completed page.
 
 A split may carry "rope_scaling" (e.g. YaRN for the 64K setting); it is applied to the model config
 and recorded in the manifest. A prompt entry may carry "user_template" to override USER[task].
@@ -77,12 +90,52 @@ def spearman(a, b):
     return float((ra * rb).sum() / den) if den > 0 else float("nan")
 
 
-class QuestPages:
-    """Same selector as notebooks/long_trace_capture.py; the record_* flags only add read-outs."""
+DIGESTS = ("cuboid_mean", "cuboid_center", "sphere_max", "sphere_center", "sphere_mean")
 
-    def __init__(s, page_size, top_k, record_attn_mass=False, record_true_attn_rank=False):
+
+def page_digest_stats(b, lo, hi):
+    """ArkVale digest statistics of completed pages. b: keys [kvh, n, page, d] (float32); lo/hi: their
+    element-wise min/max [kvh, n, d]. Returns the AABB centre c [kvh, n, d] and the radii of the paper's
+    bounding volumes (section 5.2): per-dimension r_mean / r_center [kvh, n, d] (cuboids, Eq. 4) and the
+    scalar L2 radii R_max / R_center / R_mean [kvh, n] (spheres, Eq. 2). cuboid-mean is the official code
+    (infer_state.py:448-462: centers = (max+min)/2, dists = mean |centers - keys|, bounds = centers +- dists)."""
+    c = (lo + hi) / 2
+    dev = b - c[:, :, None]
+    ad = dev.abs()
+    l2 = dev.norm(dim=-1)
+    rmax = l2.amax(2)
+    return dict(c=c, r_mean=ad.mean(2), r_center=(ad.amin(2) + ad.amax(2)) / 2,
+                R_max=rmax, R_center=(l2.amin(2) + rmax) / 2, R_mean=l2.mean(2))
+
+
+def digest_scores(q, st, name):
+    """Estimated page score under one digest, mean over query heads (ArkVale estimate.cu with n_groups=1).
+    q: [kvh, g, d] float32; st: page_digest_stats. Cuboid (Eq. 3): sum_d max(q_d (c_d + r_d), q_d (c_d - r_d))
+    = q.c + |q|.r; sphere (Eq. 1): q.c + R |q|_2."""
+    qc = torch.einsum("hgd,hpd->hgp", q, st["c"])
+    if name.startswith("cuboid"):
+        r = st["r_mean"] if name == "cuboid_mean" else st["r_center"]
+        out = qc + torch.einsum("hgd,hpd->hgp", q.abs(), r)
+    else:
+        R = st[{"sphere_max": "R_max", "sphere_center": "R_center", "sphere_mean": "R_mean"}[name]]
+        out = qc + q.norm(dim=-1)[:, :, None] * R[:, None, :]
+    return out.mean((0, 1))
+
+
+class QuestPages:
+    """Same selector as notebooks/long_trace_capture.py; the record_* flags only add read-outs.
+    selector="arkvale-mean" replaces the selection (exploratory, see the module docstring)."""
+
+    def __init__(s, page_size, top_k, record_attn_mass=False, record_true_attn_rank=False,
+                 record_arkvale_digest=False, selector="quest", arkvale_sink=1, arkvale_recent=1):
         s.page_size, s.top_k, s.bounds, s.step = page_size, top_k, {}, None
         s.record_attn_mass, s.record_true_attn_rank = record_attn_mass, record_true_attn_rank
+        if selector not in ("quest", "arkvale-mean"):
+            raise ValueError(f"unknown selector {selector}")
+        s.record_arkvale_digest, s.selector = record_arkvale_digest, selector
+        s.arkvale_sink, s.arkvale_recent = arkvale_sink, arkvale_recent
+        s.dstats = {}
+        s.need_digest = record_arkvale_digest or selector != "quest"
 
     def __call__(s, module, query, key, value, attention_mask, scaling, **kw):
         layer = module.layer_idx
@@ -93,19 +146,35 @@ class QuestPages:
         if hp > cached:
             b = key[0, :, cached*s.page_size:hp*s.page_size].reshape(kvh, hp-cached, s.page_size, dim)
             lo, hi = b.amin(2).float(), b.amax(2).float()
+            if s.need_digest:  # digest statistics from copies (float32); bounds above are unchanged
+                st = page_digest_stats(b.float(), lo, hi)
+                old = s.dstats.get(layer)
+                if old is not None:
+                    st = {n: torch.cat((old[n], v), 1) for n, v in st.items()}
+                s.dstats[layer] = st
             if past is not None:
                 lo, hi = torch.cat((past[0], lo), 1), torch.cat((past[1], hi), 1)
             s.bounds[layer] = lo, hi
         g = query.shape[1] // kvh
         lo, hi = s.bounds[layer]
         q = query[0, :, 0].reshape(kvh, g, dim).float()
-        scores = (torch.einsum("hgd,hpd->hgp", q.clamp_min(0), hi)
-                  + torch.einsum("hgd,hpd->hgp", q.clamp_max(0), lo)).mean((0, 1))
-        ranked = scores.argsort(descending=True, stable=True)[:s.top_k]
-        s.RANK[s.step, layer] = ranked.to(torch.int16)
+        if s.selector == "quest":
+            scores = (torch.einsum("hgd,hpd->hgp", q.clamp_min(0), hi)
+                      + torch.einsum("hgd,hpd->hgp", q.clamp_max(0), lo)).mean((0, 1))
+            ranked = scores.argsort(descending=True, stable=True)[:s.top_k]
+            s.RANK[s.step, layer] = ranked.to(torch.int16)
+            sel = ranked.sort().values
+        else:  # ArkVale: forced sink + recent pages, top-(K - forced) of the rest by cuboid-mean
+            scores = digest_scores(q, s.dstats[layer], "cuboid_mean")
+            forced = sorted(set(range(min(s.arkvale_sink, hp))) | set(range(max(0, hp - s.arkvale_recent), hp)))
+            ft = torch.tensor(forced, dtype=torch.long, device=key.device)
+            masked = scores.clone()
+            masked[ft] = float("-inf")
+            ranked = masked.argsort(descending=True, stable=True)[:s.top_k - len(forced)]
+            s.RANK[s.step, layer, :len(ranked)] = ranked.to(torch.int16)
+            sel = torch.cat((ranked, ft)).sort().values
         s.SCORE[s.step, layer, :hp] = scores.to(torch.float16)
         off = torch.arange(s.page_size, device=key.device)
-        sel = ranked.sort().values
         pos = torch.cat(((sel[:, None]*s.page_size + off).flatten(),
                          torch.arange(hp*s.page_size, length, device=key.device)))
         k = key.index_select(2, pos).repeat_interleave(g, 1)
@@ -118,13 +187,17 @@ class QuestPages:
             n = len(sel)
             mass_sorted = w[:, :n*s.page_size].reshape(-1, n, s.page_size).sum((0, 2))
             inv = torch.searchsorted(sel, ranked)                          # ranked order
-            s.ATTN[s.step, layer, :n] = mass_sorted[inv].to(torch.float16)
+            s.ATTN[s.step, layer, :len(ranked)] = mass_sorted[inv].to(torch.float16)
         if s.record_true_attn_rank and hp >= 2:
             qf = query[0, :, 0].float()
             kt = key[0, :, :length].float().repeat_interleave(g, 0)         # [H, length, d]
             full = torch.einsum("hd,hnd->hn", qf, kt) * scaling
             p = full.softmax(-1)[:, :hp*s.page_size].reshape(-1, hp, s.page_size).sum(2).mean(0)
             s.RHO[s.step, layer] = spearman(scores.float(), p)
+        if s.record_arkvale_digest:
+            st = s.dstats[layer]
+            for name in DIGESTS:
+                s.DIGEST[name][s.step, layer, :hp] = digest_scores(q, st, name).to(torch.float16)
         return out.transpose(1, 2).contiguous(), None
 
 
@@ -137,11 +210,12 @@ def looping(gen, n=32):
 
 @torch.inference_mode()
 def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
-            record_attn_mass=False, record_true_attn_rank=False, device="cuda"):
+            record_attn_mass=False, record_true_attn_rank=False, device="cuda", **sel_kw):
+    """sel_kw: record_arkvale_digest, selector, arkvale_sink, arkvale_recent (QuestPages)."""
     from transformers import AttentionInterface
     cfg = model.config
     L = cfg.num_hidden_layers
-    be = QuestPages(page_size, top_k, record_attn_mass, record_true_attn_rank)
+    be = QuestPages(page_size, top_k, record_attn_mass, record_true_attn_rank, **sel_kw)
     pmax = (len(prompt) + max_new) // page_size
     be.RANK = torch.full((max_new, L, top_k), -1, dtype=torch.int16, device=device)
     be.SCORE = torch.full((max_new, L, pmax), float("nan"), dtype=torch.float16, device=device)
@@ -149,6 +223,9 @@ def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
         be.ATTN = torch.full((max_new, L, top_k), float("nan"), dtype=torch.float16, device=device)
     if record_true_attn_rank:
         be.RHO = torch.full((max_new, L), float("nan"), dtype=torch.float32, device=device)
+    if be.record_arkvale_digest:
+        be.DIGEST = {n: torch.full((max_new, L, pmax), float("nan"), dtype=torch.float16, device=device)
+                     for n in DIGESTS}
     AttentionInterface.register("quest_npz", be)
     ids = torch.tensor([prompt], device=device)
     orig = cfg._attn_implementation
@@ -179,10 +256,15 @@ def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
             extra["attn_mass"] = be.ATTN[:n].cpu().numpy()
         if record_true_attn_rank:
             extra["true_rho"] = be.RHO[:n].cpu().numpy()
+        if be.record_arkvale_digest:
+            for name in DIGESTS:
+                extra[f"digest_{name}"] = be.DIGEST[name][:n, :, :npages].cpu().numpy()
         return be.RANK[:n].cpu().numpy(), be.SCORE[:n, :, :npages].cpu().numpy(), gen, stop, extra
     finally:
         cfg._attn_implementation = orig
         be.bounds.clear()
+        be.dstats.clear()
+        be.__dict__.pop("DIGEST", None)
         del be.RANK, be.SCORE
 
 
@@ -420,6 +502,11 @@ def main(argv=None):
     ap.add_argument("--dense-reference", action="store_true")
     ap.add_argument("--record-attn-mass", action="store_true")
     ap.add_argument("--record-true-attn-rank", action="store_true")
+    ap.add_argument("--record-arkvale-digest", action="store_true")
+    ap.add_argument("--selector", choices=["quest", "arkvale-mean"], default="quest",
+                    help="exploratory: arkvale-mean changes the selection (see module docstring)")
+    ap.add_argument("--arkvale-sink", type=int, default=1, help="with --selector arkvale-mean")
+    ap.add_argument("--arkvale-recent", type=int, default=1, help="with --selector arkvale-mean")
     ap.add_argument("--max-new", type=int, help="override the split's max_new_tokens (per turn)")
     ap.add_argument("--page-size", type=int, help="override the split's page size (exploratory sweeps)")
     ap.add_argument("--top-k", type=int, help="override the split's K (exploratory sweeps)")
@@ -472,6 +559,9 @@ def main(argv=None):
                split_file=str(args.split), split_sha256=hashlib.sha256(split_text).hexdigest(),
                flags=dict(record_attn_mass=args.record_attn_mass,
                           record_true_attn_rank=args.record_true_attn_rank,
+                          record_arkvale_digest=args.record_arkvale_digest, selector=args.selector,
+                          arkvale_sink=args.arkvale_sink if args.selector != "quest" else None,
+                          arkvale_recent=args.arkvale_recent if args.selector != "quest" else None,
                           dense_reference=args.dense_reference, temperature=args.temperature,
                           seed=args.seed if args.temperature else None,
                           sampling=dict(top_k=20, top_p=0.95) if args.temperature else None,
@@ -488,11 +578,17 @@ def main(argv=None):
         started = dt.datetime.now(dt.timezone.utc).isoformat()
         t0 = time.time()
         torch.cuda.reset_peak_memory_stats()
+        sel_kw = {}
+        if args.record_arkvale_digest or args.selector != "quest":
+            sel_kw = dict(record_arkvale_digest=args.record_arkvale_digest, selector=args.selector,
+                          arkvale_sink=args.arkvale_sink, arkvale_recent=args.arkvale_recent)
         if len(turns) == 1 and not args.temperature:   # the original path, unchanged
             R, S, gen, stop, extra = capture(model, prompt, ps, top_k, max_new, eos_ids,
-                                             args.record_attn_mass, args.record_true_attn_rank)
+                                             args.record_attn_mass, args.record_true_attn_rank, **sel_kw)
             turn_gens, turn_stops = None, None
         else:
+            if sel_kw:
+                sys.exit("--record-arkvale-digest / --selector are only supported on the single-turn greedy path")
             sampler = make_sampler(args.temperature, args.seed)
             R, S, turn_gens, turn_stops, extra = capture_session(
                 model, turns, ps, top_k, max_new, eos_ids, sampler,
