@@ -1,0 +1,18 @@
+{
+  "stop": "\n",
+  "tasks": [
+    "multifieldqa_en"
+  ],
+  "kept_steps": {
+    "multifieldqa_en/4-8k/191c14b84f0c8cdad3297f2bee552fb089178995208d7185": 22,
+    "multifieldqa_en/4-8k/462011b6f9beb976aaf7b38082bcf7d70a91c3c74d2c6e95": 4,
+    "multifieldqa_en/4-8k/67dd297408f3d52f22ede88df0b62644dac86da77f009e71": 9,
+    "multifieldqa_en/4-8k/6b35731428ea6d9b480338b90572d21690c2fbb89ebba249": 33,
+    "multifieldqa_en/4-8k/7a503a81877d3baca86f8d7179209e4899823433ab3326f3": 13,
+    "multifieldqa_en/8-16k/0da7747b164232cac911a34f6d0421028b27db0ce70e26a7": 18,
+    "multifieldqa_en/8-16k/60b19bbfd875f79ca168f6db761d192ab710f9b5f395de89": 50,
+    "multifieldqa_en/8-16k/cd0ecda68ad8031330b971fbfdd3794916e815109f004d3b": 75,
+    "multifieldqa_en/8-16k/d427e3ab7584a0e253bfb6a9d76626b726c79b57d5e39f2a": 25,
+    "multifieldqa_en/8-16k/ddfed65e5495d0257b22a9537993c3453d8590cc94b8e0d6": 7
+  }
+}

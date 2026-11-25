@@ -1,0 +1,355 @@
+{
+ "name": "longctx_v1",
+ "model": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+ "data": "zai-org/LongBench@5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+ "prompt": "notebooks/long_trace_capture.py USER templates, Qwen3 chat template, enable_thinking=True",
+ "selector": {
+  "page_size": 16,
+  "top_k": 64
+ },
+ "decoding": {
+  "greedy": true,
+  "max_new_tokens": 1024,
+  "stop": "eos | max_new | newest 32-gram repeats"
+ },
+ "budgets": {
+  "primary_B_over_K": 1.5,
+  "primary_B": 96,
+  "curve_B_over_K": [
+   1.125,
+   1.25,
+   1.5,
+   2,
+   4
+  ],
+  "curve_B": [
+   72,
+   80,
+   96,
+   128,
+   256
+  ]
+ },
+ "rationale": [
+  "Pool: every distinct context (sha256 of LongBench context) in qmsum and gov_report whose prompt is 16-32K Qwen tokens; QMSum rows sharing a meeting are deduplicated because the whole-document prompt ignores the query. Only 8 distinct contexts reach 24K, hence the 16K floor.",
+  "Stratified by task x band (16-24K, 24-32K); the 4 pilot-inspected documents are forced into dev, the rest ordered by sha256('longctx-v1:'+rid).",
+  "Primary budget B/K=1.5: on the pilot document the page-level LRU-Belady gap is 1.35 pp at B/K=2 (below a 2 pp threshold) and 2.15 pp at B/K=1.5; tight budgets are where a tiered cache matters. The full curve is reported."
+ ],
+ "prompts": [
+  {
+   "rid": "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259",
+   "row": 44,
+   "ctx": "3a3b74dfe03d0d75",
+   "prompt_tokens": 22395,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/217e94f10e4c8ed084bf7e22681c4bbd75d5aa35d3480edd",
+   "row": 45,
+   "ctx": "11ce44c6543f956a",
+   "prompt_tokens": 18019,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/2ffa8e41905ff69637e32b478476fd68758395f1ac7d3dcd",
+   "row": 176,
+   "ctx": "c56a18aeb76a3cbf",
+   "prompt_tokens": 18487,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/37467ea4bcf78ffd3bd34e630bc61477f73142fa0dce8cd5",
+   "row": 69,
+   "ctx": "e10b101d2de43f74",
+   "prompt_tokens": 18675,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/41203c9bcb9e82d6bfa289c0641ca1ef08073d52ceeec7f5",
+   "row": 23,
+   "ctx": "c9eb357a7bda5df5",
+   "prompt_tokens": 17447,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/5ff322b828f3adf54570798244cb178e360f53f0d6bbaf80",
+   "row": 151,
+   "ctx": "944682dbb6fb172d",
+   "prompt_tokens": 17527,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/6d5ca6fc8b8c5d3fedeec78b574fa9f418e57fec837cff3a",
+   "row": 127,
+   "ctx": "e0b3faefdf8c16cd",
+   "prompt_tokens": 21328,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/8ea6dbec3f301d7d0fc538441e0a776832f777a928c44666",
+   "row": 93,
+   "ctx": "3d3f91861ea51c36",
+   "prompt_tokens": 27254,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/cbdd4b937972c65f6d9de2ef403bbacbc169a5155ecef22a",
+   "row": 46,
+   "ctx": "74e38934ce211ef2",
+   "prompt_tokens": 28140,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/f205ea85a60f0353bd98268ae9f5f6ae702788629c9061be",
+   "row": 171,
+   "ctx": "57354d6fb55e719d",
+   "prompt_tokens": 19439,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "qmsum/4629a555e4748fcf19fce224d09b3c75040d4c1fa89c0bfb",
+   "row": 27,
+   "ctx": "d5799c1368ee6e56",
+   "prompt_tokens": 30410,
+   "task": "qmsum",
+   "band": "24-32K",
+   "split": "dev"
+  },
+  {
+   "rid": "qmsum/975d4e997974135de214468ed968e79573563f68e352716a",
+   "row": 6,
+   "ctx": "268f53c7f273ab16",
+   "prompt_tokens": 18561,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "qmsum/cb5b1672ca426597251b6def8cbab8ec5249c9662a0c9888",
+   "row": 19,
+   "ctx": "a110757871728cd7",
+   "prompt_tokens": 26120,
+   "task": "qmsum",
+   "band": "24-32K",
+   "split": "dev"
+  },
+  {
+   "rid": "qmsum/fb7891826fb3f47e3750d45365e8c0c97e23613752335cc0",
+   "row": 2,
+   "ctx": "01dbc7abc252583b",
+   "prompt_tokens": 16852,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "dev"
+  },
+  {
+   "rid": "gov_report/00dfb31b36bf405150303a6ef755b72997e486d594da1a10",
+   "row": 29,
+   "ctx": "af7ce605620e075b",
+   "prompt_tokens": 22567,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/21a88b8ac5c42a6f566eadadaeaf2f727d9d01024b2dcd3b",
+   "row": 39,
+   "ctx": "968f83f2b4141331",
+   "prompt_tokens": 17208,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/4cb713e43fe0e8e6185cec6d49636297caf933ab15697ef8",
+   "row": 14,
+   "ctx": "cfc9279de7ccaee7",
+   "prompt_tokens": 19247,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/4ed664210e8729ef89226a2a1e92e6ec286054a05089b794",
+   "row": 156,
+   "ctx": "ab2d75b7619d4b56",
+   "prompt_tokens": 16888,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/642cbca15cea50e376cef6d3e81f3dc4e046cc649f6119f4",
+   "row": 172,
+   "ctx": "6ff915bb872fa8a0",
+   "prompt_tokens": 22208,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/8b518fb560a869de24be330b84a60e48e977392f6f9877b5",
+   "row": 98,
+   "ctx": "8a29bb5ee363d8e2",
+   "prompt_tokens": 27614,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/8df98281be571d77d1b26cfe285fdc4072e43607dd793980",
+   "row": 67,
+   "ctx": "66b4043685b6777c",
+   "prompt_tokens": 18242,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/9086b2ec6e1781a140d5062644f111e70fd4b738427c2250",
+   "row": 76,
+   "ctx": "bbb14815136513bd",
+   "prompt_tokens": 23545,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/a6b66279eee0135505b08462e35738e68080a9214e36f710",
+   "row": 10,
+   "ctx": "e6b4d16fa9d65f54",
+   "prompt_tokens": 19472,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/aa553d37bf5e68ec9f38976761e2c37ea3495ef11650ce0d",
+   "row": 42,
+   "ctx": "c2fed0e14c780f54",
+   "prompt_tokens": 16263,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/ce19441feee1de58a5c147dc4e878d4cf00f1cce6b945e05",
+   "row": 90,
+   "ctx": "c02658c7cd52d065",
+   "prompt_tokens": 21311,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/e6030e255f6b8c70f7b3c9faf0320d4f7729b4eddacf727f",
+   "row": 1,
+   "ctx": "74cc97aea211ec4e",
+   "prompt_tokens": 16829,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/ef16ccc98f78a77f8d3a6f3f9b737247600407ee898985a7",
+   "row": 170,
+   "ctx": "6da72ceea5b3c3ab",
+   "prompt_tokens": 18622,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/f8a0313fccf5acb9eed57e3363eecb4d2b0b7f72639a82f4",
+   "row": 68,
+   "ctx": "ce4ed46cc3867ed8",
+   "prompt_tokens": 18694,
+   "task": "gov_report",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "gov_report/fb70e010d41eb638eb5a92f57ae858347858b41f986857fc",
+   "row": 124,
+   "ctx": "20cd48508f06078a",
+   "prompt_tokens": 26997,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/03e102d88a0c17c0ee70ad09e848cd08354eff1db619c886",
+   "row": 81,
+   "ctx": "0bee9e5f2baac44b",
+   "prompt_tokens": 25572,
+   "task": "qmsum",
+   "band": "24-32K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/10c03d597a3478f601be3286b2671d5f1c27f944488b74be",
+   "row": 12,
+   "ctx": "bd482a871b8dcf4b",
+   "prompt_tokens": 16232,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/3814c81130c13d1df955f1c6e235e30559ced35bda5f139e",
+   "row": 18,
+   "ctx": "8ca7798dfca3381d",
+   "prompt_tokens": 17787,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/38ad273bc386eca003c3e3998e17a1afb56794f452852d6c",
+   "row": 7,
+   "ctx": "ce534f2b6eec3008",
+   "prompt_tokens": 18394,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/94d06273bc4b8766ac8b9eef7ff2b8c2a31e32cf54896a93",
+   "row": 64,
+   "ctx": "59cecd690f5ab3d9",
+   "prompt_tokens": 30313,
+   "task": "qmsum",
+   "band": "24-32K",
+   "split": "heldout"
+  },
+  {
+   "rid": "qmsum/f28e420cf7496c7ee50b6ea61704bba189f95823fafc87eb",
+   "row": 17,
+   "ctx": "dfe33c583a0140e1",
+   "prompt_tokens": 16932,
+   "task": "qmsum",
+   "band": "16-24K",
+   "split": "heldout"
+  }
+ ]
+}

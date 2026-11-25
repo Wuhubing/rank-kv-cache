@@ -1,0 +1,23 @@
+Depth-3 tree on all dev candidates (descriptive), label: reused within 16 steps
+if freq32 <= 5:
+    if freq32 <= 2:
+        if recency <= 21:
+            reuse rate 0.404 (n=64998)
+        else:  # recency > 21
+            reuse rate 0.187 (n=6680)
+    else:  # freq32 > 2
+        if recency <= 3:
+            reuse rate 0.639 (n=22313)
+        else:  # recency > 3
+            reuse rate 0.516 (n=42597)
+else:  # freq32 > 5
+    if freq32 <= 14:
+        if recency <= 3:
+            reuse rate 0.776 (n=45044)
+        else:  # recency > 3
+            reuse rate 0.657 (n=56707)
+    else:  # freq32 > 14
+        if recency <= 3:
+            reuse rate 0.905 (n=41752)
+        else:  # recency > 3
+            reuse rate 0.804 (n=19909)

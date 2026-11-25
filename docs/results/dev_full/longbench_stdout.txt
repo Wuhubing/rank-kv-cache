@@ -1,0 +1,6 @@
+{'task': 'gov_report', 'band': 'all', 'documents': 10, 'sparse': 19.121076032142092, 'dense': None}
+{'task': 'gov_report', 'band': '4-8k', 'documents': 5, 'sparse': 18.02895642286009, 'dense': None}
+{'task': 'gov_report', 'band': '8-16k', 'documents': 5, 'sparse': 20.21319564142409, 'dense': None}
+{'task': 'multifieldqa_en', 'band': 'all', 'documents': 10, 'sparse': 11.557942789115799, 'dense': None}
+{'task': 'multifieldqa_en', 'band': '4-8k', 'documents': 5, 'sparse': 9.6357681347327, 'dense': None}
+{'task': 'multifieldqa_en', 'band': '8-16k', 'documents': 5, 'sparse': 13.480117443498898, 'dense': None}

@@ -1,0 +1,36 @@
+Evaluating 20 documents from results/dev_full/trace_truncated.jsonl
+  budget 128 replayed
+  budget 256 replayed
+B=128 fifo       miss 6.94%  repeat   94110  G -127.02% [-139.71%, -117.23%]  H2D 7.77 MiB/token
+B=128 lru        miss 5.39%  repeat   51876  G 0.00% [0.00%, 0.00%]  H2D 6.04 MiB/token
+B=128 rank_only  miss 7.54%  repeat  110576  G -176.55% [-190.20%, -165.28%]  H2D 8.44 MiB/token
+B=128 rf         miss 5.39%  repeat   51749  G 0.38% [-0.16%, 0.95%]  H2D 6.03 MiB/token
+B=128 rrank      miss 5.39%  repeat   51781  G 0.29% [0.15%, 0.44%]  H2D 6.04 MiB/token
+B=128 full       miss 5.38%  repeat   51674  G 0.61% [0.36%, 0.88%]  H2D 6.03 MiB/token
+B=128 logistic   miss 5.37%  repeat   51160  G 2.15% [-5.18%, 8.28%]  H2D 6.01 MiB/token
+B=128 belady     miss 4.18%  repeat   18627  G 100.00% [100.00%, 100.00%]  H2D 4.68 MiB/token
+B=256 fifo       miss 3.80%  repeat    8315  G -215.26% [-397.90%, -160.48%]  H2D 4.26 MiB/token
+B=256 lru        miss 3.59%  repeat    2716  G 0.00% [0.00%, 0.00%]  H2D 4.03 MiB/token
+B=256 rank_only  miss 3.70%  repeat    5691  G -114.38% [-150.53%, -103.40%]  H2D 4.15 MiB/token
+B=256 rf         miss 3.59%  repeat    2716  G 0.00% [0.00%, 0.00%]  H2D 4.03 MiB/token
+B=256 rrank      miss 3.59%  repeat    2704  G 0.46% [0.00%, 0.81%]  H2D 4.03 MiB/token
+B=256 full       miss 3.59%  repeat    2709  G 0.27% [-0.43%, 0.84%]  H2D 4.03 MiB/token
+B=256 logistic   miss 3.59%  repeat    2474  G 9.30% [6.46%, 14.88%]  H2D 4.02 MiB/token
+B=256 belady     miss 3.50%  repeat     115  G 100.00% [100.00%, 100.00%]  H2D 3.92 MiB/token
+{
+  "budget": 128,
+  "s1_full_vs_lru_repeat_reduction": 0.003893900840465726,
+  "s1_ci": [
+    0.0023749020352910443,
+    0.005625798577340428
+  ],
+  "s1_met": false,
+  "s2_repeat_misses_saved_full_vs_rf": 75,
+  "s2_ci": [
+    -50,
+    228
+  ],
+  "s2_relative_to_rf": 0.0014493033681810276,
+  "s2_met": false
+}
+H1 observations: {'selected': 2456832, 'candidate': 3837638, 'lru': 2187667}

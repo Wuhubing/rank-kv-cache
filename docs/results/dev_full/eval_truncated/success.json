@@ -1,0 +1,16 @@
+{
+  "budget": 128,
+  "s1_full_vs_lru_repeat_reduction": 0.003893900840465726,
+  "s1_ci": [
+    0.0023749020352910443,
+    0.005625798577340428
+  ],
+  "s1_met": false,
+  "s2_repeat_misses_saved_full_vs_rf": 75,
+  "s2_ci": [
+    -50,
+    228
+  ],
+  "s2_relative_to_rf": 0.0014493033681810276,
+  "s2_met": false
+}

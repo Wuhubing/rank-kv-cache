@@ -1,11 +1,12 @@
 import itertools
 import json
+import random
 import tempfile
 import unittest
 from functools import lru_cache
 from pathlib import Path
 
-from replay import compare, read_trace, replay_stream
+from replay import compare, iter_replay, parse_policy, read_trace, replay_stream
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -74,6 +75,66 @@ class ReplayTests(unittest.TestCase):
                     solve(t + 1, frozenset(want.union(subset)))
                     for subset in itertools.combinations(old, keep))
             self.assertEqual(replay_stream(steps, 3, "belady")["misses"], solve(0, frozenset()))
+
+    def test_score_with_zero_weights_matches_lru_step_by_step(self):
+        # Every legal four-step trace over five pages with two or three selections per step.
+        choices = [c for n in (2, 3) for c in itertools.permutations(range(5), n)]
+        rng = random.Random(0)
+        traces = [list(self.steps), [(1, 0), (2, 3), (0, 2)]]
+        traces += [[rng.choice(choices) for _ in range(rng.randint(1, 12))] for _ in range(400)]
+        for steps in traces:
+            for budget in (3, 4, 5):
+                lru = list(iter_replay(steps, budget, "lru"))
+                for top_k in (None, 1, 8):
+                    self.assertEqual(list(iter_replay(steps, budget, "score", top_k=top_k)), lru)
+
+    def test_fifo_ignores_hits(self):
+        # Page 0 is hit at t=2. LRU then evicts 1, FIFO evicts 0 and misses it at t=4.
+        steps = [(0,), (1,), (0,), (2,), (0,)]
+        self.assertEqual(replay_stream(steps, 2, "lru")["misses"], 3)
+        self.assertEqual(replay_stream(steps, 2, "fifo")["misses"], 4)
+
+    def test_rank_only_evicts_worst_last_rank(self):
+        # Page 1 ranks first at t=0. LRU breaks the tie toward evicting larger ID 1.
+        steps = [(1, 0), (2, 3), (1, 2)]
+        self.assertEqual(replay_stream(steps, 3, "lru")["misses"], 5)
+        self.assertEqual(replay_stream(steps, 3, "rank")["misses"], 4)
+
+    def test_score_rank_bonus_and_frequency(self):
+        # K=4, so only rank 1 is top quartile. delta keeps page 6, which LRU evicts.
+        steps = [(6, 5), (7,), (8,), (6,)]
+        self.assertEqual(replay_stream(steps, 3, "lru", top_k=4)["misses"], 5)
+        self.assertEqual(replay_stream(steps, 3, "score", delta=1, top_k=4)["misses"], 4)
+        # K=8 puts ranks 1-2 in the top quartile, so pages 5 and 6 tie and 6 leaves.
+        self.assertEqual(replay_stream(steps, 3, "score", delta=1, top_k=8)["misses"], 5)
+        # Page 0 was selected at t=0 and t=1. At t=3, beta=2 scores it 1+4 against 2+2
+        # for the fresher page 1. beta=1 would tie at 3 and fall back to LRU.
+        steps = [(0,), (0,), (1,), (2,), (0,)]
+        self.assertEqual(replay_stream(steps, 2, "lru")["misses"], 4)
+        self.assertEqual(replay_stream(steps, 2, "score", beta=2)["misses"], 3)
+        self.assertEqual(replay_stream(steps, 2, "score", beta=1)["misses"], 4)
+        with self.assertRaises(ValueError):
+            replay_stream(steps, 2, "score", beta=-1)
+
+    def test_oracle_lower_bounds_every_policy(self):
+        choices = list(itertools.combinations(range(4), 2))
+        policies = ["lru", "fifo", "rank", "rf", "rrank", "full", "score:8:2"]
+        for steps in itertools.product(choices, repeat=4):
+            rows = compare({("x", 0): list(steps)}, [3], [*policies, "belady"], delta=2, beta=1)
+            oracle = rows[-1]["misses"]
+            self.assertTrue(all(r["misses"] >= oracle for r in rows))
+
+    def test_policy_specs(self):
+        self.assertEqual(parse_policy("rf", 3, 2), ("rf", "score", 0, 2))
+        self.assertEqual(parse_policy("rrank", 3, 2), ("rrank", "score", 3, 0))
+        self.assertEqual(parse_policy("full", 3, 2), ("full", "score", 3, 2))
+        self.assertEqual(parse_policy("score:4:0.5"), ("score:4:0.5", "score", 4, 0.5))
+        for bad in ("mru", "score:1", "score:a:b"):
+            with self.assertRaises(ValueError):
+                parse_policy(bad)
+        rows = compare(self.streams, [2], ["fifo", "full"], delta=1, beta=1)
+        self.assertEqual([(r["policy"], r["delta"], r["top_k"]) for r in rows],
+                         [("fifo", None, 2), ("full", 1, 2)])
 
     def test_standalone_notebook_matches_local_replay(self):
         notebook = json.loads((ROOT / "notebooks/first_trace.ipynb").read_text())

@@ -1,0 +1,11 @@
+Same 8 dev prompts: A100 (dev_pilot) vs L4 (dev_full). Rows are (layer, step) pairs.
+A re-run of two documents on the same L4 matched 3556/3556 rows and every generated token.
+document                           identical ranking  same page set  first differing token
+gov_report/4-8k/72b99d02c7eafbddc           4/3556        55/3556                        2
+gov_report/4-8k/99f4c9b3ae17f0f11           8/3556        74/3556                        4
+gov_report/8-16k/4bd6930b3b65caf8         173/3556      2647/3556                     none
+gov_report/8-16k/e621311fc19bbb80         127/3556      1363/3556                     none
+multifieldqa_en/4-8k/191c14b84f0c         169/3556      2660/3556                     none
+multifieldqa_en/4-8k/7a503a81877d         172/3556      2664/3556                     none
+multifieldqa_en/8-16k/0da7747b164         127/3556      1148/3556                     none
+multifieldqa_en/8-16k/cd0ecda68ad          40/3556       595/3556                       32

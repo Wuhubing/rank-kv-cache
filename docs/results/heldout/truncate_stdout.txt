@@ -1,0 +1,21 @@
+multifieldqa_en/4-8k/048c12357868d908dfb979ef3c5c6cf7f6d85053acf1cac4: keep 32 of 127 steps | 'The new Iraqi Body Count organization provides cover for the war and allows supporters of '
+multifieldqa_en/4-8k/1f3b1e37c3d2ead7ab4fe7dd9d5cddd55b2c76d28e6bfc86: keep 17 of 127 steps | 'The authors used real data of a wireless MISO channel acquired in a realistic indoor scena'
+multifieldqa_en/4-8k/33bfe67a3d40e71a5e5351ea5db4ea55df61a018d071074b: keep 12 of 127 steps | 'The baseline is used as a reference for the top longeron.'
+multifieldqa_en/4-8k/60c66572f28b071899547f0aa0b4a271969c3b153e96406b: keep 9 of 127 steps | 'V + , V 0 , V −'
+multifieldqa_en/4-8k/8fbf0a6531d9250e6bcda0c7ba456441f6d4073bf08de826: keep 31 of 127 steps | 'The decision to base the water rates on usage reflects the idea that the cost of water sho'
+multifieldqa_en/4-8k/ac42a5a54b029a05be6e6e13d9001a81761d7b40ad1edfe2: keep 20 of 127 steps | 'The study concluded that fruit consumption may provide a protective effect for Hg exposure'
+multifieldqa_en/4-8k/aeb34faf1b5507b32d6d5b49474ea5c71d4ec2aa84a82d93: keep 28 of 127 steps | "The time required to update the robot's belief does not increase with the complexity of th"
+multifieldqa_en/4-8k/b619fa683cbbeb8db3d575fc2e261940701a530452b14eef: keep 7 of 127 steps | '\\boxed{C_2H}'
+multifieldqa_en/4-8k/dee63735510f6958f4c5bf318421c9b9fac0bc8b3e341a4a: keep 1 of 127 steps | 'John'
+multifieldqa_en/4-8k/dffb383ee06d8413ac40e2c1ec7bde5548ef07fc8f35ad2f: keep 4 of 127 steps | '\\boxed{Yes}'
+multifieldqa_en/8-16k/1d46294ee8fcc0a64828778b04198fcbe4f75841775e1205: keep 12 of 127 steps | 'No, the ISR is not necessary for transgene reactivation.'
+multifieldqa_en/8-16k/34f9b2c3d79ced580687f9653a6908215f79b1405a918cd0: keep 9 of 127 steps | '\\boxed{Wearable sensors and ambient sensors}'
+multifieldqa_en/8-16k/4214e20df9d299bae4fb9ba8d1b4792d516812e86960009c: keep 14 of 127 steps | 'The dendritic spines contain the postsynaptic compartment of synapses.'
+multifieldqa_en/8-16k/a8da0d2585bb54d571a2ab4a539b61eef56b5e271692be42: keep 7 of 127 steps | 'The Director of Town and Country Planning.'
+multifieldqa_en/8-16k/ae5a3edc1bc76fee6fa1aa6557e83bc3cfea0c190763ecce: keep 19 of 127 steps | 'The high resolution becomes less on what we focus on when we look/focus at dawn or dusk.'
+multifieldqa_en/8-16k/c39f97567cff21a8591f02117632ea71e7b566f65d2d62ab: keep 27 of 127 steps | 'An Alphabetical List of the Names and Places of Abode of Merchants and Principals, with th'
+multifieldqa_en/8-16k/c677827fc67e60c6396dceb5c4194aaba925aa1c61ad7115: keep 12 of 127 steps | "Players can skip dialogue on the quest map by pressing 'SKIP'."
+multifieldqa_en/8-16k/d2a588e420083f151239e660bd47ec0cad9732ec308ab9bc: keep 8 of 127 steps | 'The answer is not provided in the text.'
+multifieldqa_en/8-16k/f3374a1971e3cfb4f241e04b82d5016d892e9e32a4aa2b53: keep 35 of 127 steps | 'The PLM with decimation is able to clearly infer the network of interaction even when M=N,'
+multifieldqa_en/8-16k/f9e0095ae38b9c36aac766c4b82f41be5b7560ce8e544675: keep 3 of 127 steps | '62'
+Wrote results/heldout/trace_truncated.jsonl: kept 79716 rows, dropped 62524
