@@ -13,13 +13,13 @@
 4. **新模型或新任务要用新的 held-out**：从 LongBench 另抽文档，先写预注册再采集。
 5. **一个分支只让一台机器写**：wulab2 上的工作分支只从 wulab2 推送。
 6. **不备份到 Drive**：原始 trace 只放在 wulab2 的 `/data/weibing`，仓库里只提交小的结果文件和 manifest（含 sha256）。
-7. **共享服务器**：开跑前先看 `nvidia-smi`，只用空闲的卡；长任务放在 tmux 里跑。
+7. **只用一张卡**：开跑前用 `nvidia-smi` 挑一张空闲的卡，用 `CUDA_VISIBLE_DEVICES` 固定，全部采集和 benchmark 都在这张卡上做，卡号和 GPU UUID 写进 manifest。长任务放在 tmux 里跑。
 
 ## 1. 机器情况（2026-11-25 实测）
 
 | 项目 | 情况 | 影响 |
 |---|---|---|
-| GPU | 4 张 RTX 6000 Ada，每张 48 GB，当时空闲 | 可以按文档并行采集；8B 模型和 64K 上下文放得下 |
+| GPU | 4 张 RTX 6000 Ada，每张 48 GB，当时空闲 | **只用其中一张**：单卡显存够 8B 模型加 64K 上下文；全部 trace 出自同一张物理卡，对比更干净，也不占满共享资源 |
 | 驱动 | 550.90，最高 CUDA 12.4 | 之前用的 torch 2.14.1+cu130 不能用，要换 cu124 的 torch |
 | 根分区 | 只剩 127 GB（已用 99%） | 家目录不放任何大文件 |
 | `/data` | 剩 9.9 TB，已有 `/data/weibing` | 模型、HF 缓存、trace、结果都放这里 |
@@ -44,7 +44,7 @@
 4. 按 split 文件里固定的 revision 下载 Qwen3-0.6B 和 LongBench。
 5. 跑全部单元测试（PR #7 上是 155 个通过、1 个跳过），以及 GPU 相关测试。
 6. 跑选择器自检：notebook 里已有和暴力计算比对的检查。
-7. **同卡确定性**：同一篇文档在同一张卡上跑两次，逐行比较 trace，应完全一致。顺便看一下不同卡（同为 RTX 6000 Ada）之间是否一致。
+7. **同卡确定性**：同一篇文档在选定的那张卡上跑两次，逐行比较 trace，应完全一致。因为全程只用这一张卡，不需要再检查卡与卡之间是否一致。
 
 **关卡 1**：测试全过，自检通过，同卡重跑完全一致。
 
@@ -53,15 +53,17 @@
 现在的采集代码在 `notebooks/first_trace.ipynb`（短文档，trace v1）和 `notebooks/long_trace_capture.py`（长文档，schema v2 NPZ），都按 Colab 写的。
 
 1. 新建 `collect/short.py` 和 `collect/long.py`，选择器、prompt 模板、停止规则、精度逻辑**原样搬过来**，不改算法。
-2. 命令行参数：`--split`、`--subset dev|heldout`、`--docs`（分片用）、`--gpu`、`--out`、`--dense-reference`。
-3. manifest 记录：GPU 型号、驱动、torch、transformers、模型和数据的 revision、prompt token 的哈希、生成的 token、trace 的 sha256。
+2. 命令行参数：`--split`、`--subset dev|heldout`、`--docs`（只跑指定文档，方便试跑和补跑）、`--out`、`--dense-reference`。GPU 由外部的 `CUDA_VISIBLE_DEVICES` 指定。
+3. manifest 记录：GPU 型号和 UUID、驱动、torch、transformers、模型和数据的 revision、prompt token 的哈希、生成的 token、trace 的 sha256。
 4. 支持断点续跑（按文档判断是否完成），写文件时先写临时文件再改名。
-5. 4 张卡按文档分片并行；每张卡一个 tmux 会话，进程号和状态写进状态文件。
+5. 单进程、单卡、按文档顺序跑；放在一个 tmux 会话里，进程号和进度写进状态文件。
 6. 加入采集结果的格式校验，直接复用 #7 里更严格的 NPZ 读取校验。
 
 **关卡 2**：短、长各跑 1 篇文档，整条链路"采集 → 校验 → 回放 → 出表"跑通；记录每篇耗时，用来估算后面的总时长。
 
-## 5. 阶段 3：重采 dev（GPU，耗时等关卡 2 实测后再估）
+## 5. 阶段 3：重采 dev（单卡 GPU）
+
+单卡耗时粗估（关卡 2 实测后更新）：长文档每篇一两分钟（1024 步加 32K prefill），14 篇加 dense 参考约半小时到一小时；短文档 20 篇几分钟。
 
 1. 排名研究：20 篇 dev（`splits/longbench_v1.json`），128 token，附带 dense 参考生成。
 2. EMA 研究：14 篇 dev（`splits/longctx_v1.json`），最多 1024 步，thinking 开启。
@@ -105,7 +107,7 @@
 
 每项都需要新文档时，先在 dev 上探索；要做确认性评估，就另抽 held-out 并单独写预注册。
 
-1. **第二个模型 Qwen3-8B**：同样的 schema v2 trace。64K 上下文下 KV 约 9.4 GB（36 层 × 8 KV head × 128 维 × K/V × bf16），48 GB 放得下。
+1. **第二个模型 Qwen3-8B**：同样的 schema v2 trace。64K 上下文下权重约 16 GB、KV 约 9.4 GB（36 层 × 8 KV head × 128 维 × K/V × bf16），单张 48 GB 的卡放得下。速度约为 0.6B 的 1/3 到 1/5，单卡几个小时量级。
 2. **64K 上下文**，以及 RULER 和 SCBench 多轮。
 3. **page 大小和 K**：page ∈ {8, 16, 32, 64}，K ∈ {32, 64, 128}。
 4. **trace 加字段**：每个选中 page 的真实注意力质量（用于真正的 InfLLM 基线），以及 Quest 分数与真实注意力的秩相关。
@@ -113,7 +115,7 @@
 
 ## 9. 阶段 7：系统重测（GPU）
 
-1. 用 #7 修好的 `gpu_bench.py`（warmup 生效，显存按阶段报告）在 RTX 6000 Ada 上重测。
+1. 用 #7 修好的 `gpu_bench.py`（warmup 生效，显存按阶段报告）在采集用的同一张 RTX 6000 Ada 上重测，测时确认这张卡上没有别人的任务。
 2. 报告：每层策略开销（µs）、延迟分解（选择器 / 取数 / 注意力 / 其余）、PCIe 字节、显存；关掉 host 取数的对照；证明各策略的输出逐 token 一致。
 3. 补上 FLOPs/MACs 开销表的实测部分（估算见 README 第 2.3 节）。
 4. 如果要冲主会，再做 batch > 1 和带宽受限的场景。
@@ -133,7 +135,7 @@
 | 风险 | 应对 |
 |---|---|
 | 根分区满了导致任务失败 | 所有路径指向 `/data/weibing`；启动前检查 `HF_HOME` 和临时目录 |
-| 其他人占用 GPU | 每次开跑前检查；采集按文档分片，被打断可续跑 |
+| 选定的那张卡被别人占用 | 每次开跑前检查；被打断可按文档续跑。如果必须换卡，记录新卡的 UUID，并在新卡上重跑一篇已有文档，确认 trace 与原卡一致后再继续 |
 | cu124 的 torch 与原来的数值行为不同 | 本来就是新硬件；把版本写进 manifest，并在复现报告里说明 |
 | 分数存为 float16，平局更多 | 照原样保留，以保证和原实验一致；在复现报告里分析平局比例 |
 | 长上下文显存不够或太慢 | 关卡 2 先测 32K；8B 和 64K 放到最后 |
