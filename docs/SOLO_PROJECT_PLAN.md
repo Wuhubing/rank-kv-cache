@@ -9,7 +9,7 @@
 | 顺序 | 问题与方法 | 交付与验收 | 环境 |
 |---|---|---|---|
 | 1 · 验证起点 | 对照 proposal、两份 checkout 和本地归档。在真实 trace 上交叉检查 LRU、R+F、R+F+rank、Bélády。 | 跑测试、检查 oracle、重现四个 repeat-miss 计数，从已有逐层表重算长上下文主结果。已完成。 | Mac CPU |
-| 2 · 从预测到驱逐 | 首先在个人 20 篇 dev 上跑 H1。固定过去 8 步的访问次数，比较本步 top/bottom quartile 在未来 8 步至少再出现一次的概率。再缩到实际发生驱逐时、已驻留且未入选的候选页，用上次入选时的 rank 比较。 | 先输出 pooled、任务 × 层组、有效文档数、可比较样本数、加权概率差和文档 bootstrap CI。标注末尾不足 8 步的样本。对同一批驱逐记录统计 rank 改变 LRU 决定的比例和改选后谁先复用。主分析与机制分析分表。 | Mac CPU |
+| 2 · 从预测到驱逐 | 首先在个人 20 篇 dev 上跑 H1。固定过去 8 步的访问次数，比较本步 top/bottom quartile 在未来 8 步至少再出现一次的概率。再缩到实际发生驱逐时、已驻留且未入选的候选页，用上次入选时的 rank 比较。 | 先输出 pooled、任务 × 层组、有效文档数、可比较样本数、加权概率差和文档 bootstrap CI。标注末尾不足 8 步的样本。对同一批驱逐记录统计 rank 改变 LRU 决定的比例和改选后谁先复用。主分析与机制分析分表。[20 篇 dev 已完成](results/solo_rank_dev/README.md)。 | Mac CPU |
 | 3 · 回答原 proposal | 在个人 dev 上复算 25 组 δ、β；核对已存锁定结果。按原有设计在个人 40 篇上重放。比较 FIFO、LRU、rank-only、R+F、R+rank、full 和 oracle。用固定 β 的成对实验量化 rank 的增量。 | B=128 主表、B=256 对照，B=64 做正确性检查。给出总 miss、首次和重复 miss、配对 CI、需求 MiB/token。原版 20/40 正式实验根据其冻结配置单列。补充原版 dense/sparse 的任务分数作为 selector 质量检查。 | Mac CPU |
 | 4 · 验证更有用的信号 | 在 GovReport/QMSum 的 16–32K 长摘要 trace 上，比较历史 rank、当前 Quest 分数、只在入选时更新的 EMA、每步更新的 EMA。按层分配的权重只从 dev 学习；在相同总槽位下做 uniform/allocated × LRU/EMA 的 dev 对照。 | 先取得 1 篇开发 NPZ 与归档基准逐层对齐。随后跑 14 篇 dev；按原冻结协议重放 21 篇既有 held-out。报告 B=96 主结果及 B=72/80/96/128/256 曲线。表格写明数据来源、模型、prompt、生成长度与精度。 | Mac CPU 回放；原始 NPZ 无法取回时，用 Colab L4 按既有采集设置生成并单独记录 |
 | 5 · 验证硬件收益 | 优先完成原题的 LRU 对 rank 单层硬件测试。沿用个人 checkout 中的 `gpu_layer_benchmark.py` 和对应 replay 语义，将入口和依赖移植到本分支。已有 L4 smoke 包覆盖 4 个文档，但其两个策略各有 0 次重复 miss；正式测试应覆盖有实际驱逐差异的层。 | 固定 trace、BF16 页、缓存初始化和 GPU，核对每次 miss 与回放一致、payload 与直接索引一致。预热后交错至少 3 轮，输出 wall、resolver、host pack、H2D、配对文档区间和原始逐步计时。EMA 的整模型融合数据作为单独对照。 | Colab L4；Mac 汇总 |
@@ -49,8 +49,8 @@ python3 recompute_heldout.py docs/results/longctx_heldout/misses.csv
 | `heldout-20261120T043814Z.zip` | `24e5cfc913352ac8b85451dc77f0e4f72052b76584f449ad82b1ec8cc05c82f3` |
 | `gpu-layer-smoke-20261122T044930617682Z.zip` | `b6021c1e61f0c2a6f8cb880d8ff58a945c73d40947dc6caae87017244d9837c2` |
 
-## 下一次实现
+## 开发集上的驱逐例子
 
 已定位第一个教学例子。个人开发 ZIP 的 `01.jsonl`（GovReport，ID 前缀 `eaf2acd9`），层 6、第 37 步，层和步均从零计。这是该层固定 β=2 的两种策略第一次驻留集合不同。此前均有 128 页，本步 55 次命中、9 次缺页。R+F 留下 page 447，加 rank 后留下 page 457。它们上次都在第 29 步出现，分别排第 62 和第 13。在随后的第 38–45 步，两页均未被选中。这次选了不同的页，在这 8 步里没有直接的复用收益。
 
-下一次把这类统计扩展到 20 篇开发文档，汇报换人频率、对照组和可观察窗口。可复用 `analysis.py` 的频率与分层统计，以及 `gap_analysis.py` 的驱逐样本提取。长上下文正式重跑前要修复 `heldout.py` 的输入校验，用 NPZ 内部 ID 对照 split，检查重复、维度与完整性，并从冻结 JSON 读 α。
+20 篇开发文档的复用图、任务 × 层组比较、同状态驱逐对照和完整回放见[第二阶段结果](results/solo_rank_dev/README.md)。下一步是第 3 阶段，复算 25 组 dev 权重，核对已有参数锁定记录，在个人 40 篇 held-out 上按文档复现 B=128 的配对区间和 B=256 的预算对照。长上下文正式重跑前，修复 `heldout.py` 的输入校验并从冻结 JSON 读取 α。
