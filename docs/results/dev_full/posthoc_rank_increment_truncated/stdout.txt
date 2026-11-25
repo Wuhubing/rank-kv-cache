@@ -1,0 +1,7 @@
+POST-HOC / EXPLORATORY (NOT PREREGISTERED): 20 documents from /Users/ww/Desktop/tinyml/rank-kv-cache/results/dev_full/trace_truncated.jsonl
+B=128 rank_increment       rank_removed (0, 2) -> full (8, 2)    saved    58 [19, 105]  +0.112% of baseline
+B=128 beta_change               rf (0, 4) -> rank_removed (0, 2) saved    17 [-126, 181]  +0.033% of baseline
+B=128 s2_as_preregistered       rf (0, 4) -> full (8, 2)    saved    75 [-50, 228]  +0.145% of baseline
+B=256 rank_increment       rank_removed (0, 2) -> full (8, 2)    saved     7 [-6, 24]  +0.258% of baseline
+B=256 beta_change               rf (0, 4) -> rank_removed (0, 2) saved     0 [0, 0]  +0.000% of baseline
+B=256 s2_as_preregistered       rf (0, 4) -> full (8, 2)    saved     7 [-6, 24]  +0.258% of baseline

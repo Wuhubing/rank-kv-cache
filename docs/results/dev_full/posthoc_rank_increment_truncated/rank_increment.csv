@@ -1,0 +1,7 @@
+label,budget,contrast,baseline,treatment,baseline_repeat_misses,treatment_repeat_misses,repeat_misses_saved,ci_low,ci_high,relative_to_baseline,ci_excludes_zero,documents,replicates,seed
+post-hoc / exploratory (not preregistered),128,rank_increment,"rank_removed (0, 2)","full (8, 2)",51732,51674,58,19,105,0.0011211629165700147,True,20,2000,0
+post-hoc / exploratory (not preregistered),128,beta_change,"rf (0, 4)","rank_removed (0, 2)",51749,51732,17,-126,181,0.0003285087634543663,False,20,2000,0
+post-hoc / exploratory (not preregistered),128,s2_as_preregistered,"rf (0, 4)","full (8, 2)",51749,51674,75,-50,228,0.0014493033681810276,False,20,2000,0
+post-hoc / exploratory (not preregistered),256,rank_increment,"rank_removed (0, 2)","full (8, 2)",2716,2709,7,-6,24,0.002577319587628866,False,20,2000,0
+post-hoc / exploratory (not preregistered),256,beta_change,"rf (0, 4)","rank_removed (0, 2)",2716,2716,0,0,0,0.0,False,20,2000,0
+post-hoc / exploratory (not preregistered),256,s2_as_preregistered,"rf (0, 4)","full (8, 2)",2716,2709,7,-6,24,0.002577319587628866,False,20,2000,0

@@ -1,0 +1,31 @@
+{
+  "label": "post-hoc / exploratory (not preregistered)",
+  "trace": "/Users/ww/Desktop/tinyml/rank-kv-cache/results/dev_full/trace.jsonl",
+  "budget": 128,
+  "label_horizon": 16,
+  "sample_rows": 300000,
+  "seed": 0,
+  "all_candidates": {
+    "rows": 2287139,
+    "positives": 1376192,
+    "negatives": 910947,
+    "censored": 194852,
+    "censored_share_of_rows": 0.0851946471115223,
+    "censored_share_of_negatives": 0.21390047939122694
+  },
+  "training_sample": {
+    "rows": 300000,
+    "positives": 180370,
+    "negatives": 119630,
+    "censored": 25678,
+    "censored_share_of_rows": 0.08559333333333333,
+    "censored_share_of_negatives": 0.21464515589735017
+  },
+  "steps_per_stream": [
+    127
+  ],
+  "sample_check": {
+    "refit_reproduces_frozen_coefficients": true,
+    "note": "refit of the logistic model on this rebuilt training sample, compared with the frozen coefficients in the preregistration"
+  }
+}
