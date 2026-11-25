@@ -272,6 +272,3 @@ the model.
 6. How to frame the policy in the report: as InfLLM's decayed rule on Quest scores (recommended), with
    the contribution being the measurement and ablations.
 
-Housekeeping: `distill_kvrl.py` (abandoned RL distillation) is still untracked, unused and not
-deleted.
-

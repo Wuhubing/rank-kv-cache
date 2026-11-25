@@ -82,7 +82,7 @@
 | ~15:06 | **采集全部 20 篇 dev**（L4）；发现 A100 与 L4 的选择结果不同（见 §4.7） | 结果在 [`results/dev_full/`](results/dev_full/) |
 | 15:13 | **在 20 篇 dev 上调参并预注册**：完整策略 δ=8、β=2，R+F β=4，R+rank δ=4，逻辑回归系数固定；评估脚本随预注册一起提交 | `2f6a9bd` [`preregistration.md`](preregistration.md) |
 | ~15:24 | **采集 40 篇 held-out**（L4，sparse trace + dense 生成），随后按预注册**只评估一次** | 结果在 [`results/heldout/`](results/heldout/) |
-| 11-22 晚 | 团队决定换主线到"高效替换策略"，不使用 RL；原 kvrl 蒸馏方案放弃（`distill_kvrl.py` 未跟踪、未使用） | — |
+| 11-22 晚 | 团队决定换主线到"高效替换策略"，不使用 RL；原 kvrl 蒸馏方案放弃 | — |
 | 11-23 00:11 | **trace schema v2**：每步记录所有历史 page 的分数；`replay.py` 兼容 v1/v2 | `db51faa` |
 | 00:39 | **长 trace pilot**：一篇 26K QMSum，741 步；确定 prompt 和停止规则 | `537a196` [`long_trace_pilot.md`](long_trace_pilot.md) |
 | 00:47 | **冻结 `longctx_v1` 划分和 budget**（14 dev / 21 held-out，主 budget B=96） | `950cb37` [`splits/longctx_v1.json`](../splits/longctx_v1.json) |
