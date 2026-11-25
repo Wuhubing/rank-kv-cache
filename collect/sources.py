@@ -22,8 +22,18 @@ def _rev(spec):
 
 def load_rows(source, spec, wanted):
     from huggingface_hub import hf_hub_download
-    repo, rev = _rev(spec)
     rows = {}
+    if source == "parquet":   # the dataset is named per prompt (source_spec); spec is the split's data dict
+        import pandas as pd
+        frames = {}
+        for p in wanted:
+            sp, f = p["source_spec"], p["file"]
+            if (sp, f) not in frames:
+                r, _, v = sp.partition("@")
+                frames[sp, f] = pd.read_parquet(hf_hub_download(r, f, repo_type="dataset", revision=v or None))
+            rows[f, int(p["row"])] = {"context": frames[sp, f][p["field"]].iloc[int(p["row"])]}
+        return rows
+    repo, rev = _rev(spec)
     if source == "ruler":
         import pandas as pd
         files = {p["file"] for p in wanted}
@@ -33,16 +43,6 @@ def load_rows(source, spec, wanted):
                 if p["file"] == f:
                     r = d.iloc[int(p["row"])]
                     rows[f, int(p["row"])] = {k: (r[k].tolist() if hasattr(r[k], "tolist") else r[k]) for k in d.columns}
-        return rows
-    if source == "parquet":
-        import pandas as pd
-        frames = {}
-        for p in wanted:
-            spec, f = p["source_spec"], p["file"]
-            if (spec, f) not in frames:
-                r, _, v = spec.partition("@")
-                frames[spec, f] = pd.read_parquet(hf_hub_download(r, f, repo_type="dataset", revision=v or None))
-            rows[f, int(p["row"])] = {"context": frames[spec, f][p["field"]].iloc[int(p["row"])]}
         return rows
     if source == "scbench":
         for f in {p["file"] for p in wanted}:
