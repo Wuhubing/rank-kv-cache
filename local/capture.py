@@ -19,14 +19,16 @@ Output per document, readable by kvpolicy.load:
 import argparse
 import hashlib
 import json
+import os
 import platform
 import sys
 import time
 from pathlib import Path
 from zipfile import ZipFile
 
-import numpy as np
-import torch
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")  # hub downloads fork after the tokenizer is used
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
 from torch.nn import functional as F
 
 ROOT = Path(__file__).resolve().parents[1]
