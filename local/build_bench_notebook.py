@@ -181,11 +181,13 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", revision="c1899d
                                              torch_dtype=torch.bfloat16, attn_implementation="sdpa").cuda().eval()
 CTX, PAGES = 1088, 1600
 
-compute = {}
+compute = globals().get("compute", {})
 with torch.inference_mode():
     for b in BATCHES:
+        if b in compute:      # already measured (re-running the cell resumes)
+            continue
         ids = torch.randint(0, 150000, (b, CTX), device="cuda")
-        out = model(input_ids=ids, use_cache=True)
+        out = model(input_ids=ids, use_cache=True, logits_to_keep=1)   # full logits at b=64 would need ~20 GB
         cache, tok = out.past_key_values, out.logits[:, -1:].argmax(-1)
         def step():
             global cache
