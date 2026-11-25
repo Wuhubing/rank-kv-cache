@@ -17,6 +17,7 @@ Output per document, readable by kvpolicy.load:
   python local/capture.py run --subset dev --out traces/mps_dev   # resumable
 """
 import argparse
+import faulthandler
 import hashlib
 import json
 import os
@@ -118,7 +119,7 @@ class Quest:
 
 
 @torch.inference_mode()
-def capture(model, prompt, device, *, max_new=MAX_NEW, chunk=1024, eos_ids=(), check_every=0):
+def capture(model, prompt, device, *, max_new=MAX_NEW, chunk=1024, eos_ids=(), check_every=0, progress=False):
     from transformers import AttentionInterface
     cfg = model.config
     L = cfg.num_hidden_layers
@@ -136,6 +137,9 @@ def capture(model, prompt, device, *, max_new=MAX_NEW, chunk=1024, eos_ids=(), c
         for s in range(0, len(prompt), chunk):
             out = model(input_ids=ids[:, s:s + chunk], past_key_values=cache, use_cache=True, logits_to_keep=1)
             cache = out.past_key_values
+            if progress:
+                sync(device)
+                print(f"    prefill {min(s + chunk, len(prompt))}/{len(prompt)}", end="\r", flush=True)
         tokn = out.logits[:, -1].argmax(-1, keepdim=True)
         gen = [tokn.item()]
         t1 = time.perf_counter()
@@ -153,6 +157,8 @@ def capture(model, prompt, device, *, max_new=MAX_NEW, chunk=1024, eos_ids=(), c
             cache = out.past_key_values
             tokn = out.logits[:, -1].argmax(-1, keepdim=True)
             gen.append(tokn.item())
+            if progress and step % 200 == 199:
+                print(f"    step {step + 1}  {time.perf_counter() - t1:.0f}s          ", end="\r", flush=True)
         sync(device)
         t2 = time.perf_counter()
         n = len(gen) - 1
@@ -253,8 +259,12 @@ def run(args):
                 sys.exit(msg + " (pin transformers to the version in local/README.md, or pass --allow-mismatch)")
             print("WARNING", msg)
         print(f"{rid}: {len(prompt)} prompt tokens ...", flush=True)
+        # Watchdog: an MPS hang blocks inside Metal, where Ctrl-C cannot reach Python. After
+        # --doc-timeout seconds, print every thread's stack to stderr and exit; rerunning resumes.
+        faulthandler.dump_traceback_later(args.doc_timeout, exit=True)
         ranked, scores, gen, stop, timing, _ = capture(model, prompt, device, max_new=args.max_new,
-                                                       chunk=args.chunk, eos_ids=eos)
+                                                       chunk=args.chunk, eos_ids=eos, progress=True)
+        faulthandler.cancel_dump_traceback_later()
         stem = args.out / rid.replace("/", "__")
         np.savez(str(stem) + ".tmp.npz", ranked=ranked, scores=scores, rid=np.array(rid))
         Path(str(stem) + ".tmp.npz").replace(str(stem) + ".npz")
@@ -326,6 +336,7 @@ def main():
     ap.add_argument("--max-new", type=int, default=MAX_NEW)
     ap.add_argument("--allow-heldout", action="store_true")
     ap.add_argument("--allow-mismatch", action="store_true")
+    ap.add_argument("--doc-timeout", type=int, default=900, help="seconds per document before the watchdog exits")
     args = ap.parse_args()
     check(args) if args.cmd == "check" else run(args)
 
