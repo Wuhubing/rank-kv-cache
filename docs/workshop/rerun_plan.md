@@ -66,7 +66,7 @@
 | D5 | 目标依据 | 不使用 proposal；以本文第 1.2 节、`splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
 | D6 | 新设置的确认性评估 | **只给 Qwen3-8B 做**：另抽 21 篇新的 held-out，先预注册再评估一次。64K、SCBench、RULER、page 大小和 K、采样解码只在 dev 上做，结果标为探索性 |
 | D7 | 系统部分 | **要做 batch > 1**：实现多请求的分层缓存并实测吞吐（S7） |
-| D8 | 原 L4 trace | **不从 Drive 下载**。需要 L4 数据时，用 mini 上的 Colab CLI 申请 L4，用同一个采集脚本重新采集（S3） |
+| D8 | 原 L4 trace | **这次不使用**：不从 Drive 下载，也不在 Colab 上重采。S3 只和已提交的 L4 汇总结果对比；逐层逐步的跨 GPU 选择对比以后再说 |
 | D9 | 扩展实验的样本量 | 每个新设置的 dev 至少 14 篇（与现有长文档 dev 相同）；8B 的 held-out 21 篇 |
 
 ---
@@ -179,13 +179,8 @@
 ### S3：重采 dev
 1. 14 篇 dev（`splits/longctx_v1.json`），最多 1024 步，thinking 开启。
 2. 与原 L4 结果对比：LRU/Bélády 差距、各策略的 G，是否落在原来的 CI 附近。
-3. **在 Colab L4 上重采同样的 14 篇 dev**（按 D8，不从 Drive 下载）：
-   - 在 mini 上用 `colab new -s l4dev --gpu L4` 申请，用 `colab upload` 传代码，用与原实验相同的 torch 2.14.1+cu130 和 transformers 4.53.3 跑 `collect/long.py`，用 `colab download` 取回 trace，再 rsync 到 wulab2 的数据目录。
-   - **跑完立刻 `colab stop -s l4dev`，并用 `colab usage` 确认 `Active assignments: 0`**。账户约 100 units，L4 约 1.94 units/小时。
-   - 先核对新的 L4 trace 能否复现已提交的原结果（`docs/results/longctx_dev/misses.csv` 中的 LRU 和 Bélády miss 数）。能复现，说明采集脚本移植正确；不能复现，先查原因。
-   - 再比较 L4 与 RTX 6000 Ada：逐层逐步选出同一组 page 的比例、排序完全相同的比例，以及翻转的 page 是否集中在 top-K 边界附近（用分数与第 K 名分数的差距衡量）。
-- 输出：`results_v2/dev/`、`results_v2/dev_l4/`，`docs/rerun/s3_dev_vs_l4.md`。
-- 检查：所有文档完整、校验通过；对比小结写好。如果和 L4 差异很大，先停下分析原因，再往下走。
+- 输出：`results_v2/dev/`，`docs/rerun/s3_dev_vs_l4.md`（对比的是已提交的 L4 汇总结果，如 `docs/results/longctx_dev/` 下的 CSV）。
+- 检查：所有文档完整、校验通过；对比小结写好。换 GPU 后选择本来就会变，和 L4 的数字有差异不算失败：在小结里写清差异和可能原因，然后继续。只有出现明显的程序错误迹象（例如 miss 率为 0、Bélády 高于 LRU、文档步数异常）才按第 10.3 节处理。
 
 ### S4：dev 上的全部基线和分析（CPU 回放）
 用 S3 的新 trace，48 核并行。
