@@ -34,6 +34,7 @@ Each held-out set was collected once and evaluated once with the preregistered c
   G −0.219 at B=96 (worse than LRU; EMA 0.278). Its cuboid-mean digest disagrees with the Quest selector on ~20 % of the top-64,
   so evicting by it drops pages Quest is about to select; with the selector's own score it reaches 0.200 (ΔG −0.078 vs EMA). With
   ArkVale's own selector end to end the EMA still beats ArkVale by 0.068 and gains +0.030 over the current score (14/14).
+  Qwen3-8B dev agrees (ArkVale full −0.344 vs EMA 0.270 at B=96).
 
 **2. "On common hardware these miss and byte savings do not necessarily become latency savings; we characterise when they do."**
 - ✅ **Supported and now measured with batching**: EMA moves 8–11 % fewer bytes (allocation + EMA 11–20 %, Bélády 18–40 %), and

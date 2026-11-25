@@ -26,7 +26,9 @@ the S4.4 simplified ArkVale had 0.214. Taking the three parts one at a time:
 
 ArkVale with the best digest (the Quest score, everything else as released) is G 0.200 at B=96, still −0.078
 [−0.081, −0.075] behind the EMA (0/14 documents better). The power-law kernel (0.310) and the all-page percentile
-EMA (0.271) keep their S4 positions. Dev only, exploratory; 0 audit mismatches.
+EMA (0.271) keep their S4 positions. **Qwen3-8B dev gives the same result** (ArkVale full −0.344 vs EMA 0.270 at B=96,
+ΔG −0.614 [−0.639, −0.590], 0/14; best digest −0.101). Dev only, exploratory; 0 audit mismatches. Not done: items 1–2 on
+held-out traces (optional in the task; no held-out data were touched).
 
 Data: 0.6B dev traces re-collected with `--record-arkvale-digest` (`data/dev_digest` on wulab2). They are
 **bit-identical** to the S3 traces on all 14 documents (ranked, scores and generated tokens:
@@ -37,8 +39,8 @@ Data: 0.6B dev traces re-collected with `--record-arkvale-digest` (`data/dev_dig
 budget, `misses.csv.gz`). Statistics as in S4: G with LRU/Bélády of the **same access stream and the same layers**
 as anchors, 14-document paired bootstrap (2000, seed 0), EMA / all-page-percentile EMA / power-law parameters by
 LODO, ArkVale untuned (code defaults; the best-digest row is the separately listed tuned version). Every LRU and
-Bélády count was recomputed with `replay.py` from forced rows built independently in the audit: main 33 536 streams,
-end-to-end 6 676, 0 mismatches (`*/audit.txt`).
+Bélády count was recomputed with `replay.py` from forced rows built independently in the audit: main 38 240 streams
+(including the extra budgets), end-to-end 6 676, 8B 27 632, 0 mismatches (`*/audit.txt`).
 
 Names: stream `plain` = no forced pages; `page` = 1 sink + 1 recent completed page (the code's `n_sink_pages=1`,
 `n_win_pages=2` at the same number of pages); `token` = 2 + 2 (same number of tokens); `page_is` / `token_is` =
@@ -171,7 +173,27 @@ under the ArkVale selector (7.46 vs 6.33 % at B=96, scope a), so its selections 
 
 ## Qwen3-8B dev (digest read-outs; streams plain/page/token, digests Quest and cuboid-mean)
 
-QWEN8B_PLACEHOLDER
+14 8B dev documents re-collected with `--record-arkvale-digest` (`data/8b_dev_digest`; bit-identical to the S6 8B dev traces,
+`compare_readout_8b.txt`), replayed with streams plain/page/token and the Quest and cuboid-mean estimates
+(`results_v2/dev/arkvale/8b/`; audit 27 632 LRU/Bélády streams, 0 mismatches). Same picture as 0.6B, with larger gaps:
+
+| Stream `page`, scope `a` | B=72 | B=80 | B=96 | B=128 | B=256 |
+|---|---|---|---|---|---|
+| LRU miss % | 9.53 | 7.21 | 4.74 | 2.70 | 0.97 |
+| Score EMA z (LODO) | 0.258 | 0.273 | **0.270** [0.266, 0.274] | **0.254** [0.248, 0.260] | 0.230 |
+| All-page percentile EMA (LODO) | 0.254 | 0.267 | 0.262 | 0.239 | 0.204 |
+| Power law (LODO) | 0.284 | 0.292 | 0.310 | 0.283 | 0.224 |
+| ArkVale simplified | 0.131 | 0.184 | 0.193 | 0.158 | 0.047 |
+| **ArkVale full** (cuboid-mean) | −0.387 | −0.440 | **−0.344** [−0.368, −0.319] | **−0.186** [−0.206, −0.164] | −0.197 |
+| ArkVale full, best digest (= Quest score) | 0.190 | 0.198 | 0.170 [0.165, 0.174] | 0.091 [0.084, 0.098] | −0.134 |
+| ΔG ArkVale full − EMA | −0.645 0/14 | −0.714 0/14 | −0.614 [−0.639, −0.590] 0/14 | −0.440 [−0.462, −0.416] 0/14 | −0.427 0/14 |
+| ΔG best digest − EMA | −0.069 0/14 | −0.075 0/14 | −0.101 [−0.104, −0.097] 0/14 | −0.163 [−0.170, −0.157] 0/14 | −0.364 0/14 |
+
+Forced pages add 0.35 % accesses (page) / 2.0 % (token); the window rule costs 0.04–0.05 G at B=72–96 and 0.08 at B=128.
+Cuboid-mean eviction alone (stream plain, all layers) is −0.297 at B=96 against +0.221 for the Quest score. Scope (a)
+moves the EMA and the power law by ≤ 0.004. Equal slots (b) with 36 layers is feasible for 6/14 documents at B=128 and all from B=192. At
+B=128 it multiplies total misses by ×2.95 (LRU) / ×3.05 (EMA), at B=256 by ×1.37 / ×1.34 (`8b/eq_vs_std.csv`; no 8B
+all-layer replay at 192/384/512). The token-count stream gives the same numbers within 0.01.
 
 ## Rule table: official code → our replay
 
@@ -200,3 +222,33 @@ QWEN8B_PLACEHOLDER
 4. Cold start instead of ArkVale's prefill eviction (R10).
 5. Digest computed in float32 from bf16 keys (ArkVale: fp16 keys and arithmetic); stored as float16 like the scores.
 6. Our K/B ratio (64/96, 64/128) is the S4 grid, not ArkVale's 32/128 pages.
+7. ArkVale-selector traces keep K=64 attended pages (1 sink + 1 recent + 62 by digest); ArkVale's own `page_topks` is 32
+   pages of 32 tokens out of a 128-page budget.
+
+Deviations from the task, and things not done:
+- Equal-slots scope (b) is infeasible at B ≤ 128 on 0.6B (and for 1/14 documents at B=192); it is reported where
+  feasible, with extra all-layer replays at B=192/384/512 (page stream; Quest and cuboid-mean only) for the totals.
+- 8B: streams plain/page/token and the Quest/cuboid-mean estimates only (no `page_is`/`token_is`, no other digests), to
+  keep CPU time reasonable.
+- Items 1–2 were not replayed on the held-out traces (optional in the task). No held-out data were collected or read.
+- The 8B digest collection failed twice on card 2 with CUDA errors in the model (illegal instruction; cuBLAS execution
+  failed) and finished on the third, resumed run. The result is bit-identical to the S6 traces.
+
+## Reproduce (wulab2, CPU unless stated)
+```
+# GPU, one card: digest read-outs (must equal data/dev) and the ArkVale selector
+python -m collect.long --split splits/longctx_v1.json --subset dev --out data/dev_digest --record-arkvale-digest
+python -m collect.long --split splits/longctx_v1.json --subset dev --out data/dev_arkvale_sel --selector arkvale-mean
+python -m collect.long --split splits/longctx_8b_v1.json --subset dev --out data/8b_dev_digest --record-arkvale-digest
+# checks, replays, statistics, independent audit
+python -m analysis_v2.arkvale_full compare data/dev data/dev_digest --out compare_readout_main.txt
+python -m analysis_v2.arkvale_full agree data/dev_digest --out digest_agreement.txt
+python -m analysis_v2.arkvale_full replay data/dev_digest --out main --procs 32
+python -m analysis_v2.arkvale_full replay data/dev_digest --out extra --streams plain page --digests quest cuboid_mean \
+    --budgets 192 384 512 --no-eq      # then move extra/misses.csv to main/misses_extra.csv
+python -m analysis_v2.arkvale_full summarize --out main && python -m analysis_v2.arkvale_full tables --out main
+python -m analysis_v2.arkvale_full audit data/dev_digest --out main
+python -m analysis_v2.arkvale_full compare data/dev data/dev_arkvale_sel --e2e --out compare_e2e.txt
+python -m analysis_v2.arkvale_full replay data/dev_arkvale_sel --e2e --out e2e   # + summarize/tables/audit --e2e
+python -m analysis_v2.arkvale_full replay data/8b_dev_digest --out 8b --streams plain page token --digests quest cuboid_mean
+```
