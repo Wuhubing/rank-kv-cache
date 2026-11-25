@@ -136,7 +136,13 @@ def lru_fine():
     return e
 
 
-REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine)}
+def base():
+    e = Exp("base", doc="LRU, Belady, current score, EMA of z and of the all-page percentile (G2 and other settings)")
+    e.base(ema_signals=("z", "allrank"))
+    return e
+
+
+REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine, base)}
 
 
 def get(name):
