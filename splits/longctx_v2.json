@@ -1,0 +1,194 @@
+{
+ "name": "longctx_v2",
+ "model": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+ "data": "zai-org/LongBench@5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+ "prompt": "local/capture.py TEMPLATES (gov_report and qmsum identical to longctx_v1), Qwen3 chat template, enable_thinking=True",
+ "selector": {
+  "page_size": 16,
+  "top_k": 64
+ },
+ "decoding": {
+  "greedy": true,
+  "max_new_tokens": 1024,
+  "stop": "eos | max_new | newest 32-gram repeats"
+ },
+ "budgets": {
+  "primary_B_over_K": 1.5,
+  "primary_B": 96,
+  "curve_B_over_K": [
+   1.125,
+   1.25,
+   1.5,
+   2,
+   4
+  ],
+  "curve_B": [
+   72,
+   80,
+   96,
+   128,
+   256
+  ]
+ },
+ "excludes": {
+  "longctx_v1_sha256": "1b4c763e09e48061d0605ee945ccd989e5ab082fcb7b85e488400a371449d590",
+  "longbench_v1_ids": true
+ },
+ "rationale": [
+  "longctx_v1 used every GovReport/QMSum context with a 16-32K prompt, so v2 draws fresh, longer contexts and middle-truncates them (first and last halves kept, as LongBench does) to a target prompt length 16500 + sha256('longctx-v2:'+ctx) mod 15000 tokens.",
+  "heldout keeps dev's tasks and prompts (primary, preregistered criteria); heldout_ood adds NarrativeQA whole-story summaries as a separately reported generalization check.",
+  "Distinct eligible-or-not contexts per task after exclusions: {'gov_report': 146, 'qmsum': 25, 'narrativeqa': 20}."
+ ],
+ "prompts": [
+  {
+   "rid": "gov_report/864c2b03ab84ceb4179238296a7e923b7b82da0708259071",
+   "row": 56,
+   "ctx": "23b4e5802b88ce00",
+   "prompt_tokens": 28350,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "heldout",
+   "truncate": {
+    "context_tokens": 41605,
+    "head": 14160,
+    "tail": 14160
+   }
+  },
+  {
+   "rid": "gov_report/6b904be52b37799ba0fe353800ac1a5246d263927387b6f1",
+   "row": 59,
+   "ctx": "d146cbf90f9c4e7b",
+   "prompt_tokens": 27816,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "heldout",
+   "truncate": {
+    "context_tokens": 45982,
+    "head": 13893,
+    "tail": 13893
+   }
+  },
+  {
+   "rid": "gov_report/505345771a2e5b438ea4bfa7c0f238f8787f45b0ca52ef7d",
+   "row": 115,
+   "ctx": "0733e989c8981025",
+   "prompt_tokens": 29623,
+   "task": "gov_report",
+   "band": "24-32K",
+   "split": "heldout",
+   "truncate": {
+    "context_tokens": 52521,
+    "head": 14796,
+    "tail": 14797
+   }
+  },
+  {
+   "rid": "narrativeqa/f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726",
+   "row": 7,
+   "ctx": "ca530752853c92b8",
+   "prompt_tokens": 19584,
+   "task": "narrativeqa",
+   "band": "16-24K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 46698,
+    "head": 9776,
+    "tail": 9776
+   }
+  },
+  {
+   "rid": "narrativeqa/7e1df407b7018ef82e2ade488c601066798bbe67a39a6da4",
+   "row": 16,
+   "ctx": "0c509886c69d3dbb",
+   "prompt_tokens": 16528,
+   "task": "narrativeqa",
+   "band": "16-24K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 23104,
+    "head": 8247,
+    "tail": 8248
+   }
+  },
+  {
+   "rid": "narrativeqa/36232c9c63d19d282643657b3da5b688cb14e3b44009c494",
+   "row": 4,
+   "ctx": "7707dd9dee3fcf30",
+   "prompt_tokens": 22387,
+   "task": "narrativeqa",
+   "band": "16-24K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 36972,
+    "head": 11177,
+    "tail": 11177
+   }
+  },
+  {
+   "rid": "narrativeqa/b91ede2d2d08ea6f5f3b894c932b70e141665dd59d334dc8",
+   "row": 35,
+   "ctx": "32cfca10e4664a87",
+   "prompt_tokens": 25742,
+   "task": "narrativeqa",
+   "band": "24-32K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 38109,
+    "head": 12855,
+    "tail": 12855
+   }
+  },
+  {
+   "rid": "narrativeqa/880269c856197f51942d2649c32e0c37955409d7fdb3f369",
+   "row": 27,
+   "ctx": "b3f4ec448da87749",
+   "prompt_tokens": 17852,
+   "task": "narrativeqa",
+   "band": "16-24K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 64126,
+    "head": 8909,
+    "tail": 8910
+   }
+  },
+  {
+   "rid": "narrativeqa/677af5490eddd9e1d2ecd66ab0d1e038d1f7e7c5e985accf",
+   "row": 18,
+   "ctx": "62b7c3681d3a6c04",
+   "prompt_tokens": 28188,
+   "task": "narrativeqa",
+   "band": "24-32K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 32871,
+    "head": 14078,
+    "tail": 14078
+   }
+  },
+  {
+   "rid": "narrativeqa/26c6325283dece0b557e34cde9a5c57999ec5c68782e8194",
+   "row": 1,
+   "ctx": "71fe516912d0b664",
+   "prompt_tokens": 29962,
+   "task": "narrativeqa",
+   "band": "24-32K",
+   "split": "heldout_ood",
+   "truncate": {
+    "context_tokens": 31337,
+    "head": 14965,
+    "tail": 14965
+   }
+  },
+  {
+   "rid": "narrativeqa/ba016e084e6954d21521889759d81e159d1977cbf2b3354a",
+   "row": 49,
+   "ctx": "b428f0ba3d419848",
+   "prompt_tokens": 19069,
+   "task": "narrativeqa",
+   "band": "16-24K",
+   "split": "heldout_ood",
+   "truncate": null
+  }
+ ]
+}
