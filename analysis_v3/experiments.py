@@ -129,7 +129,14 @@ def d5():
     return e
 
 
-REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5)}
+def lru_fine():
+    e = Exp("lru_fine", budgets=list(range(64, 1025, 8)), doc="D1: LRU on a fine budget grid (iso-miss capacity)")
+    for n in ("lru", "belady"):
+        e.add(n, n, n)
+    return e
+
+
+REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine)}
 
 
 def get(name):
