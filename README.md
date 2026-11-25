@@ -103,8 +103,8 @@ python3 analysis.py path/to/trace.jsonl --samples selected candidate lru --lru-b
 | Sample | Pages observed at step t | Role |
 | --- | --- | --- |
 | `selected` (H1-selected) | Pages selected at t | Contrast only. These pages are protected anyway, so they never face eviction. |
-| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. These are the pages any replacement policy chooses among, and the set does not depend on the policy. |
-| `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU really chooses among. |
+| `candidate` (H1-candidate) | Pages selected before t but not at t | Primary sample. The set does not depend on the policy. It is a superset of the pages a replacement policy chooses among: it also contains pages a finite cache has already evicted, and steps at which nothing is evicted. |
+| `lru` | Candidates that an LRU cache of `--lru-budget` slots actually holds when step t arrives | The residents LRU chooses among when it must evict (steps without an eviction are included). |
 
 Each observation records:
 - its last rank, the rank at its most recent selection τ (τ = t for `selected`);
@@ -123,7 +123,7 @@ The effect compares the top quartile (last rank ≤ ⌈n/4⌉) with the bottom q
 - With a single request, the interval is reported as n/a. `--cluster stream` resamples (request, layer) pairs instead, which is useful for a pilot but ignores correlation across layers. Intervals over sparse strata, such as small layer groups, can be lopsided.
 
 Outputs in `--out`:
-- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <prefix>`, `band <band>`, `cell <task/band>` or `layers a-b`), `horizon`, `observations`, `top_share` and `bottom_share` (fractions of observations whose last rank is in the top or bottom quartile; for `candidate` this is how often a top-quartile rank bonus could apply), `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
+- `h1_effects.csv` has one row per sample, group and horizon. Its columns are `sample`, `group` (`all`, `task <prefix>`, `band <band>`, `cell <task/band>` or `layers a-b`), `horizon`, `observations`, `top_share` and `bottom_share` (fractions of observations whose last rank is in the top or bottom quartile; for `lru` this is close to how often a top-quartile rank bonus could apply; `candidate` also counts pages no longer resident), `clusters`, `strata_used`, `effect` (stratified by frequency × recency), `ci_low`, `ci_high`, `effect_recency_only`, `raw_top`, `raw_bottom` and `raw_difference`.
 - `rank_curve.csv` gives `sample`, `horizon`, `rank_decile` (1 is best), `observations` and `reuse_rate`.
 - `features.csv` is written with `--features`. It has one row per observation: `sample`, `request_id`, `task`, `layer_id`, `decode_step`, `page_id`, `rank`, `n_selected`, `quartile`, `recency`, `recency_bin`, `frequency` and `reuse_h`.
 - `h1.png` plots, for each sample, reuse by last-rank decile and the raw, recency-only and frequency × recency effects against horizon.
