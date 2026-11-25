@@ -2,7 +2,7 @@
 
 ## 做了什么
 - 采集：`python -m collect.long --split splits/longctx_v1.json --subset dev --out data/dev --dense-reference`，wulab2 卡 0（UUID `GPU-a74391df-5c27-152f-d0c0-6b86f8ea07d3`），2026-11-25 06:44–06:56 UTC，每篇 14–30 s（另有同样长度的 dense 参考生成）。
-- 14 篇全部以 EOS 结束（498–950 步，共 10 775 步；L4 是 473–1016 步，共 10 913 步）。`heldout.check_traces(..., "dev", 28)` 通过，每篇写完立即用严格读取器 `kvpolicy.load` 校验。原始 trace 共 653 MB，放在 wulab2 的 `data/dev/`，sha256 写在每篇的 manifest 里。
+- 13 篇以 EOS 结束，1 篇（qmsum/975d…，724 步）按 32-gram 重复规则停止（498–950 步，共 10 775 步；L4 是 473–1016 步，共 10 913 步）。`heldout.check_traces(..., "dev", 28)` 通过，每篇写完立即用严格读取器 `kvpolicy.load` 校验。原始 trace 共 653 MB，放在 wulab2 的 `data/dev/`，sha256 写在每篇的 manifest 里。
 - 回放：原样运行 `efficient_dev.py` 和 `checks.py`（输出 `results_v2/dev/efficient_dev/`），与 `docs/results/longctx_dev/summary.csv`（L4）对比。对比脚本是 `analysis_v2/compare_l4.py`。
 
 ## 结论
