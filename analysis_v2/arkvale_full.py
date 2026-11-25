@@ -51,7 +51,7 @@ REPS, SEED = 2000, 0
 CODE_DEFAULT = "ark:cuboid_mean:1"     # ArkVale as released: cuboid-mean digest, window exit
 
 
-def configs(e2e=False):
+def configs(e2e=False, digests=None):
     C = {"lru": ("lru", {}), "belady": ("belady", {}), "score": ("score", {})}
     for a in ALPHAS:
         C[f"ema_z:{a}"] = ("ema", dict(alpha=a, signal="z"))
@@ -60,7 +60,7 @@ def configs(e2e=False):
         C[f"powerlaw:{g}"] = ("powerlaw", dict(gamma=g))
     if not e2e:
         C["arkvale_simple"] = ("arkvale", dict(sink=2, win=2))
-    for d in (["own"] if e2e else DIGESTS):
+    for d in (["own"] if e2e else (digests or DIGESTS)):
         for ex in (1, 0):
             C[f"ark:{d}:{ex}"] = ("ark", dict(digest=d, window_exit=bool(ex)))
     return C
@@ -90,7 +90,7 @@ def run_job(job):
     path, stream, cfg, e2e = job
     R, S, rid = load(path)
     sink, recent = STREAMS[stream]
-    pol, kw = configs(e2e)[cfg]
+    pol, kw = configs(e2e)[cfg]   # every digest config is in the full set
     D = load_digest(path, kw["digest"]) if pol == "ark" and kw["digest"] not in ("quest", "own") else None
     T, L, P = S.shape
     budgets = [("std", B, B) for B in BUDGETS]
@@ -126,8 +126,8 @@ HEADER = ["doc", "layer", "stream", "config", "kind", "nominal_B", "B", "accesse
 
 def cmd_replay(args):
     paths = sorted(str(p) for p in args.traces.glob("*.npz"))
-    streams = ["page"] if args.e2e else list(STREAMS)
-    C = configs(args.e2e)
+    streams = ["page"] if args.e2e else (args.streams or list(STREAMS))
+    C = configs(args.e2e, args.digests)
     jobs = [(p, st, c, args.e2e) for p in paths for st in streams for c in C]
     args.out.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -272,8 +272,10 @@ def g_of(lru, pol, opt):
 
 def cmd_summarize(args):
     M = read(args.out / "misses.csv")
-    streams = ["page"] if args.e2e else list(STREAMS)
-    C = configs(args.e2e)
+    present = {k[0] for k in M}
+    streams = [s for s in (["page"] if args.e2e else list(STREAMS)) if s in present]
+    have = {k[2] for k in M}
+    C = [c for c in configs(args.e2e) if c in have]
     idx_cache = {}
     rows, contrasts, choices = [], [], []
     for stream in streams:
@@ -411,6 +413,8 @@ def main():
         p.add_argument("--out", type=Path, required=True)
         p.add_argument("--e2e", action="store_true")
         p.add_argument("--procs", type=int, default=32)
+        p.add_argument("--streams", nargs="+", choices=list(STREAMS), help="replay only these streams")
+        p.add_argument("--digests", nargs="+", choices=DIGESTS, help="replay only these digests")
     g = sub.add_parser("agree")
     g.add_argument("traces", type=Path)
     g.add_argument("--out", type=Path, required=True)
