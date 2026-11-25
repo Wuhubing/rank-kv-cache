@@ -1,0 +1,32 @@
+{
+ "frozen": "splits/heldout_frozen_mps.json",
+ "split": "splits/longctx_v2.json",
+ "subset": "heldout",
+ "alpha": {
+  "72": 0.4,
+  "80": 0.4,
+  "96": 0.5,
+  "128": 0.7,
+  "256": 0.95
+ },
+ "traces": {
+  "gov_report/505345771a2e5b438ea4bfa7c0f238f8787f45b0ca52ef7d": {
+   "file": "gov_report__505345771a2e5b438ea4bfa7c0f238f8787f45b0ca52ef7d.npz",
+   "sha256": "e0d04ce92615c3891a6fc82917ee0069c8ded7c3ec45294654e20bb7810fdae2",
+   "steps": 660,
+   "pages": 1892
+  },
+  "gov_report/6b904be52b37799ba0fe353800ac1a5246d263927387b6f1": {
+   "file": "gov_report__6b904be52b37799ba0fe353800ac1a5246d263927387b6f1.npz",
+   "sha256": "a9975d83dcf76dc0f714deb2d836b18bd2655ed12cbc68f734bf6e32f504bdba",
+   "steps": 909,
+   "pages": 1795
+  },
+  "gov_report/864c2b03ab84ceb4179238296a7e923b7b82da0708259071": {
+   "file": "gov_report__864c2b03ab84ceb4179238296a7e923b7b82da0708259071.npz",
+   "sha256": "fad60cdfb48ad357ef936042f7ddafcfb16c8273e95016a98465be02e6b7f24e",
+   "steps": 944,
+   "pages": 1830
+  }
+ }
+}

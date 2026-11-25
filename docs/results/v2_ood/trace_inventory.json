@@ -1,0 +1,62 @@
+{
+ "frozen": "splits/heldout_frozen_mps.json",
+ "split": "splits/longctx_v2.json",
+ "subset": "heldout_ood",
+ "alpha": {
+  "72": 0.4,
+  "80": 0.4,
+  "96": 0.5,
+  "128": 0.7,
+  "256": 0.95
+ },
+ "traces": {
+  "narrativeqa/26c6325283dece0b557e34cde9a5c57999ec5c68782e8194": {
+   "file": "narrativeqa__26c6325283dece0b557e34cde9a5c57999ec5c68782e8194.npz",
+   "sha256": "478e2b5ef6f68c0ec922b176b50055a98df8e06cb547676d615f5539a7cfc936",
+   "steps": 777,
+   "pages": 1921
+  },
+  "narrativeqa/36232c9c63d19d282643657b3da5b688cb14e3b44009c494": {
+   "file": "narrativeqa__36232c9c63d19d282643657b3da5b688cb14e3b44009c494.npz",
+   "sha256": "5f299306241ab6586ac4bb55f9f5aee38d4f846b6f1ceeaebba259ea9fa6523b",
+   "steps": 879,
+   "pages": 1454
+  },
+  "narrativeqa/677af5490eddd9e1d2ecd66ab0d1e038d1f7e7c5e985accf": {
+   "file": "narrativeqa__677af5490eddd9e1d2ecd66ab0d1e038d1f7e7c5e985accf.npz",
+   "sha256": "9a2b106a7a337c8b825d1ae1ac3e83dc4f193bcb6e52b8d49f46a9517c2739e9",
+   "steps": 679,
+   "pages": 1804
+  },
+  "narrativeqa/7e1df407b7018ef82e2ade488c601066798bbe67a39a6da4": {
+   "file": "narrativeqa__7e1df407b7018ef82e2ade488c601066798bbe67a39a6da4.npz",
+   "sha256": "e25c5b75593d2a26b5fccefabbfeb6b8957b95cc4e6021ad7c0f3d58dbcee53d",
+   "steps": 1023,
+   "pages": 1096
+  },
+  "narrativeqa/880269c856197f51942d2649c32e0c37955409d7fdb3f369": {
+   "file": "narrativeqa__880269c856197f51942d2649c32e0c37955409d7fdb3f369.npz",
+   "sha256": "65e330451325a2599ac7f483e49a0df2f7903b66521710c685a044f5f430bb73",
+   "steps": 814,
+   "pages": 1166
+  },
+  "narrativeqa/b91ede2d2d08ea6f5f3b894c932b70e141665dd59d334dc8": {
+   "file": "narrativeqa__b91ede2d2d08ea6f5f3b894c932b70e141665dd59d334dc8.npz",
+   "sha256": "1243b17a6c5cbf6075261aaa6461aadafb3b3da2c78777e6ad77dc4c3a2dda39",
+   "steps": 569,
+   "pages": 1644
+  },
+  "narrativeqa/ba016e084e6954d21521889759d81e159d1977cbf2b3354a": {
+   "file": "narrativeqa__ba016e084e6954d21521889759d81e159d1977cbf2b3354a.npz",
+   "sha256": "65f5bbca506cabc8885675233b38a57fa99935389076d81b4322d0c0fd5f267d",
+   "steps": 586,
+   "pages": 1228
+  },
+  "narrativeqa/f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726": {
+   "file": "narrativeqa__f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726.npz",
+   "sha256": "e2f0bafde9207e4872502ce13a26683a6adb3494d7a1514d9fbd93d16c956b30",
+   "steps": 994,
+   "pages": 1286
+  }
+ }
+}
