@@ -21,8 +21,8 @@ Used documents checked: longctx_v1 (35), longctx_8b_v1 (35), longctx64k_v1 (14),
 (60); 65 candidates were copies of used LongBench GovReport/QMSum documents (shingle overlap up to 100 %). Largest shingle
 overlap among the remaining candidates 4.9 %, among the 21 taken 2.6 %.
 
-The 21 documents: hash order sha256("longctx_v3:" + rid); 16 102–28 278 prompt tokens (same with both tokenizers), 16 at
-16–24K and 5 at 24–32K. All GovReport (QMSum is 2.5 % of the pool and none falls in the first 21). They are all held-out;
+The 21 documents: hash order sha256("longctx_v3:" + rid); 16 102–28 278 prompt tokens (same with both tokenizers), 19 at
+16–24K and 2 at 24–32K. All GovReport (QMSum is 2.5 % of the pool and none falls in the first 21). They are all held-out;
 nothing in them is used for selection or tuning, and their traces are collected only after the preregistration
 (`docs/preregistration_v3.md`, `splits/heldout_frozen_v3.json`) is committed and pushed (F2). The collector reads them through
 the new `parquet` source of `collect/sources.py` (same prompt construction as LongBench).
