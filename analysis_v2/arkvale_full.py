@@ -399,6 +399,63 @@ def cmd_agree(args):
     print("\n".join(lines))
 
 
+# ------------------------------------------------------------------------------------------ tables
+
+def cmd_tables(args):
+    """Markdown tables for docs/rerun/s4/09_arkvale_full.md from summary.csv / contrasts.csv."""
+    S = {}
+    with open(args.out / "summary.csv") as f:
+        for r in csv.DictReader(f):
+            S[r["stream"], r["scope"], int(r["nominal_B"]), r["policy"]] = r
+    Cn = []
+    with open(args.out / "contrasts.csv") as f:
+        Cn = list(csv.DictReader(f))
+
+    def g(st, sc, B, pol, ci=False):
+        r = S.get((st, sc, B, pol))
+        if r is None:
+            return "–"
+        x = f"{float(r['G']):.3f}"
+        return x + (f" [{float(r['G_lo']):.3f}, {float(r['G_hi']):.3f}]" if ci else "")
+
+    def mr(st, sc, B, pol):
+        r = S.get((st, sc, B, pol))
+        return "–" if r is None else f"{100 * float(r['miss_rate']):.2f}"
+
+    out = []
+    streams = sorted({k[0] for k in S}, key=lambda x: list(STREAMS).index(x))
+    if args.e2e:
+        pols = ["lru", "score", "ema_z(lodo)", "ema_allrank(lodo)", "powerlaw(lodo)", "ark:own:1", "ark:own:0", "belady"]
+    else:
+        pols = ["lru", "score", "ema_z(lodo)", "ema_allrank(lodo)", "powerlaw(lodo)", "arkvale_simple", "ark:quest:1",
+                "ark:quest:0", "ark:cuboid_mean:1", "ark:cuboid_mean:0", "ark:digest(lodo):1", "belady"]
+    for sc, budgets in (("all", BUDGETS), ("a", BUDGETS), ("b", EQ_NOMINAL)):
+        for st in streams:
+            if not any((st, sc, B, "lru") in S for B in budgets):
+                continue
+            Bs = [B for B in budgets if (st, sc, B, "lru") in S]
+            out.append(f"\n### stream `{st}`, scope `{sc}` — G (miss rate %)\n")
+            if sc == "b":
+                out.append("documents with a feasible equal-slots budget: " +
+                           ", ".join(f"B={B}: {S[st, sc, B, 'lru']['docs']}" for B in Bs) + "\n")
+            out.append("| policy | " + " | ".join(f"B={B}" for B in Bs) + " |")
+            out.append("|---|" + "---|" * len(Bs))
+            for pol in pols:
+                if not any((st, sc, B, pol) in S for B in Bs):
+                    continue
+                out.append(f"| {pol} | " + " | ".join(f"{g(st, sc, B, pol, ci=B in (96, 128) and pol not in ('lru', 'belady'))} ({mr(st, sc, B, pol)})"
+                                                        for B in Bs) + " |")
+    out.append("\n### Paired contrasts (dG = G(a) - G(b), 95 % document bootstrap; docs a better / b better)\n")
+    out.append("| stream | scope | B | a | b | dG [CI] | docs |")
+    out.append("|---|---|---|---|---|---|---|")
+    for r in Cn:
+        out.append(f"| {r['stream']} | {r['scope']} | {r['nominal_B']} | {r['a']} | {r['b']} | "
+                   f"{float(r['dG']):+.3f} [{float(r['lo']):+.3f}, {float(r['hi']):+.3f}] | "
+                   f"{r['docs_a_better']}/{r['docs_b_better']} of {r['docs']} |")
+    (args.out / "tables.md").write_text("\n".join(out) + "\n")
+    print(f"wrote {args.out / 'tables.md'} ({len(out)} lines)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -415,6 +472,9 @@ def main():
         p.add_argument("--procs", type=int, default=32)
         p.add_argument("--streams", nargs="+", choices=list(STREAMS), help="replay only these streams")
         p.add_argument("--digests", nargs="+", choices=DIGESTS, help="replay only these digests")
+    t = sub.add_parser("tables")
+    t.add_argument("--out", type=Path, required=True)
+    t.add_argument("--e2e", action="store_true")
     g = sub.add_parser("agree")
     g.add_argument("traces", type=Path)
     g.add_argument("--out", type=Path, required=True)
@@ -423,7 +483,7 @@ def main():
     s.add_argument("--out", type=Path, required=True)
     s.add_argument("--e2e", action="store_true")
     args = ap.parse_args()
-    dict(compare=cmd_compare, replay=cmd_replay, audit=cmd_audit, summarize=cmd_summarize, agree=cmd_agree)[args.cmd](args)
+    dict(compare=cmd_compare, replay=cmd_replay, audit=cmd_audit, summarize=cmd_summarize, agree=cmd_agree, tables=cmd_tables)[args.cmd](args)
 
 
 if __name__ == "__main__":
