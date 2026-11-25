@@ -11,3 +11,7 @@ __pycache__/
 *.synctex.gz
 *.pdf
 .DS_Store
+
+# replication-v2: raw traces live only on wulab2
+/data/
+/results_v2/**/*.npz
