@@ -1,0 +1,508 @@
+{
+ "verdict": "F can be done with 21 documents",
+ "n_taken": 21,
+ "candidates_after_dedup": 2262,
+ "stats": {
+  "distinct:gov_report": 19445,
+  "len_out_06b": 11294,
+  "char_prefilter_out": 6057,
+  "in_range:gov_report": 2260,
+  "dedup_out:gov_report": 55,
+  "distinct:qmsum": 233,
+  "in_range:qmsum": 67,
+  "dedup_out:qmsum": 10
+ },
+ "used_docs": {
+  "longctx_v1": 35,
+  "longctx_8b_v1": 35,
+  "longctx64k_v1": 14,
+  "ruler16k_v1": 14,
+  "scbench_v1": 14,
+  "longbench_v1": 60
+ },
+ "used_shingles": 3247511,
+ "excluded_by_dedup": [
+  {
+   "rid": "govreport/validation/7308c39ac8f197c7",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/c02658c7cd52d065",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/6da72ceea5b3c3ab",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/f2d3c8acb21c6075",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/ab14bfce2b7a2947",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/da0def2a7cbe9d38",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/20cd48508f06078a",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/24b308cd0bb67ee2",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/c2fed0e14c780f54",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/b4896b434cde93d6",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/870a207a850b1f6b",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/c56a18aeb76a3cbf",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/18695714f26e35cb",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/80e99cefa05e4670",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/82083338ba2454d4",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/66a4cda2f5519a6e",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/b0a900a186807f61",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/66b4043685b6777c",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/74cc97aea211ec4e",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/3a3b74dfe03d0d75",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/cf850c2b2177e3fc",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/cfc9279de7ccaee7",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/f892efb438dcc1ba",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/11ce44c6543f956a",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/8a29bb5ee363d8e2",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/d8568ff350b6ed9d",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/e10b101d2de43f74",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/890b4b474962184e",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/968f83f2b4141331",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/0fff05835f10c220",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/e0b3faefdf8c16cd",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/bbb14815136513bd",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/369b1f2e5e408b35",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/6ff915bb872fa8a0",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/bd2fa6b0aa0b4f4f",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/e6b4d16fa9d65f54",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/c9eb357a7bda5df5",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/462a444c705b390e",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/0aeea62a62b110c0",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/15510bbf7dfe8892",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/be36878f833abe16",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/944682dbb6fb172d",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/57354d6fb55e719d",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/3d3f91861ea51c36",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/e16085091296034a",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/af7ce605620e075b",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/74e38934ce211ef2",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/c30071c50ee4923d",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/ce4ed46cc3867ed8",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "govreport/validation/ab2d75b7619d4b56",
+   "overlap": 1.0,
+   "hash_hit": true
+  },
+  {
+   "rid": "qmsum/va-sq-1",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-74",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-133",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-147",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-229",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-234",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-248",
+   "overlap": 1.0,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-107",
+   "overlap": 0.9933770265608831,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-81",
+   "overlap": 0.975796568627451,
+   "hash_hit": false
+  },
+  {
+   "rid": "qmsum/va-sq-92",
+   "overlap": 0.9757218350310178,
+   "hash_hit": false
+  },
+  {
+   "rid": "govreport/test/f4bb465b85d01eeb",
+   "overlap": 0.13243469651968623,
+   "hash_hit": false
+  },
+  {
+   "rid": "govreport/train/d39b13b3ea877e1b",
+   "overlap": 0.09177090190915076,
+   "hash_hit": false
+  },
+  {
+   "rid": "govreport/test/eb38192ad0e48b63",
+   "overlap": 0.05867420945749927,
+   "hash_hit": false
+  },
+  {
+   "rid": "govreport/train/19dfd465bedb4d81",
+   "overlap": 0.053146397130746655,
+   "hash_hit": false
+  },
+  {
+   "rid": "govreport/test/614c9034f87b15f3",
+   "overlap": 0.052140938536893666,
+   "hash_hit": false
+  }
+ ],
+ "overlap_of_candidates": {
+  "max": 0.04866,
+  "taken_max": 0.02628
+ },
+ "taken": [
+  {
+   "rid": "govreport/train/318d65c26a46368b",
+   "task": "gov_report",
+   "tok06": 18655,
+   "tok8b": 18655,
+   "overlap": 0.00075
+  },
+  {
+   "rid": "govreport/train/f6b04152ead4b89d",
+   "task": "gov_report",
+   "tok06": 16686,
+   "tok8b": 16686,
+   "overlap": 0.00861
+  },
+  {
+   "rid": "govreport/train/53f55df2e9037904",
+   "task": "gov_report",
+   "tok06": 17079,
+   "tok8b": 17079,
+   "overlap": 0.00697
+  },
+  {
+   "rid": "govreport/train/475aef161ae98725",
+   "task": "gov_report",
+   "tok06": 27548,
+   "tok8b": 27548,
+   "overlap": 0.0066
+  },
+  {
+   "rid": "govreport/train/7f612500ffef3670",
+   "task": "gov_report",
+   "tok06": 16188,
+   "tok8b": 16188,
+   "overlap": 8e-05
+  },
+  {
+   "rid": "govreport/train/62001e156f220163",
+   "task": "gov_report",
+   "tok06": 16644,
+   "tok8b": 16644,
+   "overlap": 0.00914
+  },
+  {
+   "rid": "govreport/train/487f07dac7f852f9",
+   "task": "gov_report",
+   "tok06": 16221,
+   "tok8b": 16221,
+   "overlap": 0.00052
+  },
+  {
+   "rid": "govreport/train/eb3cd77e4ecc327c",
+   "task": "gov_report",
+   "tok06": 18890,
+   "tok8b": 18890,
+   "overlap": 0.00648
+  },
+  {
+   "rid": "govreport/train/c552bd1be3b2afad",
+   "task": "gov_report",
+   "tok06": 21256,
+   "tok8b": 21256,
+   "overlap": 0.00071
+  },
+  {
+   "rid": "govreport/train/26053c42a4fa0e10",
+   "task": "gov_report",
+   "tok06": 17632,
+   "tok8b": 17632,
+   "overlap": 0.00042
+  },
+  {
+   "rid": "govreport/test/ab4359b0086a2ec5",
+   "task": "gov_report",
+   "tok06": 23921,
+   "tok8b": 23921,
+   "overlap": 0.00029
+  },
+  {
+   "rid": "govreport/train/3dc02bfecc6e3289",
+   "task": "gov_report",
+   "tok06": 20306,
+   "tok8b": 20306,
+   "overlap": 0.00886
+  },
+  {
+   "rid": "govreport/train/4d98aa9bdb6e4568",
+   "task": "gov_report",
+   "tok06": 17573,
+   "tok8b": 17573,
+   "overlap": 0.00075
+  },
+  {
+   "rid": "govreport/train/636a29d17439b179",
+   "task": "gov_report",
+   "tok06": 28278,
+   "tok8b": 28278,
+   "overlap": 0.00088
+  },
+  {
+   "rid": "govreport/validation/9f997695a748b600",
+   "task": "gov_report",
+   "tok06": 16102,
+   "tok8b": 16102,
+   "overlap": 0.0031
+  },
+  {
+   "rid": "govreport/train/8ddbae657fca02a1",
+   "task": "gov_report",
+   "tok06": 17925,
+   "tok8b": 17925,
+   "overlap": 0.00129
+  },
+  {
+   "rid": "govreport/train/97b8e9feae551021",
+   "task": "gov_report",
+   "tok06": 23774,
+   "tok8b": 23774,
+   "overlap": 0.0001
+  },
+  {
+   "rid": "govreport/validation/52d13b9cef2a09e7",
+   "task": "gov_report",
+   "tok06": 17749,
+   "tok8b": 17749,
+   "overlap": 0.02628
+  },
+  {
+   "rid": "govreport/train/4ddf76d4f25b872a",
+   "task": "gov_report",
+   "tok06": 16276,
+   "tok8b": 16276,
+   "overlap": 0.00556
+  },
+  {
+   "rid": "govreport/validation/ddc1268ecb691a58",
+   "task": "gov_report",
+   "tok06": 21227,
+   "tok8b": 21227,
+   "overlap": 0.001
+  },
+  {
+   "rid": "govreport/train/137b76f668965ad8",
+   "task": "gov_report",
+   "tok06": 21338,
+   "tok8b": 21338,
+   "overlap": 0.00794
+  }
+ ],
+ "task_mix_of_candidates": {
+  "gov_report": 2205,
+  "qmsum": 57
+ }
+}

@@ -318,3 +318,16 @@ def test_arkvale_selector():
 def test_bad_selector():
     with pytest.raises(ValueError):
         cl.QuestPages(4, 2, selector="nope")
+
+
+def test_parquet_source_builds_the_longbench_prompt():
+    from collect import sources
+
+    class Tok:
+        def apply_chat_template(self, msg, **kw):
+            return list(msg[0]["content"].encode())
+    p = dict(task="gov_report", rid="govreport/test/x", file="f", row=0, field="report", source_spec="a@b")
+    row = {"context": "Hello report"}
+    got = sources.build_turns(Tok(), "parquet", p, row)
+    assert got == [list(cl.USER["gov_report"].format(context="Hello report").encode())]
+    assert sources.context_hash("parquet", row) == cl.context_hash("longbench", row)
