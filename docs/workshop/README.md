@@ -19,6 +19,15 @@
 | 修复 PR | [#6](https://github.com/Wuhubing/rank-kv-cache/pull/6)：S2 的 β 混淆。事后分析显示，单独加排名在 held-out 上少 213 次 repeat miss，占 0.14% | [#7](https://github.com/Wuhubing/rank-kv-cache/pull/7)：加入全 page 排名对照（`allrank`）和同分配 oracle，修复 F1–F9 |
 
 ### 1.2 尚未完成、投稿前必须补上的
+> **2026-11-25 replication-v2 更新**：下面四项都已在 `replication-v2` 分支完成（RTX 6000 Ada，详见 [`../rerun/`](../rerun/)）。原列表保留在后面作记录。
+>
+> | 项 | 结果 |
+> |---|---|
+> | 1. 全 page 排名对照 | allrank G 0.271 对 z 0.279（dev B=96）：**全局排序**，不是分数大小（[s4/02](../rerun/s4/02_allrank_control.md)） |
+> | 2. 同分配 Bélády | 相对同分配最优，分配 + EMA 补上 35%（0.6B held-out）/ 43%（8B held-out）；同一分配内替换部分仍是 28% / 27%（[s5](../rerun/s5_replication.md)、[s6](../rerun/s6_extensions.md)） |
+> | 3. GPU 重测（修好的 warmup 和显存口径） | batch 1：所有策略约 30.3 ms/token（0.6B），40.6 ms（8B），字节少 10%，延迟持平；显存按阶段报告（[s7](../rerun/s7_systems.md)） |
+> | 4. 一个模型、一种 GPU、batch 1 | 新 GPU 上复现通过；Qwen3-8B 新预注册 held-out 通过（G 0.272）；64K/RULER/SCBench/page/K/采样均为正；实测 batch 1–32，字节节省没有变成吞吐 |
+
 1. **全 page 排名对照（`allrank`）的结果**：代码在 #7，需要 14 个 longctx dev NPZ（在共享 Drive 上）。这个结果决定论文的核心表述是"分数大小有用"还是"全局排序有用"。
 2. **同分配 Bélády**（`validation/alloc_oracle.py`）：之前按层分配的 G 用的是均匀预算下的锚点，要换成相同分配下的 oracle。
 3. **GPU 重测**：#7 修好了 warmup 和显存的测量口径，但 L4 上的数字还没有重新测。

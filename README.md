@@ -7,6 +7,8 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 **Current status (2026-11-25):** the rank study ended negative (preregistered 40-document held-out test: the full rank policy cuts repeat misses by only 0.39% [0.20%, 0.57%] against LRU, S1 not met; S2 is met as preregistered but also changes β, and a post-hoc comparison with β held fixed puts the rank term alone at 0.14%). A follow-up line, a score-EMA replacement policy on long Quest traces, passed its preregistered 21-document held-out test but gives no latency gain on an L4. The Chinese walkthrough below explains it from the start; [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) has the full log, data and how each conclusion was reached.
 
+**Replication-v2 (2026-11-25, branch `replication-v2`):** everything was re-collected and re-evaluated from scratch on an RTX 6000 Ada ([docs/rerun/](docs/rerun/)). The preregistered held-out result replicates (EMA G 0.279 [0.275, 0.282], 21/21; L4: 0.281), and a new preregistered **Qwen3-8B** held-out set confirms it (G 0.272 [0.269, 0.276], 21/21; allocation + EMA 0.273 of the gap at the same allocation). An all-page percentile control shows that the signal is the **global ordering** of the unselected pages' scores, not score magnitude. It also holds at 64K (YaRN), on RULER and on SCBench multi-turn sessions. Measured batching (1–32) confirms that the 8–10 % byte saving does not become throughput on this hardware. Summary: [docs/replication_v2.md](docs/replication_v2.md) (preregistration), [docs/rerun/thesis.md](docs/rerun/thesis.md) (what the evidence supports).
+
 ## 高效替换策略：从问题到结果
 
 下面从头讲一遍：问题是什么，策略怎么来的，最后得到什么结果。详细数据和推导见 [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §9。
@@ -53,7 +55,8 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 | 只看当前一步的分数（KVDrive 式） | 0.244 | 分数本身就有用 |
 | **分数 EMA** | **0.279** | 平滑掉噪声后更好 |
 | 只在 page 被选中时才更新 | EMA 版 −1.596；InfLLM 式 0.028 | 远差于或几乎等于 LRU，说明**必须更新所有驻留 page** |
-| 用 top-K 内排名代替分数（未选中 page 一律记 0） | 0.016 | 几乎没用。但这个变体**同时**去掉了分数大小和未选中 page 之间的排序，所以分不清是哪一样起作用。决定性的对照（对全部可选 page 按分数取百分位排名，`signal="allrank"`）已经实现，dev 结果待跑（`validation/rank_control_dev.py`） |
+| 用 top-K 内排名代替分数（未选中 page 一律记 0） | 0.016 | 几乎没用。但这个变体**同时**去掉了分数大小和未选中 page 之间的排序 |
+| **全部可选 page 的分数百分位排名做 EMA**（`signal="allrank"`，replication-v2 新跑） | **0.271** | 保留排序、去掉大小后仍有 EMA 的 97%：**起作用的是未选中 page 之间的全局排序**，大小只多贡献约 0.008（[s4/02](docs/rerun/s4/02_allrank_control.md)） |
 | 衰减计数（只数被选中几次） | 0.044 | 频率信号很弱 |
 | LFU、ARC、LRU-2 等传统策略 | ≤ 0 | 都不如 LRU |
 | 线性回归预测下一次使用时间（学习式） | 0.300 | 只多一点，代价是每页存约 5 个数 |
@@ -62,7 +65,8 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 - 观察到差距集中在少数几层：有的层 page 选择很稳定，有的层变化剧烈。
 - 用 dev 上每层的 miss 曲线，在总预算 28·B 不变的前提下，给"难"的层多分槽位、"简单"的层少分。
-- 和分数 EMA 几乎线性叠加：0.279 + 0.127 ≈ **0.409**（G 相对的是**每层均匀预算**的 LRU 和 Bélády；槽位在层间移动后，均匀预算的 Bélády 不再是这个分配下的最优，所以这不是"补上差距的比例"。同分配下的 Bélády 需要原始 trace，代码在 `validation/alloc_oracle.py`，结果待跑）。
+- 和分数 EMA 几乎线性叠加：0.279 + 0.127 ≈ **0.409**（G 相对的是**每层均匀预算**的 LRU 和 Bélády；槽位在层间移动后，均匀预算的 Bélády 不再是这个分配下的最优，所以这不是"补上差距的比例"）。
+- replication-v2 补上了同分配锚点（`validation/alloc_oracle.py`）：held-out 上，相对同分配的 Bélády，分配 + EMA 补上 **35%** 的差距（0.6B）和 **43%**（8B）；在同一分配内只看替换部分，EMA 仍补上 28%（0.6B）/ 27%（8B），和均匀预算时一样。也就是说按层分配和替换策略是**相加**的。
 
 ### 8. 结果
 
@@ -78,11 +82,24 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 - miss 数和模拟器一致，PCIe 流量少约 9.3–9.8%（EMA 单独）、13–19%（EMA + 按层分配）。
 - 第一版未融合实现里，EMA 反而慢一点（93.1 对 86.6 ms/token），因为多了很多小 kernel。
 - **把策略写成融合 Triton kernel 后**：EMA 的策略开销每 token 只比 LRU 多 0.084 ms；LRU 62.3、EMA 62.3、分配 + EMA 61.6、Bélády 62.1 ms/token，四者在噪声以内。
-- 也就是说，**EMA 不增加延迟，同时少传约 9.3–9.8% 的数据（加按层分配为 13–19%）**；但 batch 1 下传输只占 GPU 时间约 1%，所以也没变快。每个 page 的传输约 7.3 µs，估算 batch 32 时 EMA 每步约省 2.3 ms（未实测）。
+- 也就是说，**EMA 不增加延迟，同时少传约 9.3–9.8% 的数据（加按层分配为 13–19%）**；但 batch 1 下传输只占 GPU 时间约 1%，所以也没变快。（原先按单 page 7.3 µs 线性外推的"batch 32 每步省 2.3 ms"已被下面的实测取代。）
+
+**replication-v2（RTX 6000 Ada，与上面的 L4 结果并排）**：
+
+| | L4（原结果） | RTX 6000 Ada（replication-v2） |
+|---|---|---|
+| dev 14 篇，B=96：LRU miss / EMA G | 6.03% / 0.279 | 6.04% / 0.279（每篇生成长度不同，汇总几乎不变） |
+| 0.6B held-out 21 篇（预注册，只评估一次） | G 0.281 [0.277, 0.285]，21/21，ΔG(分配) 0.120 | G **0.279** [0.275, 0.282]，21/21，ΔG 0.119 |
+| Qwen3-8B 新 held-out 21 篇（新预注册） | — | G **0.272** [0.269, 0.276]，21/21，ΔG 0.252，同分配内 0.273 |
+| 64K（YaRN）/ RULER / SCBench 多轮（dev，探索性） | — | EMA G 0.284 / 0.255 / 0.285，均 14/14 |
+| batch 1 延迟（融合 kernel，B=96） | LRU 62.3，EMA 62.3 ms/token | LRU 30.3，EMA 30.3 ms/token（8B：40.6 / 40.6） |
+| batch > 1 | 未实现（外推） | 实测 batch 1–32：吞吐近似线性增长；EMA 少传 8% 字节，但吞吐 0.93–0.98× LRU；Bélády 少传 30%，吞吐只 +2–3% |
+
+详见 [docs/rerun/](docs/rerun/)：s3（dev 对比）、s4（全部基线和分析）、s5（复现）、s6（扩展）、s7（系统）。
 
 ### 9. 一句话总结
 
-> 从 rank 失败中发现"未被选中 page 的当前分数 + 全体驻留 page 都要更新"是关键（起作用的是分数大小还是未选中 page 之间的排序，还在等全 page 排名对照的结果），于是用一个每页只存 1 个数的分数滑动平均来做换出决策。它稳定拿到 LRU→最优差距的 28%；加按层分配后，在总槽位相同时 repeat miss 比 LRU 少 16.6%（相对均匀预算锚点的 G 为 0.40，同分配 Bélády 待算），真实系统里 PCIe 流量减少约 9.3–9.8%（EMA 单独）、13–19%（加按层分配），用融合 kernel 实现后开销和 LRU 相同。但在小模型、单卡、batch 1 上，这些节省换不成延迟，只是持平。
+> 从 rank 失败中发现"未被选中 page 的当前分数 + 全体驻留 page 都要更新"是关键（replication-v2 的全 page 排名对照表明，起作用的是未选中 page 之间的全局排序，而不是分数大小），于是用一个每页只存 1 个数的分数滑动平均来做换出决策。它稳定拿到 LRU→最优差距的 28%；加按层分配后，在总槽位相同时 repeat miss 比 LRU 少 16.6%（相对均匀预算锚点的 G 为 0.40，同分配 Bélády 待算），真实系统里 PCIe 流量减少约 9.3–9.8%（EMA 单独）、13–19%（加按层分配），用融合 kernel 实现后开销和 LRU 相同。但在小模型、单卡、batch 1 上，这些节省换不成延迟，只是持平。
 
 **定位**：这个规则和 InfLLM 的衰减分数规则很接近，本质是把它用在 Quest 分数上。贡献在于系统比较、消融分析、按层分配的叠加，以及"什么时候省下的 miss 能变成延迟"的真实测量。
 
