@@ -357,7 +357,8 @@ def main(argv=None):
         peak = torch.cuda.max_memory_allocated()
         npz = args.out / trace_name(p["rid"])
         tmp = npz.with_name(npz.stem + ".tmp.npz")
-        np.savez(tmp, ranked=R, scores=S, rid=np.array(p["rid"]), ctx=np.array(p["ctx"]), **extra)
+        np.savez(tmp, ranked=R, scores=S, rid=np.array(p["rid"]), ctx=np.array(p["ctx"]),
+                 prompt_tokens=np.array(len(prompt)), **extra)
         os.replace(tmp, npz)
         kp.load(npz)  # strict reader: schema checked right after collection
         man = dict(rid=p["rid"], ctx=p["ctx"], task=p["task"], row=int(p["row"]), subset=args.subset,
@@ -365,7 +366,7 @@ def main(argv=None):
                    prompt_sha256=hashlib.sha256(json.dumps(prompt).encode()).hexdigest(),
                    generated=gen, steps=int(R.shape[0]), stop=stop, layers=int(R.shape[1]),
                    page_size=ps, top_k=top_k, max_new=max_new, eos_ids=list(eos_ids),
-                   fields=sorted(["ranked", "scores", "rid", "ctx", *extra]),
+                   fields=sorted(["ranked", "scores", "rid", "ctx", "prompt_tokens", *extra]),
                    started_at=started, finished_at=dt.datetime.now(dt.timezone.utc).isoformat(),
                    capture_seconds=round(wall, 2), peak_mem_bytes=int(peak),
                    trace_sha256=sha256_file(npz), trace_bytes=npz.stat().st_size, **env)
