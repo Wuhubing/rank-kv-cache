@@ -5,7 +5,7 @@ A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2
 We test whether a page's sparse-attention top-K selection rank predicts reuse beyond
 recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, GovReport).
 
-**Current status (2026-11-22):** see [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) for the full log, data and how each conclusion was reached. On eight dev documents, rank does not close the LRU–Bélády gap; result summaries are in [docs/results/](docs/results/).
+**Current status (2026-11-25):** see [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) for the full log, data and how each conclusion was reached. The preregistered held-out evaluation (40 documents, evaluated once; [docs/preregistration.md](docs/preregistration.md)) is negative. At the primary budget B=128, the full rank policy (δ=8, β=2) cuts repeat misses by only 0.39% [0.20%, 0.57%] against LRU, far below the 10% target (S1 not met), while Bélády removes 65%. S2 is met as preregistered (the full policy saves 330 [83, 600] repeat misses against R+F, 0.22%), but R+F uses β=4, so S2 changes β as well as adding rank. A post-hoc, non-preregistered comparison with β held at 2 puts the rank term alone at 213 [96, 341] repeat misses (0.14%). Rank carries a real but tiny signal; a dev-trained logistic model closes 11.9% of the LRU–Bélády gap, mostly from repeated MultiFieldQA answers. Result summaries are in [docs/results/](docs/results/).
 
 ## Team
 
