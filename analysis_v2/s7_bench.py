@@ -116,8 +116,14 @@ def cmd_single(a):
                                      mem_start=r["mem_start"], tokens_equal_resident=r["gen"] == ref_gen,
                                      ranks_equal_resident=bool(np.array_equal(r["ranks"], ref_ranks))))
                     if rep == 0 and name in ("lru", "belady", "score", "ema", "alloc_ema"):
-                        sim = sum(kp.simulate(ref_ranks[:, l], None if mode != "ema" else None, budgets[l],
-                                              mode)["misses"] for l in range(L)) if mode != "ema" else None
+                        if mode != "ema":
+                            sim = sum(kp.simulate(ref_ranks[:, l], None, budgets[l], mode)["misses"] for l in range(L))
+                        elif trace_ok:  # same ranks as the collected trace: replay EMA on its (float16) scores
+                            n = ref_ranks.shape[0]
+                            sim = sum(kp.simulate(z["ranked"][:n, l], z["scores"][:n, l].astype(np.float32), budgets[l],
+                                                  "ema", alpha=al)["misses"] for l in range(L))
+                        else:
+                            sim = None
                         checks.append(dict(doc=rid, B=B, policy=name, measured=m, simulated=sim,
                                            equal=(sim == m) if sim is not None else None, trace_prefix_equal=trace_ok))
                 # breakdown (sync-free path with CUDA events; separate run, events add overhead)
