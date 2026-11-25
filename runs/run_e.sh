@@ -8,7 +8,6 @@ P=".venv/bin/python"
 STOPF=/data/weibing/projects/rank-kv-cache/STOP
 touch out/v3/PAUSE
 trap 'rm -f out/v3/PAUSE' EXIT
-for s in wb-rkv-fu-b-cpu wb-rkv-fu-cd-cpu wb-rkv-fu-more-cpu; do :; done
 # wait until no replay of this task is running (the queues stop between jobs while PAUSE exists)
 while pgrep -u weibing -f "analysis_v3.(run|noise|c4_alloc|instrument|learn|b2_model|b2_stats) " > /dev/null; do sleep 60; done
 pick() {  # free card without other processes, preferring not card 2; empty if none
