@@ -11,38 +11,35 @@
 ### 1.1 现有材料里写明的目标
 | 来源 | 写的是什么 |
 |---|---|
-| README 标题和第一段 | MIT 6.5940 Project 10："Can Selection Rank Improve KV Cache Replacement?"，检验 top-K 选择排名能否在 recency 和 frequency 之外预测 page 复用 |
-| `docs/preregistration.md` | 排名研究的 H1 和 H2，以及成功标准 S1（比 LRU 少 ≥10% repeat miss）和 S2 |
 | `docs/efficient_policy_dev.md`、`splits/heldout_frozen_v1.json` | 第二条线：分数 EMA 能否在长文档上缩小 LRU 与 Bélády 之间的差距（G），并有 3 条预注册判据 |
 | STATUS_REPORT §1 | 提到 proposal 和"蓝图"（A 文献 → B 信号 → C 策略 → D 系统，每阶段有决策关口），但**这两份文件不在仓库里，本机也没找到** |
 
 ### 1.2 建议的 thesis（需要你和团队确认）
 现有结果实际上回答的是一个比原题更大的问题。建议论文的 thesis 定为：
 
-> **在"稀疏注意力 + KV 卸载 + GPU 页缓存"中，决定替换质量的是选择分数随时间的延续性，而不是 top-K 排名。** 具体有三点：
-> 1. 选择排名在控制 recency 和 frequency 后几乎没有增量信息，因为排名靠前的 page 几乎从不离开选择集（预注册的负结果）。
-> 2. 使用所有 page 的分数历史（EMA）能稳定地缩小 LRU 与 Bélády 之间的差距；按层分配预算能进一步减少 miss。
-> 3. 在常见硬件上，这些 miss 和字节的减少不一定变成延迟的减少；我们刻画了什么条件下会变。
+> **在"稀疏注意力 + KV 卸载 + GPU 页缓存"中，选择分数随时间的延续性决定了替换质量。** 具体有两点：
+> 1. 使用所有 page 的分数历史（EMA）能稳定地缩小 LRU 与 Bélády 之间的差距；按层分配预算能进一步减少 miss。
+> 2. 在常见硬件上，这些 miss 和字节的减少不一定变成延迟的减少；我们刻画了什么条件下会变。
 
 ### 1.3 现有信息够不够
 **不够**，以下几项必须先补清楚，否则论文的主张会站不住或被审稿人轻易驳回：
 
 | 缺口 | 为什么重要 | 怎么补 |
 |---|---|---|
-| **EMA 和已有方法的差距很小** | 现有 dev 结果中，EMA 的 G=0.279，"只看当前分数"（ArkVale 式）是 0.244，InfLLM 式衰减和是 0.269，线性回归是 0.300。"我们提出了更好的策略"这个说法很弱 | thesis 以第 1.2 节的"刻画"为主，不以"新策略最好"为主；用全 page 排名对照、信号消融和预算扫描说明分数历史为什么有效 |
-| 全 page 排名对照还没结果 | 决定第 1.2 节第 2 点该说"分数大小"还是"全局排序" | 执行步骤 S4 |
+| **EMA 和已有方法的差距很小** | 现有 dev 结果中，EMA 的 G=0.279，"只看当前分数"（ArkVale 式）是 0.244，InfLLM 式衰减和是 0.269，线性回归是 0.300。"我们提出了更好的策略"这个说法很弱 | thesis 以第 1.2 节的"刻画"为主，不以"新策略最好"为主；用全 page 百分位对照、信号消融和预算扫描说明分数历史为什么有效 |
+| 全 page 百分位对照还没结果 | 决定第 1.2 节第 1 点该说"分数大小"还是"全局排序" | 执行步骤 S4 |
 | 按层分配缺少相同分配的 oracle | 不然不能说"补上了多少差距" | 执行步骤 S4 |
 | 只有 1 个模型、1 种 GPU、batch 1 | workshop 审稿人会质疑泛化 | 执行步骤 S3、S5、S6 |
-| proposal 和蓝图原文不在仓库 | 无法逐条核对最初承诺的目标和成功标准 | 请把 proposal 放进 `docs/`；没有的话，以 `preregistration.md` 为准 |
+| proposal 和蓝图原文不在仓库 | 无法逐条核对最初承诺的目标和成功标准 | 请把 proposal 放进 `docs/`；没有的话，以 `splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
 | 投稿目标和截止时间未定 | 影响篇幅、要不要做系统部分 | 团队决定；ICBINB 2027 届的消息在 2026-12-07 后才有 |
 | 团队对 thesis 的共识 | 两条研究线由不同的人推进过 | 团队过一遍第 1.2 节 |
 
 ---
 
 ## 2. 不能违反的规则
-1. **冻结的东西不改**：`splits/preregistration.json`、`splits/heldout_frozen_v1.json`、两份 split 文件、已提交的结果文件都保持原样。新结果只写进 `results_wulab2/`。
+1. **冻结的东西不改**：`splits/heldout_frozen_v1.json`、`splits/longctx_v1.json`、已提交的结果文件都保持原样（其他已冻结文件也一样不动）。新结果只写进 `results_wulab2/`。
 2. **原有 held-out 只再评估一次**：用冻结参数在新 GPU 上重新采集，按事先提交的复现预注册评估一次。不在新的 held-out 上调任何参数。
-3. **探索只在 dev 上做**：全 page 排名对照、预算扫描、各种消融都只用 dev。
+3. **探索只在 dev 上做**：全 page 百分位对照、预算扫描、各种消融都只用 dev。
 4. **新模型或新任务的确认性结论要用新的 held-out**：另抽文档，先写预注册再采集。
 5. **一个分支只让一台机器写**：`rerun/wulab2` 只从 mini 提交和推送（wulab2 上没有 GitHub 凭据）。wulab2 只负责跑，代码通过 `git pull` 从 GitHub 同步过去（仓库是公开的），小结果文件用 `rsync` 拉回 mini 再提交。
 6. **不备份到 Drive**：原始 trace 只放在 `/data/weibing`；仓库里只提交小的结果文件和带 sha256 的 manifest。
@@ -64,10 +61,10 @@
 | # | 决定 | 内容 |
 |---|---|---|
 | D1 | 原 held-out | 冻结参数做跨硬件复现，评估一次（S5） |
-| D2 | 代码基线 | 不等 PR 合并。从 `origin/review-fixes/efficient-policy`（PR #7，已包含 #5）开 `rerun/wulab2`，再合并 `origin/review-fixes/stage1-2`（PR #6）。冲突如果只在文档里，以 efficient-policy 一侧为准，但保留 #6 新增的 `posthoc_rank_increment.py`、它的测试和结果目录。不合并、不关闭任何 PR |
+| D2 | 代码基线 | 不等 PR 合并。从 `origin/review-fixes/efficient-policy`（PR #7，已包含 #5）开 `rerun/wulab2`。不合并、不关闭任何 PR |
 | D3 | 第二个模型 | Qwen3-8B |
-| D4 | thesis | 按第 1.2 节执行；S4 第 2 项出结果后，按结果把第 1.2 节第 2 点改成"分数大小"或"全局排序"，并在 `docs/rerun/thesis.md` 写明依据 |
-| D5 | 第 1.3 节的缺口 | proposal 原文和投稿目标暂时缺失，不阻塞执行；以 `docs/preregistration.md` 和两份冻结配置为准 |
+| D4 | thesis | 按第 1.2 节执行；S4 第 2 项出结果后，按结果把第 1.2 节第 1 点改成"分数大小"或"全局排序"，并在 `docs/rerun/thesis.md` 写明依据 |
+| D5 | 第 1.3 节的缺口 | proposal 原文和投稿目标暂时缺失，不阻塞执行；以 `splits/heldout_frozen_v1.json` 和 `docs/efficient_policy_dev.md` 为准 |
 
 ---
 
@@ -92,7 +89,7 @@
 | 预测集重叠 | EMA 预测的前 K 个 page 与下一步真实 top-K 的重叠，集合大小固定为 K | PRR（它的 98% 允许集合大于 K，要说明不可直接比） |
 | 相邻步选择重叠 | 第 t 步和第 t+1 步 top-K 的交集比例 | PRR、Scissorhands、AVSG |
 | top-K 流失率 | 1 − 相邻步 top-K 的 Jaccard | InertiaKV |
-| 增量 AUC 或分层效应 | 控制 recency 和 frequency 后，信号对 h 步内复用的预测力 | 我们的 H1（文献中没有人做过） |
+| 增量 AUC 或分层效应 | 控制 recency 和 frequency 后，分数信号对 h 步内复用的预测力 | 文献中没有人做过 |
 | Quest 分数与真实注意力的 Spearman ρ | 每层每步 | InertiaKV 的论证需要这一项 |
 
 ### 5.3 系统指标（每生成一个 token）
@@ -127,10 +124,9 @@
 | 当前分数（ArkVale 式） | 驱逐本步分数最低的驻留 page | 0.244 | ArkVale；Quest 上界正好等于 ArkVale 的 cuboid-max digest |
 | InfLLM 式衰减和 | 所有驻留 page，softmax(分数) 代理注意力质量，d 由 LODO 选 | 0.269（d=0.1 时 0.264） | InfLLM App. A |
 | 衰减的选中次数 | 不用分数，d=0.8 | 0.044 | MoE 缓存类做法 |
-| 排名策略 | 第一条线的 τ + δ·[rank≤K/4] + β·min(f,4) | 0.027（#5 修复后 1.26% 降幅） | 我们的 proposal |
 | 线性 next-use 回归（DAgger） | 学习的上限参考 | 0.300 | 我们自己的 |
 | 分数 EMA（z） | e ← αe + (1−α)z | 0.279 | 我们的主策略 |
-| 全 page 排名 EMA（allrank） | 每步所有 page 的百分位排名做 EMA | 待跑 | PR #7 |
+| 全 page 百分位 EMA（allrank） | 每步所有 page 的百分位排名做 EMA | 待跑 | PR #7 |
 | 按层分配 + LRU / + EMA | 每层不同的 B，总槽位相同 | 降幅 5.3% / ~16% | 我们的 |
 | Bélády | 最远的下一次使用 | 1 | 上限 |
 
@@ -169,41 +165,39 @@
 - 检查：全部单元测试通过（PR #7 上是 155 个通过、1 个跳过）；选择器自检（与暴力计算比对）通过。
 
 ### S2：采集脚本
-1. 把 `notebooks/first_trace.ipynb`（短文档，trace v1）改成 `collect/short.py`，把 `notebooks/long_trace_capture.py`（长文档，schema v2）改成 `collect/long.py`。选择器、prompt 模板、停止规则、精度逻辑原样搬，不改算法。
+1. 把 `notebooks/long_trace_capture.py`（长文档，schema v2）改成 `collect/long.py`。选择器、prompt 模板、停止规则、精度逻辑原样搬，不改算法。
 2. 参数：`--split`、`--subset dev|heldout`、`--docs`（只跑指定文档）、`--out`、`--dense-reference`。
 3. 新增可选字段（默认关闭，S6 打开）：`--record-attn-mass`（每个选中 page 的 softmax 后注意力质量，按 head 求和）和 `--record-true-attn-rank`（每层每步分数与真实注意力的 Spearman ρ）。打开这些字段不能改变选中的 page，用测试保证。
 4. manifest 记录：GPU 型号和 UUID、驱动、torch、transformers、模型和数据的 revision、prompt token 的哈希、生成的 token、trace 的 sha256。
 5. 按文档断点续跑；先写临时文件再改名；进度写进状态文件。
 6. 采集后立刻用 #7 的严格读取器校验格式。
-- 检查：短、长各采 1 篇；同一篇在同一张卡上采两次，trace 逐字节一致；整条链路"采集 → 校验 → 回放 → 出表"跑通；记录单篇耗时。
+- 检查：采 1 篇；同一篇在同一张卡上采两次，trace 逐字节一致；整条链路"采集 → 校验 → 回放 → 出表"跑通；记录单篇耗时。
 
 ### S3：重采 dev
-1. 排名研究：20 篇 dev，128 token，带 dense 参考生成。
-2. EMA 研究：14 篇 dev，最多 1024 步，thinking 开启。
-3. 与原 L4 结果对比：LRU/Bélády 差距、各策略的 G、H1 效应，是否落在原来的 CI 附近。如果能拿到 L4 原始 trace，再比较逐层逐步的选择一致率，以及翻转的 page 是否集中在 top-K 边界。
+1. 14 篇 dev（`splits/longctx_v1.json`），最多 1024 步，thinking 开启。
+2. 与原 L4 结果对比：LRU/Bélády 差距、各策略的 G，是否落在原来的 CI 附近。如果能拿到 L4 原始 trace，再比较逐层逐步的选择一致率，以及翻转的 page 是否集中在 top-K 边界。
 - 输出：`results_wulab2/dev/`，`docs/rerun/s3_dev_vs_l4.md`。
 - 检查：所有文档完整、校验通过；对比小结写好。如果和 L4 差异很大，先停下分析原因，再往下走。
 
 ### S4：dev 上的全部基线和分析（CPU 回放）
 用 S3 的新 trace，48 核并行。
 1. 第 6.1 节全部已实现基线重跑，加上第 6.2 节全部新基线（需要 `attn_mass` 的 InfLLM 两个版本先用 softmax 代理，S6 再用真实值补）。
-2. 全 page 排名对照：z、allrank、只看选中的 rank，α 网格和 LODO 选参相同。
+2. 全 page 百分位对照：z 和 allrank，α 网格和 LODO 选参相同。
 3. 同分配 Bélády 和同分配 LRU。
 4. 预算扫描 B/K ∈ {1, 1.25, 1.5, 2, 3, 4, 6, 8}，所有策略，加等 miss 容量。
-5. α 从 0 到 1 的连续曲线，信号 ∈ {raw, z, allrank, last rank}。
+5. α 从 0 到 1 的连续曲线，信号 ∈ {raw, z, allrank}。
 6. CO2 式析因、lazy 刷新、Holt、幂律衰减。
 7. 第 5.2 节的预测质量指标。
 8. 第 5.4 节的统计和噪声注入。
-9. 排名研究：重跑 H1 三种样本、gap 分析、S2 拆分后的对照（`posthoc_rank_increment.py`）。
 - 输出：`results_wulab2/dev/<实验名>/`，每项一页结论放在 `docs/rerun/s4/`。
 - 检查：所有回放的 LRU 和 Bélády 计数与独立实现一致（`validation/audit.py`）；第 2 项的结论写进 thesis（"分数大小"还是"全局排序"）。
 
 ### S5：跨硬件复现（先提交预注册，再采 held-out）
 1. 写 `docs/replication_wulab2.md` 并**提交、推送后**才能进行下一步。内容：
    - 所有参数原样沿用两份冻结配置，不允许用 S3–S4 的结果改动。
-   - 判定标准：排名研究的 S1、S2 是否复现；EMA 的 G 及其 CI、21 篇中胜过 LRU 的篇数、按层分配后的降幅（同时报告同分配 oracle 的版本）。
+   - 判定标准：EMA 的 G 及其 CI、21 篇中胜过 LRU 的篇数、按层分配后的降幅（同时报告同分配 oracle 的版本）。
    - 评估命令、偏离的定义、复现失败时报告什么。
-2. 采 40 篇短 held-out（带 dense 参考）和 21 篇长 held-out。
+2. 采 21 篇长 held-out。
 3. 按预注册的命令各跑一次。
 - 输出：`results_wulab2/heldout/`，`docs/rerun/s5_replication.md`（与 L4 结果并排对比，列出全部偏离）。
 - 检查：预注册的提交时间早于第一篇 held-out 的采集时间（看 git 记录和 manifest 时间戳）。
@@ -268,7 +262,7 @@
 
 ### 10.2 必须遵守
 1. 第 2 节的规则全部有效。特别是：不改冻结文件；held-out 只在 S5 预注册提交之后采集、只评估一次；探索只用 dev。
-2. 不合并、不关闭任何 PR；不改 `main`、`stage1-2`、`efficient-policy` 等已有分支。
+2. 不合并、不关闭任何 PR；不改 `main`、`efficient-policy` 等已有分支。
 3. 每完成一个有意义的单元就提交并推送，提交信息写清楚做了什么。
 4. wulab2 是共享服务器：只用一张卡；不 kill 别人的进程；不往根分区写大文件。
 5. 等待长任务时不要反复调用模型：用 tmux 跑，进度写进文件，定时用普通命令检查。
