@@ -58,3 +58,41 @@ def test_malformed_npz_is_rejected(tmp_path, bad):
     np.savez(path, **bad)
     with pytest.raises(ValueError):
         kp.load(path)
+
+
+# F9: allocators reject infeasible inputs and handle all-zero weights.
+CURVES = {0: {8: 10, 16: 1}, 1: {8: 10, 16: 1}}
+
+
+@pytest.mark.parametrize("fn", [kp.allocate, kp.allocate_dp])
+def test_allocator_rejects_infeasible_budget(fn):
+    with pytest.raises(ValueError, match="minimum feasible"):
+        fn(CURVES, 2, 8, [8, 16])
+
+
+def test_proportional_rejects_infeasible_budget():
+    with pytest.raises(ValueError, match="minimum feasible"):
+        kp.allocate_proportional({0: 1, 1: 1}, 2, 8, [8, 16])
+
+
+@pytest.mark.parametrize("grid", [[16, 8], [8, 8], [0, 8], [8.5, 16], []])
+def test_allocator_rejects_bad_grid(grid):
+    with pytest.raises(ValueError):
+        kp.allocate(CURVES, 2, 32, grid)
+
+
+def test_allocator_rejects_incomplete_curves():
+    with pytest.raises(ValueError, match="curves"):
+        kp.allocate({0: {8: 10, 16: 1}}, 2, 32, [8, 16])
+
+
+@pytest.mark.parametrize("weights", [{0: 0, 1: 0}, {0: -1, 1: -3}])
+def test_zero_weights_produce_feasible_allocation(weights):
+    allocation = kp.allocate_proportional(weights, 2, 24, [8, 12, 16])
+    assert allocation == {0: 8, 1: 8}
+
+
+@pytest.mark.parametrize("fn", [kp.allocate, kp.allocate_dp])
+def test_feasible_allocation_stays_within_total(fn):
+    a = fn(CURVES, 2, 24, [8, 16])
+    assert sum(a.values()) <= 24 and set(a.values()) <= {8, 16}

@@ -571,10 +571,28 @@ def bootstrap(per_doc_lru, per_doc_pol, per_doc_opt, reps=2000, seed=0):
     return np.nanpercentile(gs, [2.5, 97.5])
 
 
+def check_allocation_args(L, total, grid, curves=None):
+    """Shared input contract of the allocators: L >= 1 layers, a strictly increasing grid of
+    positive integer budgets, a total that admits the minimum plan (every layer at grid[0]),
+    and, if given, a finite miss count curves[l][g] for every layer and grid point."""
+    grid = list(grid)
+    if L < 1:
+        raise ValueError(f"need at least one layer, got L={L}")
+    if not grid or any(int(g) != g or g <= 0 for g in grid) or any(b <= a for a, b in zip(grid, grid[1:])):
+        raise ValueError(f"grid must be strictly increasing positive integers, got {grid}")
+    if total < L * grid[0]:
+        raise ValueError(f"total {total} is below the minimum feasible allocation {L} x {grid[0]}")
+    if curves is not None:
+        for l in range(L):
+            if l not in curves or any(g not in curves[l] or not np.isfinite(curves[l][g]) for g in grid):
+                raise ValueError(f"curves lacks a finite value for layer {l} at some grid budget")
+
+
 def allocate(curves, L, total, grid):
     """Greedy per-layer budgets. curves[l][B] = misses on training docs; each layer starts at
     grid[0]; repeatedly give the next grid step to the layer with the largest misses saved per
     slot, while the total stays within L*B budget."""
+    check_allocation_args(L, total, grid, curves)
     alloc = {l: 0 for l in range(L)}
     used = L * grid[0]
     while True:
@@ -596,6 +614,7 @@ def allocate(curves, L, total, grid):
 def allocate_dp(curves, L, total, grid):
     """Optimal multiple-choice knapsack: pick one grid budget per layer, minimising total misses
     with sum(budgets) <= total (KVDrive-style offline allocation, solved exactly)."""
+    check_allocation_args(L, total, grid, curves)
     unit = math.gcd(*grid)
     cap = total // unit
     INF = float("inf")
@@ -625,10 +644,14 @@ def allocate_dp(curves, L, total, grid):
 
 def allocate_proportional(weights, L, total, grid):
     """Budgets proportional to a per-layer weight (e.g. the LRU-Belady gap), on the grid,
-    each layer at least grid[0], never exceeding the total."""
+    each layer at least grid[0], never exceeding the total. All-zero (or all-negative) weights
+    give the minimum plan, every layer at grid[0]."""
+    check_allocation_args(L, total, grid)
     w = np.maximum(np.array([weights[l] for l in range(L)], float), 0)
+    if not np.isfinite(w).all():
+        raise ValueError("allocation weights must be finite")
     spare = total - L * grid[0]
-    raw = grid[0] + (spare * w / w.sum() if w.sum() > 0 else 0)
+    raw = grid[0] + spare * w / w.sum() if w.sum() > 0 else np.full(L, float(grid[0]))
     out = {l: max(g for g in grid if g <= max(grid[0], raw[l])) for l in range(L)}
     while sum(out.values()) > total:
         l = max(out, key=lambda k: out[k])
