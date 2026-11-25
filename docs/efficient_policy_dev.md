@@ -16,7 +16,7 @@ leave-one-document-out (LODO) on the 14 dev documents unless the text says "fixe
 - G = (LRU misses − policy misses) / (LRU misses − Bélády misses), pooled over all layers and documents.
   CIs come from a 2000-replicate document-clustered bootstrap. "Repeat-miss drop" is the relative
   reduction in misses on pages that had been selected before.
-- Code: `kvpolicy.py` (simulator and policies; 63 tests in the repo), `efficient_dev.py` (grid, LODO, allocation,
+- Code: `kvpolicy.py` (simulator and policies; `python3 -m pytest -q` runs 154 tests), `efficient_dev.py` (grid, LODO, allocation,
   learned models, gap analysis), `checks.py` (robustness, ablations). Raw outputs are backed up to
   Google Drive `rank-kv-cache/results_efficient_dev/` (misses per document × layer × config × budget).
 
