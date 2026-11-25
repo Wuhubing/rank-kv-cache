@@ -6,6 +6,7 @@ Adds misses_ext.csv (ablation configs) and writes checks_*.csv plus checks_repor
 """
 import argparse
 import csv
+import json
 from collections import defaultdict
 from multiprocessing import Pool
 from pathlib import Path
@@ -70,11 +71,13 @@ def run_doc(args):
 def doc_meta(paths):
     meta = {}
     for p in paths:
-        z = np.load(p)
-        rid = str(z["rid"])
-        meta[rid] = dict(task=rid.split("/")[0],
-                         band="24-32K" if int(z["prompt_tokens"]) >= 24000 else "16-24K",
-                         steps=int(z["ranked"].shape[0]))
+        with np.load(p) as z:
+            rid, steps = str(z["rid"]), int(z["ranked"].shape[0])
+            if "prompt_tokens" in z.files:  # Colab captures store it in the npz
+                tokens = int(z["prompt_tokens"])
+            else:  # local/capture.py keeps metadata in the sidecar manifest
+                tokens = int(json.loads(Path(p).with_suffix(".json").read_text())["prompt_tokens"])
+        meta[rid] = dict(task=rid.split("/")[0], band="24-32K" if tokens >= 24000 else "16-24K", steps=steps)
     return meta
 
 
