@@ -9,7 +9,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 ## Team
 
-Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Jimmy Yu
+Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Xihang Yu
 
 ## Collecting traces
 

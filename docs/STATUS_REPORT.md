@@ -398,7 +398,7 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 2. **layer-level GPU benchmark 是否还做**。完整策略每 token 只省 0.01 MiB 的 H2D（约 0.2%），benchmark 预期测不出可见差异，建议降为可选或不做。
 3. **是否把"选择对 GPU 型号敏感"写进报告**，作为附带发现。
 4. **是否在 trace 中记录未选中 page 的分数**，以便加入 ArkVale 式 baseline。这需要新采集，而 held-out 已经用过一次，只能在 dev 上做探索性分析。
-5. **成员名单**：proposal 写 Xihang Yu，README 写 Jimmy Yu。
+5. ~~**成员名单**~~：已确定为 Xihang Yu（与 proposal 一致），README 已更新。
 
 ---
 
