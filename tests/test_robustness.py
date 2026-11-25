@@ -255,3 +255,97 @@ def test_freeze_rejects_heldout_trace_in_dev_folder(traces, tmp_path):
     args = SimpleNamespace(traces=traces, out=tmp_path / "frozen.json", procs=1)
     with pytest.raises(ValueError, match="heldout document"):
         heldout.freeze(args)
+
+
+# F3: checks.py resumes per (doc, config, B) unit and rejects incomplete tables.
+import sys
+
+import checks
+
+HEADER = "doc,layer,config,B,accesses,misses,compulsory\n"
+
+
+class StopAfterScheduling(Exception):
+    pass
+
+
+def _run_checks(tmp_path, monkeypatch, base, ext, docs=("a", "b"), stop_at_meta=True):
+    traces, result = tmp_path / "traces", tmp_path / "result"
+    traces.mkdir(exist_ok=True)
+    result.mkdir(exist_ok=True)
+    for doc in docs:
+        (traces / f"{doc}.npz").touch()
+    (result / "misses.csv").write_text(HEADER + base)
+    if ext is not None:
+        (result / "misses_ext.csv").write_text(HEADER + ext)
+    submitted = []
+
+    class Pool:
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def imap_unordered(self, fn, jobs):
+            submitted.extend(jobs)
+            return iter([])
+
+    def meta(paths):
+        if stop_at_meta:
+            raise StopAfterScheduling
+        return {checks.doc_of(p): {} for p in paths}
+
+    monkeypatch.setattr(checks, "Pool", Pool)
+    monkeypatch.setattr(checks, "EXTRA", {"ema:0.4": ("ema", {"alpha": 0.4})})
+    monkeypatch.setattr(checks, "doc_meta", meta)
+    monkeypatch.setattr(sys, "argv", ["checks", str(traces), "--res", str(result), "--budgets", "96"])
+    return submitted, result
+
+
+def test_partial_check_resume_schedules_missing_document(tmp_path, monkeypatch):
+    base = "a,0,lru,96,100,20,10\nb,0,lru,96,100,20,10\n"
+    submitted, _ = _run_checks(tmp_path, monkeypatch, base, "a,0,ema:0.4,96,100,18,10\n")
+    with pytest.raises(StopAfterScheduling):
+        checks.main()
+    assert [(Path(p).stem, b) for p, _, b in submitted] == [("b", [96])]
+
+
+def test_resume_reruns_unit_with_missing_layer_and_prunes_it(tmp_path, monkeypatch):
+    base = "".join(f"{d},{l},lru,96,100,20,10\n" for d in "ab" for l in (0, 1))
+    ext = "a,0,ema:0.4,96,100,18,10\na,1,ema:0.4,96,100,18,10\nb,0,ema:0.4,96,100,18,10\n"
+    submitted, result = _run_checks(tmp_path, monkeypatch, base, ext)
+    with pytest.raises(StopAfterScheduling):
+        checks.main()
+    assert [(Path(p).stem, b) for p, _, b in submitted] == [("b", [96])]
+    kept = (result / "misses_ext.csv").read_text().splitlines()[1:]
+    assert sorted(kept) == ["a,0,ema:0.4,96,100,18,10", "a,1,ema:0.4,96,100,18,10"]
+
+
+def test_incomplete_aggregate_table_is_rejected(tmp_path, monkeypatch):
+    base = "a,0,lru,96,100,20,10\nb,0,lru,96,100,20,10\nb,0,belady,96,100,15,10\n"
+    _, _ = _run_checks(tmp_path, monkeypatch, base, "a,0,ema:0.4,96,100,18,10\nb,0,ema:0.4,96,100,18,10\n",
+                       stop_at_meta=False)
+    monkeypatch.setattr(sys, "argv", sys.argv + ["--skip-run"])
+    with pytest.raises(ValueError, match="incomplete table"):
+        checks.main()
+
+
+def test_conflicting_duplicate_rows_are_rejected(tmp_path):
+    path = tmp_path / "m.csv"
+    path.write_text(HEADER + "a,0,lru,96,100,20,10\na,0,lru,96,100,21,10\n")
+    with pytest.raises(ValueError, match="conflicting"):
+        checks.read_table(path)
+
+
+def test_committed_dev_tables_are_complete():
+    res = ROOT / "docs/results/longctx_dev"
+    base, ext = checks.read_table(res / "misses.csv"), checks.read_table(res / "misses_ext.csv")
+    L = checks.layer_count(base, "misses.csv")
+    docs = sorted({k[0] for k in base})
+    assert (L, len(docs)) == (28, 14)
+    checks.check_complete(base, docs, L, "misses.csv")
+    checks.check_complete(ext, docs, L, "misses_ext.csv")

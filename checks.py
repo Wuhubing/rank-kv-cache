@@ -55,9 +55,87 @@ FIXED = ["lru", "fifo", "lfu", "lru2", "arc", "score", "belady"]
 SINGLE = ["lru_hit_first", "lru_id"] + [c for c in EXTRA if c.startswith(("dsum_", "dcount:"))]
 
 
+HEADER = ["doc", "layer", "config", "B", "accesses", "misses", "compulsory"]
+
+
+def doc_of(path):
+    """Trace files are named rid.replace("/", "__") + ".npz" (heldout.trace_name)."""
+    return Path(path).stem.replace("__", "/")
+
+
+def read_table(path):
+    """{(doc, config, B, layer): (accesses, misses, compulsory)} from a misses table. Exact
+    duplicate rows (a unit rewritten after an interrupted append) collapse; conflicting
+    duplicates raise ValueError."""
+    out = {}
+    with open(path, newline="") as f:
+        for r in csv.DictReader(f):
+            try:
+                key = (r["doc"], r["config"], int(r["B"]), int(r["layer"]))
+                v = (int(r["accesses"]), int(r["misses"]), int(r["compulsory"]))
+            except (KeyError, TypeError, ValueError):
+                raise ValueError(f"{path}: malformed row {r}") from None
+            if out.setdefault(key, v) != v:
+                raise ValueError(f"{path}: conflicting rows for {key}")
+    return out
+
+
+def layer_count(table, path):
+    layers = {k[3] for k in table}
+    if not layers or layers != set(range(max(layers) + 1)):
+        raise ValueError(f"{path}: layers {sorted(layers)} are not 0..L-1")
+    return max(layers) + 1
+
+
+def complete_units(table, L):
+    """(doc, config, B) units that have exactly the layers 0..L-1."""
+    units = defaultdict(set)
+    for doc, c, B, l in table:
+        units[doc, c, B].add(l)
+    return {u for u, ls in units.items() if ls == set(range(L))}
+
+
+def check_complete(table, docs, L, path):
+    """Every (config, B) group in the table must cover every doc at every layer exactly once;
+    otherwise a missing count would enter the sums below as zero."""
+    units = complete_units(table, L)
+    groups = defaultdict(set)
+    for doc, c, B, _ in table:
+        groups[c, B].add(doc)
+    bad = []
+    for (c, B), ds in sorted(groups.items()):
+        missing = [d for d in docs if (d, c, B) not in units]
+        extra = sorted(ds - set(docs))
+        if missing or extra:
+            bad.append(f"{c} B={B}: missing/incomplete {missing[:3]}{'...' if len(missing) > 3 else ''}"
+                       f"{' unknown ' + str(extra[:3]) if extra else ''}")
+    if bad:
+        raise ValueError(f"{path}: incomplete table ({len(bad)} config/budget groups):\n  " + "\n  ".join(bad[:20]))
+
+
+def prune_incomplete(path, L):
+    """Keep only complete units in a resumable table (atomic rewrite); returns the complete set."""
+    table = read_table(path)
+    units = complete_units(table, L)
+    keep = sorted(k for k in table if k[:3] in units)
+    with open(path, newline="") as f:
+        nrows = sum(1 for _ in f) - 1
+    if len(keep) != nrows:
+        tmp = path.with_name(path.name + ".tmp")
+        with open(tmp, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(HEADER)
+            w.writerows((d, l, c, B) + table[d, c, B, l] for d, c, B, l in keep)
+        tmp.replace(path)
+        print(f"{path}: dropped {nrows - len(keep)} rows of incomplete or duplicated units", flush=True)
+    return units
+
+
 def run_doc(args):
     path, config, budgets = args
     R, S, rid = kp.load(path)
+    if rid != doc_of(path):
+        raise ValueError(f"{path}: rid {rid} does not match the file name")
     name, kw = EXTRA[config]
     rows = []
     for B in budgets:
@@ -88,36 +166,43 @@ def main():
     args = ap.parse_args()
     paths = sorted(args.traces.glob("*.npz"))
     ext = args.res / "misses_ext.csv"
+    base = read_table(args.res / "misses.csv")
+    nlayers = layer_count(base, args.res / "misses.csv")
     if not args.skip_run:
-        have = set()
-        if ext.exists():
-            with open(ext) as f:
-                have = {(r["config"], int(r["B"])) for r in csv.DictReader(f)}
-        todo = [(str(p), c, [B for B in args.budgets if (c, B) not in have]) for p in paths for c in EXTRA]
+        # Resume per (doc, config, B) unit with all layers; drop partially written units first.
+        have = prune_incomplete(ext, nlayers) if ext.exists() else set()
+        todo = [(str(p), c, [B for B in args.budgets if (doc_of(p), c, B) not in have])
+                for p in paths for c in EXTRA]
         todo = [t for t in todo if t[2]]
         new = not ext.exists()
         with Pool(args.procs) as pool, open(ext, "a", newline="") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["doc", "layer", "config", "B", "accesses", "misses", "compulsory"])
+                w.writerow(HEADER)
             for part in pool.imap_unordered(run_doc, todo):
-                w.writerows(part)
+                w.writerows(part)  # one complete (doc, config) unit per write
                 f.flush()
 
     # Load everything into M[config][B][doc] = (acc, miss, comp) summed over layers, plus per layer.
+    tables = {"misses.csv": base, "misses_ext.csv": read_table(ext)}
     M = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0, 0, 0])))
     ML = defaultdict(lambda: defaultdict(dict))
-    for fn in ("misses.csv", "misses_ext.csv"):
-        with open(args.res / fn) as f:
-            for r in csv.DictReader(f):
-                c, B, d, l = r["config"], int(r["B"]), r["doc"], int(r["layer"])
-                v = (int(r["accesses"]), int(r["misses"]), int(r["compulsory"]))
-                cell = M[c][B][d]
-                for i in range(3):
-                    cell[i] += v[i]
-                ML[c][B][d, l] = v[1]
+    seen = set()
+    for fn, table in tables.items():
+        for (d, c, B, l), v in table.items():
+            if (d, c, B, l) in seen:
+                raise ValueError(f"{fn}: row {(d, c, B, l)} also appears in another table")
+            seen.add((d, c, B, l))
+            cell = M[c][B][d]
+            for i in range(3):
+                cell[i] += v[i]
+            ML[c][B][d, l] = v[1]
     meta = doc_meta(paths)
     docs = sorted(meta)
+    if docs != sorted(doc_of(p) for p in paths):
+        raise ValueError("trace rids do not match their file names")
+    for fn, table in tables.items():
+        check_complete(table, docs, nlayers, args.res / fn)
     L = 1 + max(l for _, l in ML["lru"][96])
     budgets = sorted(set(args.budgets) | {72, 80})
     rng = np.random.default_rng(0)
