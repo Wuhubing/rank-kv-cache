@@ -1,0 +1,44 @@
+..................................F...........................F..        [100%]
+================================== FAILURES ===================================
+_______________ PreregTests.test_preregistration_matches_split ________________
+
+self = <test_prereg.PreregTests testMethod=test_preregistration_matches_split>
+
+    def test_preregistration_matches_split(self):
+        path = ROOT / "splits/preregistration.json"
+        if not path.exists():
+            self.skipTest("no preregistration yet")
+        prereg = json.loads(path.read_text())
+>       self.assertEqual(prereg["split_sha256"],
+                         sha256((ROOT / "splits/longbench_v1.json").read_bytes()).hexdigest())
+E       AssertionError: 'b8252589bb44958abc74cf1c4d606922f70cf259d97d94d843c3e5d45d97d99f' != 'b25ad0520b15aeb7be1e3ed251ec1d29dd5fb6756d6d944729cd98430d2b00ff'
+E       - b8252589bb44958abc74cf1c4d606922f70cf259d97d94d843c3e5d45d97d99f
+E       + b25ad0520b15aeb7be1e3ed251ec1d29dd5fb6756d6d944729cd98430d2b00ff
+
+tests\test_prereg.py:63: AssertionError
+________________ SplitTests.test_notebook_config_matches_split ________________
+
+self = <test_split.SplitTests testMethod=test_notebook_config_matches_split>
+
+    def test_notebook_config_matches_split(self):
+        notebook = json.loads((ROOT / "notebooks/first_trace.ipynb").read_text())
+        cell, = [c for c in notebook["cells"] if c["id"] == "config"]
+        namespace = {}
+        exec("".join(cell["source"]), namespace)
+        digest = sha256((ROOT / "splits/longbench_v1.json").read_bytes()).hexdigest()
+>       self.assertEqual(namespace["SPLIT_SHA256"], digest)
+E       AssertionError: 'b8252589bb44958abc74cf1c4d606922f70cf259d97d94d843c3e5d45d97d99f' != 'b25ad0520b15aeb7be1e3ed251ec1d29dd5fb6756d6d944729cd98430d2b00ff'
+E       - b8252589bb44958abc74cf1c4d606922f70cf259d97d94d843c3e5d45d97d99f
+E       + b25ad0520b15aeb7be1e3ed251ec1d29dd5fb6756d6d944729cd98430d2b00ff
+
+tests\test_split.py:51: AssertionError
+============================== warnings summary ===============================
+tests/test_kvpolicy.py::test_efficient_dev_smoke
+  C:\Users\hp\anaconda3\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1437: RuntimeWarning: All-NaN slice encountered
+    return _nanquantile_unchecked(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_prereg.py::PreregTests::test_preregistration_matches_split
+FAILED tests/test_split.py::SplitTests::test_notebook_config_matches_split - ...
+2 failed, 63 passed, 1 warning in 5.07s

@@ -1,4 +1,4 @@
-"""Regressions for the review findings in PR #4 (validation/REPORT.md, F1-F9)."""
+"""Regressions for the review findings in PR #4 (validation/SYSTEMS_REVIEW.md, F1-F9)."""
 import numpy as np
 import pytest
 

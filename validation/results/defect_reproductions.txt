@@ -1,0 +1,89 @@
+........................................FFFFFFFFFFF.FF..                 [100%]
+================================== FAILURES ===================================
+____________________ test_frozen_alpha_controls_evaluation ____________________
+validation\test_contracts.py:120: in test_frozen_alpha_controls_evaluation
+    assert heldout.configs(96, frozen)["ema"][1]["alpha"] == 0.123
+E   assert 0.5 == 0.123
+_________________ test_renamed_development_trace_is_rejected __________________
+validation\test_contracts.py:144: in test_renamed_development_trace_is_rejected
+    with pytest.raises((ValueError, AssertionError), match="dev|held|split|document"):
+E   Failed: DID NOT RAISE (<class 'ValueError'>, <class 'AssertionError'>)
+---------------------------- Captured stdout call -----------------------------
+rows 8
+_________ test_auc_ties_are_half_credit_and_order_invariant[labels0] __________
+validation\test_contracts.py:151: in test_auc_ties_are_half_credit_and_order_invariant
+    assert ed.auc(np.ones(4), labels) == 0.5
+E   assert np.float64(1.0) == 0.5
+E    +  where np.float64(1.0) = <function auc at 0x0000023D2F6F09A0>(array([1., 1., 1., 1.]), [0, 0, 1, 1])
+E    +    where <function auc at 0x0000023D2F6F09A0> = ed.auc
+E    +    and   array([1., 1., 1., 1.]) = <function ones at 0x0000023D2EC2F1A0>(4)
+E    +      where <function ones at 0x0000023D2EC2F1A0> = np.ones
+_________ test_auc_ties_are_half_credit_and_order_invariant[labels1] __________
+validation\test_contracts.py:151: in test_auc_ties_are_half_credit_and_order_invariant
+    assert ed.auc(np.ones(4), labels) == 0.5
+E   assert np.float64(0.0) == 0.5
+E    +  where np.float64(0.0) = <function auc at 0x0000023D2F6F09A0>(array([1., 1., 1., 1.]), [1, 1, 0, 0])
+E    +    where <function auc at 0x0000023D2F6F09A0> = ed.auc
+E    +    and   array([1., 1., 1., 1.]) = <function ones at 0x0000023D2EC2F1A0>(4)
+E    +      where <function ones at 0x0000023D2EC2F1A0> = np.ones
+_______________ test_invalid_ranked_pages_are_rejected[ranked0] _______________
+validation\test_contracts.py:157: in test_invalid_ranked_pages_are_rejected
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE <class 'ValueError'>
+_______________ test_invalid_ranked_pages_are_rejected[ranked1] _______________
+validation\test_contracts.py:157: in test_invalid_ranked_pages_are_rejected
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE <class 'ValueError'>
+__________________ test_nonfinite_selected_score_is_rejected __________________
+validation\test_contracts.py:165: in test_nonfinite_selected_score_is_rejected
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE <class 'ValueError'>
+__________________ test_allocator_rejects_infeasible_budget ___________________
+validation\test_contracts.py:172: in test_allocator_rejects_infeasible_budget
+    with pytest.raises(ValueError):
+E   Failed: DID NOT RAISE <class 'ValueError'>
+________________ test_zero_weights_produce_feasible_allocation ________________
+validation\test_contracts.py:178: in test_zero_weights_produce_feasible_allocation
+    allocation = kp.allocate_proportional({0: 0, 1: 0}, 2, 24, [8, 12, 16])
+kvpolicy.py:565: in allocate_proportional
+    out = {l: max(g for g in grid if g <= max(grid[0], raw[l])) for l in range(L)}
+kvpolicy.py:565: in <genexpr>
+    out = {l: max(g for g in grid if g <= max(grid[0], raw[l])) for l in range(L)}
+E   TypeError: 'int' object is not subscriptable
+_____________ test_zero_weight_rank_policy_preserves_lru_baseline _____________
+validation\test_contracts.py:185: in test_zero_weight_rank_policy_preserves_lru_baseline
+    assert kp.simulate(ranked, None, 3, "rank", delta=0, beta=0) == kp.simulate(ranked, None, 3, "lru")
+E   AssertionError: assert {'accesses': ..., 'misses': 5} == {'accesses': ..., 'misses': 4}
+E
+E     Omitting 2 identical items, use -vv to show
+E     Differing items:
+E     {'misses': 5} != {'misses': 4}
+E     Use -v to get more diff
+____________ test_partial_check_resume_schedules_missing_document _____________
+validation\test_contracts.py:219: in test_partial_check_resume_schedules_missing_document
+    assert any(Path(path).stem == "b" and 96 in budgets for path, _, budgets in submitted)
+E   assert False
+E    +  where False = any(<generator object test_partial_check_resume_schedules_missing_document.<locals>.<genexpr> at 0x0000023D098A2A40>)
+_____ test_tiered_decode_releases_prefill_cache_before_memory_measurement _____
+validation\test_gpu_contracts.py:31: in test_tiered_decode_releases_prefill_cache_before_memory_measurement
+    assert not memory_probe["observations"][0]["prefill_cache_alive"]
+E   assert not True
+__________________ test_warmup_is_applied_to_latency_samples __________________
+validation\test_gpu_contracts.py:36: in test_warmup_is_applied_to_latency_samples
+    assert memory_probe["returned_latency_samples"] == memory_probe["steps"] - memory_probe["warmup_argument"]
+E   assert 4 == (4 - 2)
+=========================== short test summary info ===========================
+FAILED validation/test_contracts.py::test_frozen_alpha_controls_evaluation - ...
+FAILED validation/test_contracts.py::test_renamed_development_trace_is_rejected
+FAILED validation/test_contracts.py::test_auc_ties_are_half_credit_and_order_invariant[labels0]
+FAILED validation/test_contracts.py::test_auc_ties_are_half_credit_and_order_invariant[labels1]
+FAILED validation/test_contracts.py::test_invalid_ranked_pages_are_rejected[ranked0]
+FAILED validation/test_contracts.py::test_invalid_ranked_pages_are_rejected[ranked1]
+FAILED validation/test_contracts.py::test_nonfinite_selected_score_is_rejected
+FAILED validation/test_contracts.py::test_allocator_rejects_infeasible_budget
+FAILED validation/test_contracts.py::test_zero_weights_produce_feasible_allocation
+FAILED validation/test_contracts.py::test_zero_weight_rank_policy_preserves_lru_baseline
+FAILED validation/test_contracts.py::test_partial_check_resume_schedules_missing_document
+FAILED validation/test_gpu_contracts.py::test_tiered_decode_releases_prefill_cache_before_memory_measurement
+FAILED validation/test_gpu_contracts.py::test_warmup_is_applied_to_latency_samples
+13 failed, 43 passed in 7.86s
