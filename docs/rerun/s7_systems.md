@@ -90,6 +90,68 @@ stays). 128 decode steps, 8 warm-up excluded, 2 repeats, B=96 per request and la
   the first steps). Batched kernels change the bf16 numerics, which changes near-tie selections and, later, the greedy token. This is
   a property of batched inference with a data-dependent selector, not of the cache.
 
-## 3. Where a policy could pay off (pending: B=80/256, 8B, FLOPs)
-- Context length (0.6B, prompts cut to 8 192 tokens, B=96): dense 19.2 ms, resident Quest 26.1 ms, tiered 30.4 ms (all policies
-  within 0.5 ms; EMA −11 % bytes). At 8K on a 0.6B model, sparse selection costs more than it saves; offloading only buys memory.
+## 3. Where could a policy pay off? (B/K, context length, 0.6B vs 8B)
+**Budget (0.6B, batch 1, 3 documents, 2 repeats; `single_06b_b80_256/`):**
+| B (B/K) | LRU ms/token | EMA ms/token | Bélády ms/token | LRU MiB/token | EMA bytes vs LRU | Bélády bytes vs LRU |
+|---|---|---|---|---|---|---|
+| 80 (1.25) | 30.10 | 30.13 | 30.92 | 11.85 | −8.2 % | −30.0 % |
+| 96 (1.5) | 30.33 | 30.31 | 30.56 | 8.14 | −10.0 % | −36.1 % |
+| 128 (2) | 30.42 | 30.72 | 30.67 | 4.86 | −10.6 % | −39.5 % |
+| 256 (4) | 30.45 | 31.00 | 30.60 | 1.84 | −7.6 % | −28.8 % |
+
+Latency does not move with bytes across a 6× range of PCIe traffic (1.8–11.9 MiB/token). LRU and Bélády misses equal the
+simulator in all 12 (document, budget, policy) pairs.
+
+**Context length (0.6B, prompts cut to 8 192 tokens, B=96; `single_06b_8k/`):** dense 19.2 ms, resident Quest 26.1 ms, tiered
+30.4 ms (all policies within 0.5 ms; EMA −11 % bytes). At 8K on a 0.6B model the sparse selection costs more than it saves, and
+offloading only buys memory.
+
+**Model size (Qwen3-8B, 2 held-out documents, 256 steps, 2 repeats, B=96; `single_8b/`):**
+| Policy | ms/token | misses/step | MiB/token | decode peak GiB |
+|---|---|---|---|---|
+| dense | 48.89 | – | – | 17.70 |
+| resident Quest | 34.60 | – | – | 17.51 |
+| LRU | 40.56 | 96.5 | 6.03 | 16.02 |
+| current score | 40.57 | 88.9 | 5.56 | 16.02 |
+| score EMA (α=0.6, frozen on 8B dev) | 40.55 | 86.9 | 5.43 | 16.02 |
+| allocation + EMA | 40.64 | 78.3 | 4.89 | 16.03 |
+| Bélády | 40.85 | 61.4 | 3.84 | 16.02 |
+
+On 8B, sparse attention clearly pays off (resident Quest 29 % faster than dense), and offloading costs 6 ms per token. The
+replacement policy is again a tie (all within 0.3 ms), and the 8B weights (16 GB) dominate decode memory. Breakdown (unfused
+timed path, ms per token): LRU policy 15.9 / fetch 6.1; EMA 19.0 / 7.3; Bélády 16.1 / 6.5. LRU, Bélády and current score match the
+simulator exactly in both documents, EMA within 11 misses of ~20–29 K, and every run reproduced the collected 8B held-out trace prefix.
+
+**Batch on 8B (prompts cut to 16 384 tokens, 64 steps, 2 repeats; `batch_8b/`):**
+| Batch | LRU tokens/s | EMA / LRU | current score / LRU | alloc+EMA / LRU | Bélády / LRU | EMA bytes / LRU | Bélády bytes / LRU | LRU MiB/step | decode peak GiB | host tier GiB |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 14.1 | 0.904 | 0.943 | 0.939 | 1.034 | 0.937 | 0.800 | 7.4 | 15.9 | 2.3 |
+| 4 | 49.4 | 0.963 | 0.960 | 0.907 | 1.001 | 0.946 | 0.818 | 28.4 | 17.4 | 9.0 |
+| 8 | 100.0 | 0.899 | 0.887 | 0.932 | 1.000 | 0.945 | 0.819 | 57.3 | 19.5 | 18.1 |
+| 16 | 173.9 | 0.975 | 0.934 | 0.978 | 1.002 | 0.948 | 0.821 | 114.7 | 23.6 | 36.2 |
+
+Only 25 of the 35 8B documents reach 16 384 tokens, which limits this table to batch 16; a batch-32 run with prompts cut to 12 288 tokens is
+in `batch_8b_12k/` (section 4). In this 64-step window the 8B per-request saving is smaller than on 0.6B (EMA −5 %, Bélády −18 % bytes:
+a short decode, so a larger share of misses is compulsory). Every request's LRU/Bélády misses equal the simulator. Batch vs alone (batch 4):
+3 of 4 requests generate identical tokens over 64 steps (94 % of tokens equal), although the ranks differ.
+
+**FLOPs/MACs per generated token and sequence** (`flops.csv`, analytic from the model configs):
+| Model, context | linear layers + lm_head | Quest selector | sparse attention (K pages + tail) | dense attention | EMA update | eviction sort |
+|---|---|---|---|---|---|---|
+| 0.6B, 16K | 0.60 G | 0.12 G (20 %) | 0.12 G (20 %) | 1.88 G | 8.1 K ops | 35 K compares |
+| 0.6B, 32K | 0.60 G | 0.23 G (39 %) | 0.12 G | 3.76 G | 8.1 K | 35 K |
+| 8B, 16K | 7.57 G | 0.30 G (4 %) | 0.30 G (4 %) | 4.83 G | 10.4 K | 46 K |
+| 8B, 32K | 7.57 G | 0.60 G (8 %) | 0.30 G | 9.66 G | 10.4 K | 46 K |
+
+The replacement policy's arithmetic is about 10⁻⁵ of the model's. Its cost in practice is kernel launches and synchronisation (unfused:
++2.4 ms/token on 0.6B, +3.1 ms on 8B; fused: ≈ 0), not FLOPs. The selector, not the policy, is the expensive part of sparse attention
+on a small model.
+
+## 4. Characterisation (thesis point 2)
+The miss and byte savings of a better replacement policy turn into latency or throughput only when **host→GPU transfer is a large
+share of the decode step**. On a PCIe 4.0 RTX 6000 Ada, with 0.6B and 8B Qwen3, 16–32K contexts, B/K = 1.25–4 and batch 1–16
+(32 pending), it never is: at batch 1 the step is bound by kernel dispatch (the whole offloading path costs 4–6 ms per token, of which
+transfer is a fraction), and with batching the step time grows far more slowly than the bytes. Even the optimal policy (Bélády,
+18–40 % fewer bytes) is within ±3 % of LRU. Conditions under which this could change, none of which we measured: a slower or
+contended host link, much larger KV per page (MHA instead of 8-head GQA, larger head dim), many more pages fetched per step (larger
+K, smaller B/K), or a fully fused/asynchronous offload path whose remaining cost *is* the transfer.
