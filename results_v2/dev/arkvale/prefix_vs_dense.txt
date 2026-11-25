@@ -1,0 +1,2 @@
+Quest vs dense prefix [13, 16, 16, 16, 13, 13, 13, 18, 23, 31, 4, 15, 7, 13] median 14.0
+ArkVale-sel vs dense prefix [13, 16, 16, 16, 13, 13, 13, 18, 23, 49, 4, 4, 7, 13] median 13.0

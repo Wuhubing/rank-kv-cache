@@ -28,8 +28,12 @@ Each held-out set was collected once and evaluated once with the preregistered c
   (0.6B) / 43 % (8B) of the gap; within an allocation EMA still closes 28 % / 27 %, so the two add up.
 - ⬇️ **Weakened / qualified**: the gain equals only 5–7 % more LRU slots (Bélády: 18–46 %), so capacity matters more than the policy.
   Noisy scores push the policy *below random*, not back to LRU. "Best policy" is not claimed: a power-law age kernel (0.310) and
-  a learned linear model (0.300) beat the EMA on dev, and the EMA is one point on a curve from current score (ArkVale, α=0) to
-  frequency (α→1).
+  a learned linear model (0.300) beat the EMA on dev, and the EMA is one point on a curve from current score (ArkVale's eviction
+  rule, α=0) to frequency (α→1).
+- ✅ **ArkVale as released is weaker, not stronger** (S4.9, dev, exploratory): with the official code's defaults ArkVale reaches
+  G −0.219 at B=96 (worse than LRU; EMA 0.278). Its cuboid-mean digest disagrees with the Quest selector on ~20 % of the top-64,
+  so evicting by it drops pages Quest is about to select; with the selector's own score it reaches 0.200 (ΔG −0.078 vs EMA). With
+  ArkVale's own selector end to end the EMA still beats ArkVale by 0.068 and gains +0.030 over the current score (14/14).
 
 **2. "On common hardware these miss and byte savings do not necessarily become latency savings; we characterise when they do."**
 - ✅ **Supported and now measured with batching**: EMA moves 8–11 % fewer bytes (allocation + EMA 11–20 %, Bélády 18–40 %), and
@@ -56,7 +60,7 @@ Each held-out set was collected once and evaluated once with the preregistered c
   identical selection. Adds a manifest (GPU UUID, versions, revisions, prompt hash, tokens, sha256), resume, optional `attn_mass` /
   `true_rho` read-outs (proven not to change the selection; bit-identical traces on all 14 dev docs), multi-turn sessions, YaRN,
   sampling and page/K overrides. `collect/sources.py` covers RULER and SCBench.
-- `kvpolicy_v2.py`: Random, ArkVale (sink/window pins), InfLLM Eq. 1 and code `lru-s` (true mass or proxy), SIEVE, S3-FIFO
+- `kvpolicy_v2.py`: Random, ArkVale (sink/window pins; full version `simulate_arkvale` with forced pages, window rule, digests), InfLLM Eq. 1 and code `lru-s` (true mass or proxy), SIEVE, S3-FIFO
   (checked against independent references), lazy/frozen EMA, Holt, power-law kernel and the CO2 factorial. `kvpolicy.py` only gains a
   registry hook and an optional `attn=` argument; the existing classes are unchanged.
 - `analysis_v2/`: S4 driver (sweep, iso-miss capacity, α curves, factorials, prediction metrics, paired bootstrap, noise),
@@ -72,8 +76,11 @@ Each held-out set was collected once and evaluated once with the preregistered c
    floor was relaxed to 12K as the plan prescribes: 25 documents at 16–32K plus 10 at 12–16K. Held-out: 20 GovReport, 1 QMSum.
 3. **64K**: 2 of 14 documents middle-truncated to 62K tokens (LongBench rule); YaRN factor 2; 6/14 stopped on the loop rule.
 4. **SCBench**: contexts middle-truncated to 24K tokens to fit 32K with 5 turns (not specified in the plan).
-5. **ArkVale baseline**: pins are protected but not force-loaded (under Quest only selected pages are fetched); "first two layers
-   unbudgeted" and the cuboid-mean digest were not run.
+5. **ArkVale baseline**: the full version is now run (S4.9, `docs/rerun/s4/09_arkvale_full.md`): forced sink/recent pages, the
+   window rule, layers 0–1 unbudgeted and the cuboid-mean digest (plus the paper's other digests), following the official code
+   line by line. Remaining differences, the same for every policy: 16-token pages (page- and token-count conversions both
+   reported), the page being written is outside the cache, attention over the selected pages + tail instead of every resident
+   page (needed for trace replay), cold start instead of ArkVale's prefill eviction, digest in float32.
 6. **Power-law baseline**: implemented with an exponential-mixture approximation (max relative error 2.7 % at γ=1).
 7. **Batched benchmark**: requests are cut to 16 384 tokens (first/last halves of the chat prompt); 8B batch 32 uses 12 288 tokens because
    only 25 8B documents reach 16K. The batched policy step is unfused (pessimistic for EMA).

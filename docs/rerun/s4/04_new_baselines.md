@@ -36,8 +36,9 @@ Paired contrasts (`stats/contrasts.csv`): EMA − current score +0.038 [0.036, 0
 
 ## Notes on the rules
 - ArkVale (deviation from its code, stated in `kvpolicy_v2.ArkVale`): pinned pages are protected while resident but not
-  force-loaded, because under the Quest selector only selected pages are fetched. Its "first two layers unbudgeted"
-  option and the cuboid-mean digest were not run (the digest needs per-dimension key statistics that the trace lacks).
+  force-loaded, because under the Quest selector only selected pages are fetched. **The full version is in
+  [09_arkvale_full.md](09_arkvale_full.md)**: forced pages, ArkVale's window rule, unbudgeted layers 0–1 and the
+  cuboid-mean digest (new trace read-out). It is weaker than this simplified version (G −0.219 at B=96).
 - Holt follows PRR's convention (α weights the new observation). The trend term never helps: the best γ is 0.25–0.5 and
   the mean G falls monotonically with γ (`factorials/main_effects.csv`).
 - CO2: the FIFO protection zone hurts (mean G over the other factors: ρ=0 0.038, ρ=0.25 −0.090, ρ=0.5 −0.559), and so does the

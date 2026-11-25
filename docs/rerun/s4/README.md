@@ -9,6 +9,7 @@ Results: `results_v2/dev/`. One page per experiment:
 | [02_allrank_control.md](02_allrank_control.md) | S4.2 | **Global ordering, not magnitude**: all-page percentile EMA keeps 97 % of the gain (0.271 vs 0.279) |
 | [03_alloc_oracle.md](03_alloc_oracle.md) | S4.3 | Allocation and replacement add up; vs the same-allocation Bélády, alloc+score closes ~33 % of the gap |
 | [04_new_baselines.md](04_new_baselines.md) | S4.1/S4.6, §6.2 | Random/SIEVE/S3-FIFO ≤ LRU; ArkVale pins and InfLLM rules weaker; Holt/CO2 add nothing; **power-law kernel 0.310** |
+| [09_arkvale_full.md](09_arkvale_full.md) | follow-up | ArkVale as released (forced pages, window rule, layers 0–1 unbudgeted, cuboid-mean digest): G −0.219 at B=96 vs EMA 0.278; best digest 0.200; EMA advantage holds under ArkVale's own selector |
 | [05_budget_sweep.md](05_budget_sweep.md) | S4.4 | EMA = 5–7 % more LRU slots; Bélády = 18–46 %; capacity dominates |
 | [06_alpha_curve.md](06_alpha_curve.md) | S4.5 | One curve from current score (α=0) to frequency (α→1); optimum α ≈ 0.4–0.7 |
 | [07_prediction_quality.md](07_prediction_quality.md) | S4.7, §5.2 | Top-K persists 84 %; the score predicts reuse of *unselected* pages beyond recency/frequency (stratified AUC 0.635) |
