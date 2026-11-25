@@ -385,6 +385,7 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 - **文献**：第二轮已补齐大部分未核实条目。仍未核实的是 ArkVale 的 OpenReview 评审（页面有反爬虫验证），以及几处小尾巴（H₂O 附录 D 末尾、HiSparse 代码版本是否与论文评测一致）；Scissorhands 和 H₂O 的引文需对照 PDF 抽查。详见 [`related_work_matrix.md`](related_work_matrix.md) 末尾。
 - **选择器与 Quest 不同**：Quest 按 query head 各自选择，我们把各 head 的上界平均成一个排名，每层共用一个缓存。
 - **缺少 InfLLM 式 baseline**：按注意力加权的衰减频率分数需要每个 page 的注意力质量，trace v1 没有记录。
+- **逻辑回归的训练标签有右删失**：标签是"16 步内再次被选中"。`gap_analysis.build_dataset` 把在 trace 结束前没有再被选中的候选一律记为负例，但 t+16 ≥ 127（trace 长度）的行其实没有观察完整个 16 步窗口，真实标签未知。事后统计（post-hoc，非预注册；[`posthoc_censoring.py`](../posthoc_censoring.py)，[`censoring.json`](results/dev_full/posthoc_censoring/censoring.json)）：在 dev_full 的 30 万行训练样本中，有 **25,678 行（8.6%）** 属于这种删失负例，占全部负例的 21.5%；全部 228.7 万个候选行中的比例相同（8.5%）。我们确认重建的样本能逐位复现冻结的系数。这会让模型低估临近 trace 末尾的复用概率，可能偏向 recency/frequency 特征；冻结的模型和预注册结果不改，后续若重新训练应丢弃或单独处理这些行。
 - **ArkVale 式 baseline 缺失**：按"当前分数最低"驱逐需要记录未选中 page 的当前分数，trace v1 没有这个字段。
 
 ---
