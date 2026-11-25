@@ -148,6 +148,13 @@ python3 longbench_score.py results/heldout --out results/heldout/longbench
 - `success.json` with S1 and S2;
 - the H1 outputs of `analysis.py`.
 
+Post-hoc analyses, added after the held-out evaluation and not part of the preregistration, write to new `posthoc_*` folders and never overwrite the preregistered outputs. `posthoc_rank_increment.py` compares `score:8:2` with `score:0:2` (β fixed) and splits S2 into the rank term and the β change, with the same paired document bootstrap. `posthoc_censoring.py` (numpy) counts logistic training labels that are right-censored at the trace end:
+
+```bash
+python3 posthoc_rank_increment.py results/heldout/trace.jsonl --out docs/results/heldout/posthoc_rank_increment
+python3 posthoc_censoring.py results/dev_full --out docs/results/dev_full/posthoc_censoring
+```
+
 `longbench_score.py` scores the sparse reference generations and the dense generations in the manifests with LongBench's own metrics. The notebook collects dense generations when `DENSE_REFERENCE = True`. Results are summarized in [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) §4.7.
 
 ## Truncating repeated answers
