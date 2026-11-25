@@ -12,7 +12,7 @@ ssh ww@100.125.41.1 '~/.local/bin/claude-headless agents --json'
 
 列表里不能有名为 `rkv-replication` 的会话。
 
-**1.2 建议补上拒绝规则。** 无人值守必须用 `claude-bypass`，它跳过所有确认，只有 `~/work/.claude/settings.json` 的 `deny` 规则还会拦截。`CLAUDE.md` 和任务书只是给 agent 的指示，不是拦截。建议在 `deny` 里加上：
+**1.2 拒绝规则（2026-11-25 已加上）。** 无人值守必须用 `claude-bypass`，它跳过所有确认，只有 `~/work/.claude/settings.json` 的 `deny` 规则还会拦截。`CLAUDE.md` 和任务书只是给 agent 的指示，不是拦截。建议在 `deny` 里加上：
 
 ```json
 "Bash(gh pr merge:*)",
@@ -28,7 +28,9 @@ ssh ww@100.125.41.1 '~/.local/bin/claude-headless agents --json'
 "Bash(rclone purge:*)"
 ```
 
-这些规则按命令前缀匹配，挡不住写在 `ssh wulab2 '…'` 里面的远程命令，所以 wulab2 上的安全仍然靠 `CLAUDE.md` 的规则。这个文件是 mini 上所有会话共用的，要你决定是否修改。
+这些规则按命令前缀匹配，挡不住写在 `ssh wulab2 '…'` 里面的远程命令，所以 wulab2 上的安全仍然靠 `CLAUDE.md` 的规则。它们不影响任务需要的操作：推送 `replication-v2`、`gh pr create` 都照常可用。
+
+已于 2026-11-25 加进 mini 的 `~/work/.claude/settings.json`，修改前的文件备份为同目录的 `settings.json.bak-20261125`。
 
 **1.3 告诉管理员。** 指南建议：mini 自动登录 wulab2 长时间跑任务，最好和管理员（`yining`）或组里说一声。这次只用 1 张卡，但可能连续跑好几天。
 
