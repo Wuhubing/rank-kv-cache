@@ -1,0 +1,9 @@
+kind,item,value,sd
+lodo_logistic_auc,recency+freq,0.7068595746982321,0.0073002017537701375
+lodo_logistic_auc,+z,0.7331414248349811,0.00594627226229049
+lodo_logistic_auc,+z_ema,0.7324065164966292,0.0059237081402608366
+lodo_logistic_auc,+z+z_ema,0.7337946336146981,0.0059062575814602045
+stratified_auc_age_decile_x_count,z_ema,0.6349999068204344,
+stratified_auc_age_decile_x_count,z,0.6230115436908263,
+n_decisions,lru_B96_candidates,8651344,
+base_rate,reused_within_32,0.7732366208071254,
