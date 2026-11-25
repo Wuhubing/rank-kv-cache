@@ -4,6 +4,7 @@
   python -m analysis_v2.arkvale_full replay   TRACES --out DIR [--e2e] [--procs 32]
   python -m analysis_v2.arkvale_full audit    TRACES --out DIR [--e2e] [--procs 14]
   python -m analysis_v2.arkvale_full summarize --out DIR [--e2e]
+  python -m analysis_v2.arkvale_full agree    TRACES --out FILE
 
 compare: NEW traces (with --record-arkvale-digest) against OLD (same documents, no read-out): ranked,
   scores (bitwise, NaN pattern included) and the generated tokens must be identical. With --e2e, NEW was
@@ -361,6 +362,41 @@ def cmd_summarize(args):
     print(f"summary rows {len(rows)}, contrasts {len(contrasts)}")
 
 
+# ------------------------------------------------------------------------------------------ agree
+
+def agree_doc(path):
+    """Per digest: mean overlap of its top-K with Quest's selected top-K and mean Spearman rho with the
+    Quest scores, over every 8th step of every layer."""
+    R, S, rid = kp.load(path)
+    out = {}
+    with np.load(path, allow_pickle=False) as z:
+        for name in DIGESTS[1:]:
+            D = z[f"digest_{name}"]
+            ov, rho = [], []
+            for l in range(R.shape[1]):
+                for t in range(0, R.shape[0], 8):
+                    hp = int(np.isfinite(S[t, l]).sum())
+                    d = D[t, l, :hp].astype(np.float64)
+                    q = S[t, l, :hp].astype(np.float64)
+                    top = np.argsort(-d, kind="stable")[:K]
+                    ov.append(len(set(top.tolist()) & set(int(x) for x in R[t, l] if x >= 0)) / K)
+                    rd = np.argsort(np.argsort(d)); rq = np.argsort(np.argsort(q))
+                    rho.append(np.corrcoef(rd, rq)[0, 1])
+            out[name] = (float(np.mean(ov)), float(np.mean(rho)))
+    return rid, out
+
+
+def cmd_agree(args):
+    paths = sorted(str(p) for p in args.traces.glob("*.npz"))
+    with Pool(min(args.procs, len(paths))) as pool:
+        res = pool.map(agree_doc, paths)
+    lines = ["digest top64_overlap_with_quest spearman_with_quest (mean over documents; every 8th step, all layers)"]
+    for name in DIGESTS[1:]:
+        lines.append(f"{name} {np.mean([r[1][name][0] for r in res]):.3f} {np.mean([r[1][name][1] for r in res]):.3f}")
+    args.out.write_text("\n".join(lines) + "\n")
+    print("\n".join(lines))
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -375,11 +411,15 @@ def main():
         p.add_argument("--out", type=Path, required=True)
         p.add_argument("--e2e", action="store_true")
         p.add_argument("--procs", type=int, default=32)
+    g = sub.add_parser("agree")
+    g.add_argument("traces", type=Path)
+    g.add_argument("--out", type=Path, required=True)
+    g.add_argument("--procs", type=int, default=14)
     s = sub.add_parser("summarize")
     s.add_argument("--out", type=Path, required=True)
     s.add_argument("--e2e", action="store_true")
     args = ap.parse_args()
-    dict(compare=cmd_compare, replay=cmd_replay, audit=cmd_audit, summarize=cmd_summarize)[args.cmd](args)
+    dict(compare=cmd_compare, replay=cmd_replay, audit=cmd_audit, summarize=cmd_summarize, agree=cmd_agree)[args.cmd](args)
 
 
 if __name__ == "__main__":
