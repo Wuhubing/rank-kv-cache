@@ -53,4 +53,4 @@ python3 recompute_heldout.py docs/results/longctx_heldout/misses.csv
 
 已定位第一个教学例子。个人开发 ZIP 的 `01.jsonl`（GovReport，ID 前缀 `eaf2acd9`），层 6、第 37 步，层和步均从零计。这是该层固定 β=2 的两种策略第一次驻留集合不同。此前均有 128 页，本步 55 次命中、9 次缺页。R+F 留下 page 447，加 rank 后留下 page 457。它们上次都在第 29 步出现，分别排第 62 和第 13。在随后的第 38–45 步，两页均未被选中。这次选了不同的页，在这 8 步里没有直接的复用收益。
 
-20 篇开发文档的复用图、任务 × 层组比较、同状态驱逐对照和完整回放见[第二阶段结果](results/solo_rank_dev/README.md)。第 3 阶段已完成，完整策略在 B=128 相对 LRU 少 0.405% 的重复 miss，固定 β 后 rank 单独贡献 138 次；B=256 的增量区间跨零。[主表与图](results/solo_short_heldout/README.md)。第 4 阶段的[单篇原始 trace 回放](results/solo_longctx_pilot/README.md)已完成，112 行逐层计数全部对齐。下一步在全部 14 篇开发文档上按同一配置回放，以每篇文档配对汇报结果。长上下文正式重跑前，修复 `heldout.py` 的输入校验并从冻结 JSON 读取 α。
+20 篇开发文档的复用图、任务 × 层组比较、同状态驱逐对照和完整回放见[第二阶段结果](results/solo_rank_dev/README.md)。第 3 阶段已完成，完整策略在 B=128 相对 LRU 少 0.405% 的重复 miss，固定 β 后 rank 单独贡献 138 次；B=256 的增量区间跨零。[主表与图](results/solo_short_heldout/README.md)。第 4 阶段的[单篇原始 trace 回放](results/solo_longctx_pilot/README.md)已完成，112 行逐层计数全部对齐。[14 篇开发文档的本地回放](results/solo_longctx_dev/README.md)已完成，1,568 组逐层计数全部对齐。下一步是独立复现 21 篇冻结 longctx held-out。长上下文正式重跑前，修复 `heldout.py` 的输入校验并从冻结 JSON 读取 α。
