@@ -349,7 +349,7 @@ compulsory miss 为 44,450 次，占全部访问的 2.44%，任何策略都无�
 | H1-candidate，8 步内 | +9.5 [7.1, 12.6] | +10.8 [9.1, 13.0] |
 | top 四分位占比：LRU-candidate（candidate） | 0.75%（0.76%） | 0.74%（0.73%） |
 
-dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著，主要是因为 held-out 的文档数是 dev 的两倍，CI 更窄，另外 β 改变的那部分在 dev 上约为 0、在 held-out 上为正；效应本身同样极小。事后的干净 rank 增量在 dev 和 held-out 上都显著且都很小。
+dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著，主要是因为 held-out 的文档数是 dev 的两倍，CI 更窄，另外 β 改变那部分的点估计在 dev 上约为 0、在 held-out 上为正（但两者的 CI 都跨 0，见上表）；效应本身同样极小。事后的干净 rank 增量在 dev 和 held-out 上都显著且都很小。
 
 **偏离预注册：无。** 策略、参数、系数、budget、指标、bootstrap 设置和 MFQA 规则都没有改；held-out 只采集一次、评估一次；GPU 型号与 dev 相同。唯一的操作差异是 Colab 里 held-out 的结果单元格不做回放（预注册中已写明）。事后分析（干净 rank 增量、§6 的标签删失统计）是在正式评估之后另加的，不改变任何预注册结果，输出放在新的 `posthoc_*` 目录里，不覆盖预注册输出。
 

@@ -57,6 +57,26 @@ class PosthocTests(unittest.TestCase):
         for r in contrasts(counts, [1], ["a", "b"], replicates=20):
             self.assertEqual((r["repeat_misses_saved"], r["ci_low"], r["ci_high"]), (0, 0, 0))
 
+    def test_s2_row_matches_preregistered_success(self):
+        # The S2 contrast must draw the same bootstrap documents as evaluate.success,
+        # otherwise it would not reproduce the preregistered S2 interval.
+        from evaluate import success
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "trace.jsonl"
+            synthetic_trace(path, docs=5)
+            streams = read_trace(path)
+        counts = per_document(streams, [5], 4)
+        docs = sorted(counts[5]["full"])
+        nested = {5: {name: {d: {"repeat_misses": counts[5][name][d]} for d in docs}
+                      for name in ("full", "rf")}}
+        nested[5]["lru"] = {d: {"repeat_misses": counts[5]["rf"][d] + 100} for d in docs}
+        prereg = {"primary_budget": 5, "bootstrap": {"seed": 0, "replicates": 200}}
+        expected = success(nested, prereg, docs)
+        s2 = next(r for r in contrasts(counts, [5], docs, replicates=200, seed=0)
+                  if r["contrast"] == "s2_as_preregistered")
+        self.assertEqual(s2["repeat_misses_saved"], expected["s2_repeat_misses_saved_full_vs_rf"])
+        self.assertEqual([s2["ci_low"], s2["ci_high"]], expected["s2_ci"])
+
     def test_cli(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

@@ -24,5 +24,8 @@
   "steps_per_stream": [
     127
   ],
-  "sample_check": "refitting Logistic on this training_sample reproduces the frozen coefficients in splits/preregistration.json exactly"
+  "sample_check": {
+    "refit_reproduces_frozen_coefficients": true,
+    "note": "refit of the logistic model on this rebuilt training sample, compared with the frozen coefficients in the preregistration"
+  }
 }
