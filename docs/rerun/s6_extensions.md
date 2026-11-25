@@ -58,7 +58,7 @@ G at B/K = 1.5 (B=96) with document-bootstrap CI; wins = documents with fewer mi
 | 8B held-out (fixed configs only) | 4.69 | 3.05 | (0.222) | (0.272, preregistered) | – | 0.010 | −0.058 | – |
 | 0.6B, 32–64K, YaRN ×2 | 7.24 | 4.60 | 0.257 | **0.284** [0.281, 0.289] 14/14 | 0.279 | – | −0.041 | −0.047 |
 | 0.6B, RULER 16K (4 tasks) | 4.42 | 2.74 | 0.207 | **0.255** [0.233, 0.292] 14/14 | 0.244 | – | −0.030 | −0.035 |
-| 0.6B, SCBench 5-turn sessions | (pending) | | | | | | | |
+| 0.6B, SCBench 5-turn sessions | 4.24 | 2.68 | 0.247 | **0.285** [0.283, 0.287] 14/14 | 0.275 | – | −0.031 | −0.035 |
 
 Notes:
 - **64K/YaRN** (`splits/longctx64k_v1.json`): a different model configuration, reported separately. 7 NarrativeQA, 4 Multi-News,
@@ -67,7 +67,12 @@ Notes:
 - **RULER** (`splits/ruler16k_v1.json`): cwe, niah_multivalue, niah_multiquery, niah_multikey_3. With thinking on, every document has
   ≥ 172 decode steps (none below the 100-step exclusion rule); 6 of 14 stopped on the loop rule. The CIs are wider (shorter
   traces); at B=256 EMA 0.313, current score 0.105.
-- **SCBench**: (pending).
+- **SCBench** (`splits/scbench_v1.json`): 7 En.Sum + 7 En.QA sessions, 5 turns each, context middle-truncated to 24K tokens,
+  ≤ 512 new tokens per turn; 768–1701 decode steps per session (12 EOS, 1 loop, 1 length on the last turn). The format and
+  the replay were first checked on one session (`scbench_summary/9`): page ids continue across turns, and keeping the cache across turns gives
+  fewer LRU misses than a cold cache per turn (78 272 vs 85 831 at B=96). Turns 2–5 often end with `<|endoftext|>` after
+  thinking-style text (previous turns' thinking stays in the KV), which is acceptable for cache behaviour. At B=256 the current score falls to
+  LRU (−0.019, 6/14) while the EMA keeps 0.192 (14/14): with turn boundaries, the score history matters more.
 
 ## 3. True attention mass and the two InfLLM rules (S6.7)
 With the true post-softmax attention mass of each selected page (summed over heads; `--record-attn-mass`), both InfLLM rules,
@@ -84,7 +89,9 @@ Spearman ρ between the Quest page scores and the true dense attention mass of e
 | 0.6B 16–32K | 0.725 | 0.527 (layer 6) | 0.805 (layer 8) |
 | 0.6B 64K/YaRN | 0.740 | 0.615 (layer 6) | 0.818 (layer 7) |
 | 0.6B RULER | 0.739 | 0.502 (layer 6) | 0.828 (layer 0) |
+| 0.6B SCBench | 0.744 | 0.549 (layer 3) | 0.840 (layer 22) |
 | 8B dev | 0.750 | 0.572 (layer 32) | 0.903 (layer 6) |
+| 8B held-out (read-out only) | 0.745 | 0.552 (layer 30) | 0.901 (layer 6) |
 
 The upper bound is a reasonably good but far from perfect proxy for attention. That matters for the noise sensitivity in S4.8.
 
