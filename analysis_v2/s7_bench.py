@@ -73,6 +73,9 @@ def cmd_single(a):
     import gpu_bench as gb
     import kvpolicy as kp
     split, tok, model, prompts = load_prompts(a.split, a.subset, a.ndocs)
+    if a.cut:
+        prompts = [(rid, cut(p, a.cut)) for rid, p in prompts]
+        a.trace_dir = None  # a cut prompt no longer matches the collected trace
     alpha, alloc = frozen(a.frozen)
     L = model.config.num_hidden_layers
     a.out.mkdir(parents=True, exist_ok=True)
@@ -255,6 +258,7 @@ def main():
     ap.add_argument("--frozen", default="splits/heldout_frozen_v1.json")
     ap.add_argument("--trace-dir")
     ap.add_argument("--host-cap-gb", type=float, default=80)
+    ap.add_argument("--cut", type=int, help="single: cut prompts to this many tokens (context-length variation)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     if a.cmd != "flops":
