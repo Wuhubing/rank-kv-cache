@@ -3,7 +3,9 @@
 set -e
 cd /data/weibing/projects/rkv-v3
 export TMPDIR=/data/weibing/tmp HF_HOME=/data/weibing/cache/huggingface
-GPU=$(free-gpus 1)
+# card 2 threw "illegal instruction" twice (ArkVale task and followup-v3 smoke test): prefer any other free card
+GPU=$(free-gpus | tr ',' '\n' | grep -v '^2$' | head -1)
+[ -z "$GPU" ] && GPU=$(free-gpus 1)
 [ -z "$GPU" ] && { echo "no free GPU"; exit 1; }
 export CUDA_VISIBLE_DEVICES=$GPU
 echo "[$(date -u -Is)] G2 collect on GPU $GPU $(nvidia-smi -i $GPU --query-gpu=uuid --format=csv,noheader)"
