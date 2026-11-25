@@ -7,7 +7,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 **Current status (2026-11-25):** the rank study ended negative (preregistered 40-document held-out test: the full rank policy cuts repeat misses by only 0.39% [0.20%, 0.57%] against LRU, S1 not met; S2 is met as preregistered but also changes β, and a post-hoc comparison with β held fixed puts the rank term alone at 0.14%). A follow-up line, a score-EMA replacement policy on long Quest traces, passed its preregistered 21-document held-out test but gives no latency gain on an L4. The Chinese walkthrough below explains it from the start; [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) has the full log, data and how each conclusion was reached.
 
-**Replication-v2 (2026-11-25, branch `replication-v2`):** everything was re-collected and re-evaluated from scratch on an RTX 6000 Ada ([docs/rerun/](docs/rerun/)). The preregistered held-out result replicates (EMA G 0.279 [0.275, 0.282], 21/21; L4: 0.281), and a new preregistered **Qwen3-8B** held-out set confirms it (G 0.272 [0.269, 0.276], 21/21; allocation + EMA 0.273 of the gap at the same allocation). An all-page percentile control shows that the signal is the **global ordering** of the unselected pages' scores, not score magnitude. It also holds at 64K (YaRN), on RULER and on SCBench multi-turn sessions. Measured batching (1–32) confirms that the 8–10 % byte saving does not become throughput on this hardware. Summary: [docs/replication_v2.md](docs/replication_v2.md) (preregistration), [docs/rerun/thesis.md](docs/rerun/thesis.md) (what the evidence supports).
+**Replication-v2 (2026-11-25, branch `replication-v2`):** everything was re-collected and re-evaluated from scratch on an RTX 6000 Ada ([docs/rerun/](docs/rerun/)). The preregistered held-out result replicates (EMA G 0.279 [0.275, 0.282], 21/21; L4: 0.281), and a new preregistered **Qwen3-8B** held-out set confirms it (G 0.272 [0.269, 0.276], 21/21; allocation + EMA 0.273 of the gap at the same allocation). An all-page percentile control shows that the signal is the **global ordering** of the unselected pages' scores, not score magnitude. It also holds at 64K (YaRN), on RULER and on SCBench multi-turn sessions. Measured batching (1–32) shows that the 8–10 % byte saving does not become latency, and becomes throughput only at batch 32 on the 0.6B model (+3.4 %; none on 8B). Summary: [docs/replication_v2.md](docs/replication_v2.md) (preregistration), [docs/rerun/thesis.md](docs/rerun/thesis.md) (what the evidence supports).
 
 ## 高效替换策略：从问题到结果
 
@@ -93,7 +93,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 | Qwen3-8B 新 held-out 21 篇（新预注册） | — | G **0.272** [0.269, 0.276]，21/21，ΔG 0.252，同分配内 0.273 |
 | 64K（YaRN）/ RULER / SCBench 多轮（dev，探索性） | — | EMA G 0.284 / 0.255 / 0.285，均 14/14 |
 | batch 1 延迟（融合 kernel，B=96） | LRU 62.3，EMA 62.3 ms/token | LRU 30.3，EMA 30.3 ms/token（8B：40.6 / 40.6） |
-| batch > 1 | 未实现（外推） | 实测 batch 1–32：吞吐近似线性增长；EMA 少传 8% 字节，但吞吐 0.93–0.98× LRU；Bélády 少传 30%，吞吐只 +2–3% |
+| batch > 1 | 未实现（外推） | 实测 batch 1–32：吞吐近似线性增长；batch ≤ 24 时 EMA 少传 8% 字节但吞吐 0.90–1.00× LRU；batch 32（0.6B）时 EMA +3.4%、分配 + EMA +4.1%、Bélády +4.8%；8B batch 32 在噪声内 |
 
 详见 [docs/rerun/](docs/rerun/)：s3（dev 对比）、s4（全部基线和分析）、s5（复现）、s6（扩展）、s7（系统）。
 

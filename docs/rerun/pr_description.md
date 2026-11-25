@@ -34,8 +34,9 @@ Each held-out set was collected once and evaluated once with the preregistered c
 **2. "On common hardware these miss and byte savings do not necessarily become latency savings; we characterise when they do."**
 - ✅ **Supported and now measured with batching**: EMA moves 8–11 % fewer bytes (allocation + EMA 11–20 %, Bélády 18–40 %), and
   measured misses equal the simulator. Batch-1 latency is a tie for every policy (0.6B 30.1–31.0 ms/token at B=80–256; 8B 40.6 ms).
-  With batching (new `gpu_bench_batch.py`, one merged H2D transfer per layer) throughput scales almost linearly, but EMA reaches
-  0.90–0.98× LRU and Bélády only +0–3 %.
+  With batching (new `gpu_bench_batch.py`, one merged H2D transfer per layer) throughput scales almost linearly; up to batch 24
+  EMA reaches 0.90–1.00× LRU (Bélády +0–7 %). **Nuance:** at batch 32 on 0.6B a small, reproducible gain appears (EMA +3.4 %,
+  allocation + EMA +4.1 %, Bélády +4.8 %; about 3 ms per step). On 8B at batch 32 there is none (compute-bound step, ±2.5 % noise).
 - ❌ **Removed**: the "batch 32 saves ~2.3 ms/step" linear extrapolation (README, STATUS_REPORT, gpu_benchmark.md now point to the
   measurement).
 - The characterisation is stated as conditions that we did *not* measure (slower link, MHA-size pages, more pages per step, fully fused
@@ -48,7 +49,7 @@ Each held-out set was collected once and evaluated once with the preregistered c
 | 0.6B held-out | 0.281 [0.277, 0.285], 21/21 | 0.279 [0.275, 0.282], 21/21 |
 | 8B new held-out | – | 0.272 [0.269, 0.276], 21/21 |
 | batch-1 latency, B=96 (LRU / EMA) | 62.3 / 62.3 ms | 30.3 / 30.3 ms |
-| batch > 1 | extrapolated | measured 1–32: no throughput gain |
+| batch > 1 | extrapolated ("batch 32 saves ~2.3 ms/step") | measured 1–32: no gain up to 24; batch 32 (0.6B) EMA +3.4 % (~3 ms/step); 8B none |
 
 ## What was added
 - `collect/long.py`: the long-trace capture ported from the notebook. Same selector, prompts, stop rule and precision, with tests showing

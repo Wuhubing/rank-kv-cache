@@ -10,7 +10,7 @@
 - 全 page 百分位排名对照：起作用的是未选中 page 之间的**全局排序**（allrank 0.271 对 z 0.279），不是分数大小。
 - 同分配 Bélády 锚点：相对同分配最优，分配 + EMA 补上 35%（0.6B）/ 43%（8B）的差距。
 - 64K（YaRN）、RULER、SCBench 多轮、page 8–64、K 32–128、采样解码上 EMA 都好于 LRU（dev，探索性）。用真实注意力质量后，InfLLM 的两种规则略差于 LRU。
-- 实测 batch 1–32：字节节省没有变成吞吐。下文 §9 中"batch 32 每步约省 2.3 ms"的外推作废，以 [`rerun/s7_systems.md`](rerun/s7_systems.md) 的实测为准。下文 L4 的原始数字保留不改。
+- 实测 batch 1–32：batch ≤ 24 时字节节省没有变成吞吐；batch 32 时只在 0.6B 上出现小而稳定的收益（EMA +3.4%，约每步 3 ms），8B 上没有。下文 §9 中"batch 32 每步约省 2.3 ms"的外推作废，以 [`rerun/s7_systems.md`](rerun/s7_systems.md) 的实测为准。下文 L4 的原始数字保留不改。
 
 本报告分两部分：
 

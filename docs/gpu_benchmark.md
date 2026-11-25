@@ -18,7 +18,8 @@ scores). It does not reduce decode latency:
 - **Larger batch is now measured** (replication-v2, RTX 6000 Ada, `gpu_bench_batch.py`,
   [`docs/rerun/s7_systems.md`](rerun/s7_systems.md)). The earlier linear batch-32 extrapolation is withdrawn: up to
   batch 16 the step time grows only 58 → 68 ms while bytes grow 16×; EMA's 8 % byte saving does not raise throughput, and
-  even Bélády's 30 % saving adds only 2–3 %.
+  even Bélády's 30 % saving adds only 2–3 %. At batch 32 (0.6B) a small, reproducible gain appears (EMA +3.4 %, about 3 ms
+  per step); on 8B at batch 32 there is none.
 
 **Measurement caveats (these numbers have not been re-measured since the fixes):**
 - *Warm-up.* The setup below excludes the first 8 decode steps as warm-up, but when these runs were
@@ -175,7 +176,8 @@ What these numbers show:
   transfer is a large share of the step. KV bytes per page and layer do not grow with model width
   under 8-head GQA, so the relevant lever is **batching** (each sequence brings its own misses).
   *(Replication-v2 measured batching instead of extrapolating it: see `docs/rerun/s7_systems.md`. On an RTX 6000 Ada,
-  transfer stays a small part of the step up to batch 16, so the byte saving does not become throughput.)*
+  transfer stays a small part of the step up to batch 24, so the byte saving does not become throughput; at batch 32 on 0.6B
+  it gives +3–5 %.)*
 
 Latency wall times above are wall-clock with `torch.cuda.synchronize`; GPU-busy times come from one
 profiled run per config on one document, so treat them as indicative (±0.2 ms).
@@ -252,8 +254,8 @@ What the GPU-busy numbers show:
 token, so the policy is a tie with LRU in latency, not a win. A latency win needs transfer to be a
 real fraction of the step: large batch or long K, a slower host link, or no prefetch overlap. The
 batched measurement (replication-v2, `docs/rerun/s7_systems.md`) replaces the earlier per-page
-extrapolation: at batch 4–16 EMA's 8 % byte saving gives no throughput gain (0.93–0.98× LRU in an unfused batched
-implementation), and Bélády's 30 % saving gives +2–3 %.
+extrapolation: at batch 4–24 EMA's 8 % byte saving gives no throughput gain (0.90–1.00× LRU in an unfused batched
+implementation), and Bélády's 30 % saving gives +0–7 %. At batch 32 on 0.6B: EMA +3.4 %, Bélády +4.8 %; on 8B: none.
 
 Data, all in `MyDrive/rank-kv-cache/results_gpu_benchmark/`:
 - `bench_fused.pkl`: per-step latencies, per-layer misses, simulator counts and tokens for every

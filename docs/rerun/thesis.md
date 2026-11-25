@@ -14,8 +14,9 @@ statement below cites the step that supports it. Confirmatory = preregistered he
 > 1. A per-page EMA of that ordering, updated for every resident page, closes about **27–28 % of the LRU–Bélády gap** on two
 >    models (Qwen3-0.6B, Qwen3-8B) and two GPUs. Per-layer budgets add to it: at equal total slots, 16 % (0.6B) / 21 % (8B) fewer
 >    repeat misses than LRU, and 35 % / 43 % of the gap at the same allocation.
-> 2. On a current PCIe GPU these savings (8–14 % fewer host→GPU bytes) **do not become latency or throughput**, at batch 1 or
->    with batching up to 16–32, because transfer is a small part of the decode step. We characterise this.
+> 2. On a current PCIe GPU these savings (8–14 % fewer host→GPU bytes) **do not become latency** at batch 1, and become throughput
+>    only marginally and only at large batch on a small model (+3–4 % at batch 32 on 0.6B, none on 8B), because transfer is a small
+>    part of the decode step. We characterise this.
 
 ## Point 1: supported, with sharpened wording
 | Claim | Status | Evidence |
@@ -35,7 +36,7 @@ statement below cites the step that supports it. Confirmatory = preregistered he
 |---|---|---|
 | Byte savings exist on real hardware | **Supported** | EMA −8 to −11 % bytes, allocation + EMA −11 to −20 %, Bélády −18 to −40 %; LRU/Bélády measured misses equal the simulator exactly (S7) |
 | They do not become latency at batch 1 | **Supported** | 0.6B: all tiered policies 30.1–31.0 ms/token across B = 80–256; 8B: 40.6 ms; ties within the repeat spread (S7 §1, §3) |
-| They do not become throughput with batching | **Supported (new measurement)** | Batch 1–16 (0.6B and 8B; 32 in progress): EMA 0.90–0.98× LRU throughput in an unfused batched implementation, Bélády +0–3 % (S7 §2, §3) |
+| They barely become throughput with batching | **Supported with a nuance (new measurement)** | Batch 1–24: EMA 0.90–1.00× LRU throughput in an unfused batched implementation, Bélády +0–7 %. Batch 32: 0.6B EMA +3.4 %, alloc+EMA +4.1 %, Bélády +4.8 % (reproducible); 8B within ±2.5 % noise (S7 §2, §3) |
 | "Batch 32 would save 2.3 ms/step" | **Removed** | Was a linear extrapolation; replaced by measurement (`docs/gpu_benchmark.md`, STATUS_REPORT) |
 | When it would pay off | **Stated as conditions, not measured** | Slower/contended host link, larger KV per page (MHA), more pages per step, fully fused offload path (S7 §4) |
 

@@ -26,7 +26,7 @@
 > | 1. 全 page 排名对照 | allrank G 0.271 对 z 0.279（dev B=96）：**全局排序**，不是分数大小（[s4/02](../rerun/s4/02_allrank_control.md)） |
 > | 2. 同分配 Bélády | 相对同分配最优，分配 + EMA 补上 35%（0.6B held-out）/ 43%（8B held-out）；同一分配内替换部分仍是 28% / 27%（[s5](../rerun/s5_replication.md)、[s6](../rerun/s6_extensions.md)） |
 > | 3. GPU 重测（修好的 warmup 和显存口径） | batch 1：所有策略约 30.3 ms/token（0.6B），40.6 ms（8B），字节少 10%，延迟持平；显存按阶段报告（[s7](../rerun/s7_systems.md)） |
-> | 4. 一个模型、一种 GPU、batch 1 | 新 GPU 上复现通过；Qwen3-8B 新预注册 held-out 通过（G 0.272）；64K/RULER/SCBench/page/K/采样均为正；实测 batch 1–32，字节节省没有变成吞吐 |
+> | 4. 一个模型、一种 GPU、batch 1 | 新 GPU 上复现通过；Qwen3-8B 新预注册 held-out 通过（G 0.272）；64K/RULER/SCBench/page/K/采样均为正；实测 batch 1–32：batch ≤ 24 时字节节省没有变成吞吐，batch 32（0.6B）时 +3–4%，8B 没有 |
 
 1. **全 page 排名对照（`allrank`）的结果**：代码在 #7，需要 14 个 longctx dev NPZ（在共享 Drive 上）。这个结果决定论文的核心表述是"分数大小有用"还是"全局排序有用"。
 2. **同分配 Bélády**（`validation/alloc_oracle.py`）：之前按层分配的 G 用的是均匀预算下的锚点，要换成相同分配下的 oracle。
