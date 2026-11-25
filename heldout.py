@@ -7,6 +7,7 @@ Nothing here is tuned on held-out data: `eval` only reads the frozen file.
 """
 import argparse
 import csv
+import hashlib
 import json
 from multiprocessing import Pool
 from pathlib import Path
@@ -23,8 +24,44 @@ ALPHA = {72: 0.4, 80: 0.4, 96: 0.5, 128: 0.7, 256: 0.95}
 LINEAR_B = (96, 128, 256)
 
 
+def alpha_of(B, frozen=None):
+    """EMA alpha for budget B: the frozen file's value when given (audit item 3), else the module default."""
+    return float(frozen["alpha"][str(B)]) if frozen and "alpha" in frozen else ALPHA[B]
+
+
+def split_rids(split_path, subset):
+    split = json.loads(Path(split_path).read_text())
+    return {e["rid"] for e in split["prompts"] if e["split"] == subset}
+
+
+def trace_inventory(paths, expected=None, forbid=(), L=28, K=64):
+    """Check every npz by its stored rid (not its file name): rids unique, exactly the expected set
+    when given, none in `forbid`, ranked (T, L, K) and scores (T, L, P) with matching T.
+    Returns {rid: {file, sha256, steps, pages}}."""
+    inv = {}
+    for p in paths:
+        with np.load(p, allow_pickle=False) as z:
+            if not {"rid", "ranked", "scores"} <= set(z.files):
+                raise ValueError(f"{p}: missing rid, ranked or scores")
+            rid, R, S = str(z["rid"]), z["ranked"], z["scores"]
+            if R.ndim != 3 or R.shape[1:] != (L, K) or not R.shape[0]:
+                raise ValueError(f"{p}: ranked shape {R.shape}, expected (T, {L}, {K})")
+            if S.ndim != 3 or S.shape[:2] != R.shape[:2]:
+                raise ValueError(f"{p}: scores shape {S.shape} does not match ranked {R.shape}")
+        if rid in inv:
+            raise ValueError(f"duplicate rid {rid}: {inv[rid]['file']} and {p}")
+        if rid in forbid:
+            raise ValueError(f"{p}: rid {rid} is a development document")
+        h = hashlib.sha256(Path(p).read_bytes()).hexdigest()
+        inv[rid] = dict(file=Path(p).name, sha256=h, steps=int(R.shape[0]), pages=int(S.shape[2]))
+    if expected is not None and set(inv) != set(expected):
+        raise ValueError(f"trace set differs from the split: missing {sorted(set(expected) - set(inv))}, "
+                         f"unexpected {sorted(set(inv) - set(expected))}")
+    return inv
+
+
 def configs(B, frozen=None):
-    out = {"lru": ("lru", {}), "belady": ("belady", {}), "ema": ("ema", dict(alpha=ALPHA[B])),
+    out = {"lru": ("lru", {}), "belady": ("belady", {}), "ema": ("ema", dict(alpha=alpha_of(B, frozen))),
            "score": ("score", {}), "dsum": ("dsum", dict(decay=0.5, v="softmax")),
            "dcount": ("dsum", dict(decay=0.8, v="indicator"))}
     if frozen and str(B) in frozen["linear"]:
@@ -46,9 +83,11 @@ def per_layer(args):
 
 def freeze(args):
     paths = [str(p) for p in sorted(args.traces.glob("*.npz"))]
+    inv = trace_inventory(paths, expected=split_rids(args.split, "dev") if args.split else None)
     pool = Pool(args.procs)
-    out = {"dev_docs": [Path(p).name for p in paths], "alpha": ALPHA, "alloc": {}, "linear": {},
-           "dev_check": {}}
+    out = {"dev_docs": [Path(p).name for p in paths], "dev_rids": sorted(inv),
+           "dev_trace_sha256": {r: v["sha256"] for r, v in inv.items()},
+           "split": str(args.split), "alpha": ALPHA, "alloc": {}, "linear": {}, "dev_check": {}}
     for B in CURVE:
         rows = [r for part in pool.map(per_layer, [(p, "ema", dict(alpha=ALPHA[B]), GRID) for p in paths])
                 for r in part]
@@ -82,7 +121,13 @@ def evaluate(args):
     frozen = json.load(open(args.frozen))
     paths = [str(p) for p in sorted(args.traces.glob("*.npz"))]
     assert not set(Path(p).name for p in paths) & set(frozen["dev_docs"]), "dev doc in held-out set"
+    dev = set(frozen.get("dev_rids") or (split_rids(args.split, "dev") if args.split else ()))
+    expected = split_rids(args.split, args.subset) if args.split else None
+    inv = trace_inventory(paths, expected=expected, forbid=dev)
     args.out.mkdir(parents=True, exist_ok=True)
+    json.dump(dict(frozen=str(args.frozen), split=str(args.split), subset=args.subset,
+                   alpha={str(B): alpha_of(B, frozen) for B in CURVE}, traces=inv),
+              open(args.out / "trace_inventory.json", "w"), indent=1)
     pool = Pool(args.procs)
     jobs, keys = [], []
     for B in CURVE:
@@ -92,7 +137,7 @@ def evaluate(args):
         # allocation + EMA: each layer at its frozen budget
         for g in sorted(set(frozen["alloc"][str(B)])):
             for p in paths:
-                jobs.append((p, "ema", dict(alpha=ALPHA[B]), [g])); keys.append(f"alloc_ema@{B}")
+                jobs.append((p, "ema", dict(alpha=alpha_of(B, frozen)), [g])); keys.append(f"alloc_ema@{B}")
     rows = []
     for cfg, part in zip(keys, pool.map(per_layer, jobs)):
         rows += [(cfg,) + r for r in part]
@@ -118,7 +163,11 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--frozen", type=Path)
     ap.add_argument("--procs", type=int, default=8)
+    ap.add_argument("--split", default=str(Path(__file__).resolve().parent / "splits/longctx_v1.json"),
+                    help="split file whose rids the traces must match exactly (pass '' to skip)")
+    ap.add_argument("--subset", default="heldout")
     args = ap.parse_args()
+    args.split = Path(args.split) if args.split else None
     freeze(args) if args.cmd == "freeze" else evaluate(args)
 
 

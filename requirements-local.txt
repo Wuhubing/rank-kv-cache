@@ -1,0 +1,7 @@
+# Apple-silicon (MPS) environment for local trace capture and replay. Python 3.10-3.12.
+torch>=2.5
+transformers==4.53.3   # same as the L4 captures; newer versions may tokenize the chat template differently
+huggingface_hub>=0.30
+numpy>=1.26
+matplotlib>=3.8
+pytest>=8
