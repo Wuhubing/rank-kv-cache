@@ -1,0 +1,186 @@
+{
+ "name": "scbench_v1",
+ "model": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+ "data": "microsoft/SCBench@283310bb8c5ba6909dd9a6b1be087d2937f76f6d",
+ "source": "scbench",
+ "selector": {
+  "page_size": 16,
+  "top_k": 64
+ },
+ "decoding": {
+  "greedy": true,
+  "max_new_tokens": 512,
+  "stop": "eos | max_new | newest 32-gram repeats",
+  "per_turn": true
+ },
+ "budgets": {
+  "primary_B": 96,
+  "curve_B": [
+   80,
+   96,
+   128,
+   256
+  ]
+ },
+ "rationale": [
+  "Exploratory multi-turn setting (dev only). SCBench sessions share one context across 5 queries; the contexts are 300K+ characters, so the context is middle-truncated to 24K Qwen3 tokens to fit the 32K window with 5 turns of at most 512 new tokens each. Some queries may refer to truncated text; the setting measures cache behaviour, not answer quality.",
+  "The KV cache, page bounds and page ids persist across turns (collect.long.capture_session); the trace concatenates the decode steps of all turns (turn_of_step), and the replay keeps the cache between turns. Prefill of each new turn is dense.",
+  "Tasks: scbench_summary (En.Sum) and scbench_qa_eng (En.QA), 7 sessions each, ordered by sha256('scbench_v1:<file>/<id>')."
+ ],
+ "prompts": [
+  {
+   "rid": "scbench_summary/9",
+   "file": "scbench_summary",
+   "row": 8,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "26142c0eb58a8a69",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/13",
+   "file": "scbench_summary",
+   "row": 12,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "bb8defa13c3a33ad",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/35",
+   "file": "scbench_summary",
+   "row": 33,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "f1ccce565a40eb33",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/28",
+   "file": "scbench_summary",
+   "row": 26,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "ded38cc8a3a43af5",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/14",
+   "file": "scbench_summary",
+   "row": 13,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "9361d5415502a683",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/31",
+   "file": "scbench_summary",
+   "row": 29,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "ffed447711f6037e",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_summary/32",
+   "file": "scbench_summary",
+   "row": 30,
+   "task": "scbench_summary",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "002de1b00049907e",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/8",
+   "file": "scbench_qa_eng",
+   "row": 8,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "3822340431a4a419",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/29",
+   "file": "scbench_qa_eng",
+   "row": 29,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "63ffcaa5886716c2",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/46",
+   "file": "scbench_qa_eng",
+   "row": 46,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "3e3a1a2dbd3bc870",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/63",
+   "file": "scbench_qa_eng",
+   "row": 63,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "0015d8eabb811f45",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/15",
+   "file": "scbench_qa_eng",
+   "row": 15,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "b721d0a06ba3ad39",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/48",
+   "file": "scbench_qa_eng",
+   "row": 48,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "0bec916936a55899",
+   "max_context_tokens": 24000,
+   "turns": 5
+  },
+  {
+   "rid": "scbench_qa_eng/36",
+   "file": "scbench_qa_eng",
+   "row": 36,
+   "task": "scbench_qa_eng",
+   "split": "dev",
+   "band": "24K+turns",
+   "ctx": "ef8ee769eeaaf621",
+   "max_context_tokens": 24000,
+   "turns": 5
+  }
+ ]
+}

@@ -1,0 +1,191 @@
+{
+ "name": "longctx64k_v1",
+ "model": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+ "data": "zai-org/LongBench@5e628be450b7e67fb7ae6e201bd6d8f7056f7672",
+ "source": "longbench",
+ "selector": {
+  "page_size": 16,
+  "top_k": 64
+ },
+ "decoding": {
+  "greedy": true,
+  "max_new_tokens": 1024,
+  "stop": "eos | max_new | newest 32-gram repeats"
+ },
+ "rope_scaling": {
+  "rope_type": "yarn",
+  "factor": 2.0,
+  "original_max_position_embeddings": 32768
+ },
+ "max_position_embeddings": 67584,
+ "budgets": {
+  "primary_B": 96,
+  "curve_B": [
+   72,
+   80,
+   96,
+   128,
+   256
+  ]
+ },
+ "rationale": [
+  "Exploratory 64K setting for Qwen3-0.6B (dev only, no held-out; D6). Qwen3's native context is 32K, so YaRN rope scaling (factor 2, original 32768, as on the Qwen3 model card) is applied: a different model configuration, reported separately from the 32K results.",
+  "Pool: distinct LongBench contexts with a 32-64K token chat prompt, not in longctx_v1: GovReport (gov_report, gov_report_e), NarrativeQA and Multi-News (summary prompts in the same 'detailed summary, at least eight paragraphs' form). Contexts above 62K tokens are middle-truncated to 62K (LongBench's own truncation rule) and used only if needed to reach 14 documents.",
+  "Order: untruncated first, then sha256('longctx64k_v1:'+rid)."
+ ],
+ "candidates": 15,
+ "prompts": [
+  {
+   "rid": "gov_report/505345771a2e5b438ea4bfa7c0f238f8787f45b0ca52ef7d",
+   "file": "gov_report",
+   "row": 115,
+   "ctx": "0733e989c8981025",
+   "task": "gov_report",
+   "prompt_tokens": 52551,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "gov_report/6b904be52b37799ba0fe353800ac1a5246d263927387b6f1",
+   "file": "gov_report",
+   "row": 59,
+   "ctx": "d146cbf90f9c4e7b",
+   "task": "gov_report",
+   "prompt_tokens": 46012,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "gov_report/864c2b03ab84ceb4179238296a7e923b7b82da0708259071",
+   "file": "gov_report",
+   "row": 56,
+   "ctx": "23b4e5802b88ce00",
+   "task": "gov_report",
+   "prompt_tokens": 41635,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "multi_news_e/0e05cc18a8cb83168b2027b1734f77c9328fac1b3f6ff608",
+   "file": "multi_news_e",
+   "row": 200,
+   "ctx": "062d811e0513c389",
+   "task": "multi_news",
+   "user_template": "News articles:\n\n{context}\n\nWrite a detailed summary of all the news articles, covering every event, in at least eight paragraphs.",
+   "prompt_tokens": 41079,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "multi_news_e/5bb5eef35268996a15327046c09c0c83000af20ff094db34",
+   "file": "multi_news_e",
+   "row": 238,
+   "ctx": "b25d54153f930db9",
+   "task": "multi_news",
+   "user_template": "News articles:\n\n{context}\n\nWrite a detailed summary of all the news articles, covering every event, in at least eight paragraphs.",
+   "prompt_tokens": 36104,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "multi_news_e/7e67283535da954db448324ee34bed1d96e5e3d3587f671e",
+   "file": "multi_news_e",
+   "row": 214,
+   "ctx": "a6f311755d011ce9",
+   "task": "multi_news",
+   "user_template": "News articles:\n\n{context}\n\nWrite a detailed summary of all the news articles, covering every event, in at least eight paragraphs.",
+   "prompt_tokens": 36998,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "multi_news_e/bdaddc2a7890f334604f25c851178459ca0eb40e386aff1d",
+   "file": "multi_news_e",
+   "row": 263,
+   "ctx": "a237f9a99b9b8734",
+   "task": "multi_news",
+   "user_template": "News articles:\n\n{context}\n\nWrite a detailed summary of all the news articles, covering every event, in at least eight paragraphs.",
+   "prompt_tokens": 36646,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/36232c9c63d19d282643657b3da5b688cb14e3b44009c494",
+   "file": "narrativeqa",
+   "row": 4,
+   "ctx": "7707dd9dee3fcf30",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 37005,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/677af5490eddd9e1d2ecd66ab0d1e038d1f7e7c5e985accf",
+   "file": "narrativeqa",
+   "row": 18,
+   "ctx": "62b7c3681d3a6c04",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 32903,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/67933dc11fce5ce5b80acc04541f0442117aca5eccc06b6f",
+   "file": "narrativeqa",
+   "row": 10,
+   "ctx": "994ea4ff500e7668",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 36312,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/949abce7e7abc634fc08ff28f996a235ddd6041358bee155",
+   "file": "narrativeqa",
+   "row": 22,
+   "ctx": "a660638e9128f564",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 60359,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/acc4bde34060bc451a73e0e1e0d0bc7e1ca93695bc8112a1",
+   "file": "narrativeqa",
+   "row": 62,
+   "ctx": "f8f813bd0360c238",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "max_context_tokens": 62000,
+   "prompt_tokens": 62032,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/b91ede2d2d08ea6f5f3b894c932b70e141665dd59d334dc8",
+   "file": "narrativeqa",
+   "row": 35,
+   "ctx": "32cfca10e4664a87",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 38141,
+   "split": "dev",
+   "band": "32-64K"
+  },
+  {
+   "rid": "narrativeqa/f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726",
+   "file": "narrativeqa",
+   "row": 7,
+   "ctx": "ca530752853c92b8",
+   "task": "narrativeqa",
+   "user_template": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, covering every part of the plot, in at least eight paragraphs.",
+   "prompt_tokens": 46730,
+   "split": "dev",
+   "band": "32-64K"
+  }
+ ]
+}
