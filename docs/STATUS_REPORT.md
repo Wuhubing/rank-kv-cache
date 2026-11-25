@@ -15,9 +15,9 @@
 
 ### 0.1 新主线：高效替换策略（§9）
 
-**正式结论（21 篇 held-out，预注册，只评估一次）：一个每个 page 只存一个浮点数的 score EMA 策略，稳定地填上了 LRU 到 Bélády 差距的 28%；再加上按层分配 slot，能填上 40%。在 L4 + Qwen3-0.6B 上，用融合 kernel 实现后，它的开销和 LRU 相同、PCIe 流量少 10–19%，但延迟只是持平，没有变快。**
+**正式结论（21 篇 held-out，预注册，只评估一次）：一个每个 page 只存一个浮点数的 score EMA 策略，稳定地填上了 LRU 到 Bélády 差距的 28%；再加上按层分配 slot，在总 slot 数相同的前提下 repeat miss 比 LRU 少 16.6%（EMA 单独是 11.6%）。分配后的 G 0.40 是相对每层均匀 budget 的 LRU/Bélády 算的，不能读成"填上 40% 的差距"，同分配下的 Bélády 还没算。在 L4 + Qwen3-0.6B 上，用融合 kernel 实现后，它的开销和 LRU 相同、PCIe 流量少 10–19%，但延迟只是持平，没有变快。**
 
-1. **为什么换主线。** 第一部分发现 rank 没用；消融（§9.4）说明原因是 trace v1 只记录了排名，丢掉了未选中 page 的当前分数，而这个分数恰恰是驱逐最需要的信息。
+1. **为什么换主线。** 第一部分发现 rank 没用；消融（§9.4）说明原因是 trace v1 只记录了选中 page 的排名，丢掉了未选中 page 的当前分数信息，而这恰恰是驱逐最需要的信息。至于起作用的是分数大小，还是未选中 page 之间的排序，现有消融分不清（全 page 排名对照已实现，dev 结果待跑）。
 2. **新设定。** trace v2 记录每一步所有历史 page 的 Quest 分数；上下文 16–32K token；带思考的长摘要，生成 473–1016 步。主 budget 是 B=96（B/K=1.5），此时 LRU 的 miss rate 约 6%，Bélády 约 3.9%。
 3. **held-out 结果（B=96）**：
 
@@ -25,9 +25,11 @@
    |---|---|---|
    | score EMA 的 G，CI 下界 | > 0.15 | **G 0.281**，CI [0.277, 0.285] |
    | EMA 优于 LRU 的文档数 | ≥ 18/21 | **21/21** |
-   | 分配 + EMA 显著优于 EMA | 配对 CI > 0 | **G 0.402**，ΔG +0.120 [0.113, 0.128] |
+   | 分配 + EMA 显著优于 EMA | 配对 CI > 0 | **G 0.402**†，ΔG +0.120 [0.113, 0.128] |
 
-   dev 和 held-out 几乎一致（EMA 0.279 对 0.281，分配 + EMA 0.409 对 0.402），策略排名不变。
+   dev 和 held-out 几乎一致（EMA 0.279 对 0.281，分配 + EMA 0.409 对 0.402†），策略排名不变。
+
+   † 分配 + EMA 的 G 相对的是**每层均匀 budget** 的 LRU 和 Bélády。slot 在层间移动后，均匀 budget 的 Bélády 不是这个分配下的最优，所以它不是"差距的比例"；在总 slot 相同（28·B）时可靠的比较是 repeat miss 比 LRU 少 16.6%。要说"差距的比例"，先要算同一组每层 budget 下的 Bélády（`validation/alloc_oracle.py`，需要原始 trace，待跑）。
 4. **定位。** score EMA 本质上是"InfLLM 的衰减分数规则，用在所有驻留 page 的 Quest 上界分数上"，不是新规则。贡献在于 page 级的系统比较、衰减随 budget 的扫描、找出所需信息的消融，以及按层分配和分数规则可以叠加。
 5. **GPU 延迟（L4）。**
    - 真实卸载 cache 选出的 page 和生成的 token 都与 trace 完全一致，miss 数与模拟器吻合。
@@ -514,17 +516,20 @@ python3 gap_analysis.py results/dev_pilot --trace trace_truncated.jsonl --out re
 |---|---|---|---|
 | **score EMA**（α=0.5，14 折都选了它） | 5.42% | **+0.279** [0.274, 0.284] | 14/14 |
 | 当前分数，不平均（KVDrive 式） | 5.50% | +0.244 [0.236, 0.251] | 14/14 |
-| **按层分配 + score EMA** | 5.14% | **+0.409** | — |
-| 按层分配 + LRU | 5.75% | +0.127 | — |
+| **按层分配 + score EMA** | 5.14% | **+0.409**† | — |
+| 按层分配 + LRU | 5.75% | +0.127† | — |
 | 线性下次使用距离回归（DAgger） | 5.38% | +0.300 [0.295, 0.305] | 14/14 |
 | InfLLM 式衰减求和，所有驻留 page | 5.44% | +0.269 | 14/14 |
 | 衰减选中计数，不看分数（MoE 式） | 5.93% | +0.044 | 14/14 |
 | 第一部分的 rank 策略 | 5.97% | +0.027 | 14/14 |
 | ARC / LRU-2 / LFU / FIFO | 6.04 / 6.13 / 7.85 / 8.18% | −0.01 / −0.05 / −0.84 / −1.00 | — |
 
+† 相对每层均匀 budget 的 LRU/Bélády，不是同分配下的差距比例（见 §0.1 的说明）。
+
 **结论 1：有用的信息是"未选中驻留 page 的当前分数"。** 推导来自消融（B=96 的 G）：
 - EMA 每步更新所有驻留 page：+0.279。只在 page 被选中时更新：−1.596，远差于 LRU，因为过时的高分把已经不在 top-K 附近的 page 钉住了。
-- 把分数换成排名（v1 里唯一的信息）：+0.016，基本等于 LRU。**这解释了第一部分的负面结果：v1 恰好丢掉了有用的信号。**
+- 把分数换成 top-K 内的排名（v1 里唯一的信息）：+0.016，基本等于 LRU。这和第一部分的负面结果一致：v1 缺少有用的信号。但这个变体给所有未选中 page 都记 0，**同时**去掉了分数大小和未选中 page 之间的排序，所以**不能**说明"分数大小是关键"。
+- 决定性的对照已实现、dev 结果待跑：`ScoreEMA(signal="allrank")`，取每个 page 的分数在该步所有可选 page 中的百分位排名（并列取平均名次），更新范围、α 网格和 LODO 选法都和 z 相同。接近 z 说明排序就够；掉到 0.016 附近说明大小才关键。运行：`python3 validation/rank_control_dev.py DEV_TRACES --out results/rank_control`。
 - 不做平均、只用当前分数：+0.244。平均带来约 +0.035。
 
 **结论 2：这条规则不是新规则。** InfLLM 的衰减求和（用所有驻留 page 上 Quest 上界的 softmax 代替注意力概率）得到 +0.269，每个 budget 下都和 EMA 相差 0.01–0.04。所以报告里把它写成"InfLLM 式衰减分数规则，用在 Quest 分数上"，贡献是测量和消融。
@@ -532,7 +537,7 @@ python3 gap_analysis.py results/dev_pilot --trace trace_truncated.jsonl --out re
 **结论 3：按层分配和分数规则可以叠加。**
 - 差距集中在少数几层，所以按每层的 miss 曲线贪心分配 slot（总量保持 28·B）。
 - LODO 分配能拿到 oracle 分配收益的 89–94%，不同折之间几乎一样。
-- B=96 时 EMA 0.279 加上分配 + LRU 0.127，合计 0.406，实际的分配 + EMA 是 0.409，接近相加。
+- B=96 时 EMA 0.279 加上分配 + LRU 0.127，合计 0.406，实际的分配 + EMA 是 0.409，接近相加（分配后的 G 均相对均匀 budget 锚点）。
 - KVDrive 式精确 knapsack 分配和贪心结果相同；按 LRU–Bélády 差距比例分配反而更差（−0.32）。
 
 **结论 4：效果稳定。**
@@ -580,7 +585,7 @@ Quest 本身每层每步要算约 6–8 MFLOP，EMA 只加约 400 FLOP，不到 
 
 **budget 曲线（21 篇合并）：**
 
-| B（B/K） | LRU miss | Bélády | EMA G | 分配 + EMA G | InfLLM 式 G | 当前分数 G | 线性 G |
+| B（B/K） | LRU miss | Bélády | EMA G | 分配 + EMA G† | InfLLM 式 G | 当前分数 G | 线性 G |
 |---|---|---|---|---|---|---|---|
 | 72（1.125） | 11.50% | 8.81% | 0.257 | 0.257* | 0.239 | 0.229 | – |
 | 80（1.25） | 8.88% | 6.19% | 0.276 | 0.307 | 0.257 | 0.249 | – |
@@ -588,9 +593,9 @@ Quest 本身每层每步要算约 6–8 MFLOP，EMA 只加约 400 FLOP，不到 
 | 128（2） | 3.56% | 2.19% | 0.271 | 0.528 | 0.266 | 0.224 | 0.314 |
 | 256（4） | 1.38% | 0.98% | 0.242 | 0.242* | 0.216 | 0.145 | 0.336 |
 
-\* B=72 和 256 时分配网格到了边界，冻结的分配是均匀的，所以等于 EMA。
+\* B=72 和 256 时分配网格到了边界，冻结的分配是均匀的，所以等于 EMA。† 相对每层均匀 budget 的 LRU/Bélády。
 
-B=96 时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.6%，Bélády 41.3%。dev 和 held-out 几乎一致，策略排名不变。
+B=96、总 slot 相同时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.6%，Bélády 41.3%。dev 和 held-out 几乎一致，策略排名不变。
 
 ### 9.6 GPU 延迟测试（[`gpu_benchmark.md`](gpu_benchmark.md)）
 
@@ -693,6 +698,8 @@ p90 比中位数高 1.5–2.5 ms，重复运行之间最多差约 1.5 ms，**四
 - 只有 14 篇 dev 和 21 篇 held-out，来自 2 个任务、一种 prompt。CI 窄说明各文档效果一致，不说明覆盖面广。
 - 只有一个主模型（Qwen3-0.6B）和一种选择器；1.7B 和第二种 prompt 只在 dev 上抽查。
 - G 是相对 page 级 Bélády 算的；结论不能直接推到 token 级缓存。
+- 按层分配的 G 用的是每层均匀 budget 的 LRU/Bélády 锚点，不是同分配下的最优；同分配 Bélády（`validation/alloc_oracle.py`）待在原始 trace 上跑。
+- "分数大小 vs 排名"未定：现有的排名消融同时去掉了大小和未选中 page 的排序；全 page 排名对照（`validation/rank_control_dev.py`）待在 dev trace 上跑。
 - InfLLM baseline 用 Quest 上界的 softmax 代替真实注意力质量。
 - 延迟只在一种 GPU、batch=1、3 篇文档上测过；GPU 忙碌时间只 profile 了一篇文档。
 
@@ -713,6 +720,10 @@ python3 efficient_dev.py DEV_TRACES --out results/efficient_dev
 python3 checks.py DEV_TRACES --res results/efficient_dev --budgets 96 128 256
 python3 heldout.py freeze DEV_TRACES --out frozen.json
 python3 heldout.py eval HELDOUT_TRACES --frozen splits/heldout_frozen_v1.json --out results/heldout_longctx
+# 待跑：全 page 排名对照（只用 dev）和同分配 Bélády 锚点
+python3 validation/rank_control_dev.py DEV_TRACES --out results/rank_control
+python3 validation/alloc_oracle.py dev DEV_TRACES --out results/alloc_oracle_dev
+python3 validation/alloc_oracle.py heldout HELDOUT_TRACES --out results/alloc_oracle_heldout
 ```
 
 `DEV_TRACES` 和 `HELDOUT_TRACES` 是放 npz trace 的目录。以上脚本都需要 numpy。`gpu_bench.py` 在 Colab 上和模型一起运行。
