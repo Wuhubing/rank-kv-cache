@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 
 import kvpolicy as kp
+from gap_analysis import auc as tie_aware_auc
 
 GRID = [64, 72, 80, 88, 96, 104, 112, 128, 160, 192, 256]
 CURVE = [72, 80, 96, 128, 256]
@@ -65,12 +66,13 @@ def next_use_table(rows):
     return uses
 
 
-def collect(path, B, coef=None, layers=None):
+def collect(path, B, coef=None, layers=None, *, track_horizon=False):
     """Run the linear policy (coef None = LRU behaviour) and return per-decision features,
     log next-use targets, and LRU-victim flags, plus misses per layer."""
     R, S, rid = kp.load(path)
     T = R.shape[0]
     Xs, ys, victim, soon = [], [], [], []
+    horizon = []
     misses = {}
     for l in (range(R.shape[1]) if layers is None else layers):
         uses = next_use_table(R[:, l])
@@ -92,9 +94,14 @@ def collect(path, B, coef=None, layers=None):
             ys.append(np.log1p(np.minimum(d, 1024)))
             victim.append(np.array([p in vs for p in cands]))
             soon.append(d <= H)
+            if track_horizon:
+                horizon.append(np.full(len(cands), t + H < T, dtype=bool))
     cat = (lambda a: np.concatenate(a) if a else np.zeros(0))
-    return dict(rid=rid, X=np.vstack(Xs) if Xs else np.zeros((0, len(kp.FEATURES))),
+    result = dict(rid=rid, X=np.vstack(Xs) if Xs else np.zeros((0, len(kp.FEATURES))),
                 y=cat(ys), victim=cat(victim), soon=cat(soon), misses=misses)
+    if track_horizon:
+        result["complete_horizon"] = cat(horizon).astype(bool, copy=False)
+    return result
 
 
 def bypass_doc(path, B, name):
@@ -125,12 +132,8 @@ def ridge(X, y, lam=1.0, sub=200000, seed=0):
 
 
 def auc(score, label):
-    label = np.asarray(label, bool)
-    n1, n0 = label.sum(), (~label).sum()
-    if n1 == 0 or n0 == 0:
-        return float("nan")
-    r = np.argsort(np.argsort(score, kind="stable"), kind="stable") + 1
-    return (r[label].sum() - n1 * (n1 + 1) / 2) / (n1 * n0)
+    value = tie_aware_auc(np.asarray(score), np.asarray(label, dtype=bool))
+    return float("nan") if value is None else value
 
 
 def write(path, header, rows):

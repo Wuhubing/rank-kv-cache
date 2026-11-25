@@ -28,7 +28,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 - 最初的想法是用 page 在 top-K 里的**排名**来决定换出谁。
 - 结果 G ≈ 0.027，几乎等于 LRU。
-- 反思后发现：v1 trace 只记录了被选中 page 的排名，**丢掉了两样关键信息**：分数的具体大小，以及没被选中的 page 当前的分数。排名只告诉你"第几"，不告诉你"差多少"，也不告诉你"刚掉出 top-K 的 page 还差一点就能回来"。
+- 反思后发现：v1 trace 只记录了被选中 page 的排名，**丢掉了两样关键信息**：分数的具体大小，以及没被选中的 page 当前的分数。排名只告诉你"第几"，不告诉你"差多少"，也不告诉你"刚掉出 top-K 的 page 还差一点就能回来"。（这两样里到底哪一样起作用，现有消融还分不清，见 §6。）
 
 ### 4. 核心直觉：分数会延续
 
@@ -53,7 +53,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 | 只看当前一步的分数（KVDrive 式） | 0.244 | 分数本身就有用 |
 | **分数 EMA** | **0.279** | 平滑掉噪声后更好 |
 | 只在 page 被选中时才更新 | EMA 版 −1.596；InfLLM 式 0.028 | 远差于或几乎等于 LRU，说明**必须更新所有驻留 page** |
-| 用排名代替分数 | 0.016 | 几乎没用，说明**分数大小是关键**，这正是 rank 失败的原因 |
+| 用 top-K 内排名代替分数（未选中 page 一律记 0） | 0.016 | 几乎没用。但这个变体**同时**去掉了分数大小和未选中 page 之间的排序，所以分不清是哪一样起作用。决定性的对照（对全部可选 page 按分数取百分位排名，`signal="allrank"`）已经实现，dev 结果待跑（`validation/rank_control_dev.py`） |
 | 衰减计数（只数被选中几次） | 0.044 | 频率信号很弱 |
 | LFU、ARC、LRU-2 等传统策略 | ≤ 0 | 都不如 LRU |
 | 线性回归预测下一次使用时间（学习式） | 0.300 | 只多一点，代价是每页存约 5 个数 |
@@ -62,7 +62,7 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 - 观察到差距集中在少数几层：有的层 page 选择很稳定，有的层变化剧烈。
 - 用 dev 上每层的 miss 曲线，在总预算 28·B 不变的前提下，给"难"的层多分槽位、"简单"的层少分。
-- 和分数 EMA 几乎线性叠加：0.279 + 0.127 ≈ **0.409**。
+- 和分数 EMA 几乎线性叠加：0.279 + 0.127 ≈ **0.409**（G 相对的是**每层均匀预算**的 LRU 和 Bélády；槽位在层间移动后，均匀预算的 Bélády 不再是这个分配下的最优，所以这不是"补上差距的比例"。同分配下的 Bélády 需要原始 trace，代码在 `validation/alloc_oracle.py`，结果待跑）。
 
 ### 8. 结果
 
@@ -70,25 +70,25 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 **预注册后的 held-out（21 篇，只评估一次）**：
 - 分数 EMA：G **0.281** [0.277, 0.285]，**21/21** 篇好于 LRU。
-- 加按层分配：G **0.402**。
-- repeat miss 比 LRU 少 11.6%；加按层分配后少 16.6%。
+- 在总槽位相同（每篇 28·96）的前提下，repeat miss 比 LRU 少 **11.6%**；加按层分配后少 **16.6%**。
+- 加按层分配后 G 为 0.402，但这是相对**均匀预算**的 LRU/Bélády 算的，不能读作"补上 40% 的差距"（见 §7）。
 - 三条成功标准全部达到。
 
 **真实 GPU（L4，Qwen3-0.6B）**：
-- miss 数和模拟器一致，PCIe 流量少 10–19%。
+- miss 数和模拟器一致，PCIe 流量少约 9.3–9.8%（EMA 单独）、13–19%（EMA + 按层分配）。
 - 第一版未融合实现里，EMA 反而慢一点（93.1 对 86.6 ms/token），因为多了很多小 kernel。
 - **把策略写成融合 Triton kernel 后**：EMA 的策略开销每 token 只比 LRU 多 0.084 ms；LRU 62.3、EMA 62.3、分配 + EMA 61.6、Bélády 62.1 ms/token，四者在噪声以内。
-- 也就是说，**EMA 不增加延迟，同时少传 10–19% 的数据**；但 batch 1 下传输只占 GPU 时间约 1%，所以也没变快。每个 page 的传输约 7.3 µs，估算 batch 32 时 EMA 每步约省 2.3 ms（未实测）。
+- 也就是说，**EMA 不增加延迟，同时少传约 9.3–9.8% 的数据（加按层分配为 13–19%）**；但 batch 1 下传输只占 GPU 时间约 1%，所以也没变快。每个 page 的传输约 7.3 µs，估算 batch 32 时 EMA 每步约省 2.3 ms（未实测）。
 
 ### 9. 一句话总结
 
-> 从 rank 失败中发现"分数大小 + 全体驻留 page 都要更新"是关键，于是用一个每页只存 1 个数的分数滑动平均来做换出决策。它稳定拿到 LRU→最优差距的 28%，加按层分配后是 40%，真实系统里 PCIe 流量减少 10–19%，用融合 kernel 实现后开销和 LRU 相同。但在小模型、单卡、batch 1 上，这些节省换不成延迟，只是持平。
+> 从 rank 失败中发现"未被选中 page 的当前分数 + 全体驻留 page 都要更新"是关键（起作用的是分数大小还是未选中 page 之间的排序，还在等全 page 排名对照的结果），于是用一个每页只存 1 个数的分数滑动平均来做换出决策。它稳定拿到 LRU→最优差距的 28%；加按层分配后，在总槽位相同时 repeat miss 比 LRU 少 16.6%（相对均匀预算锚点的 G 为 0.40，同分配 Bélády 待算），真实系统里 PCIe 流量减少约 9.3–9.8%（EMA 单独）、13–19%（加按层分配），用融合 kernel 实现后开销和 LRU 相同。但在小模型、单卡、batch 1 上，这些节省换不成延迟，只是持平。
 
 **定位**：这个规则和 InfLLM 的衰减分数规则很接近，本质是把它用在 Quest 分数上。贡献在于系统比较、消融分析、按层分配的叠加，以及"什么时候省下的 miss 能变成延迟"的真实测量。
 
 ## Team
 
-Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Jimmy Yu
+Jiayu Li, Mingxi Wang, Weibing Wang, Xiaoyang Wu, Xihang Yu
 
 ## Collecting traces
 

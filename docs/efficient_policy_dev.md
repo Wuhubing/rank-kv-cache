@@ -16,7 +16,7 @@ leave-one-document-out (LODO) on the 14 dev documents unless the text says "fixe
 - G = (LRU misses − policy misses) / (LRU misses − Bélády misses), pooled over all layers and documents.
   CIs come from a 2000-replicate document-clustered bootstrap. "Repeat-miss drop" is the relative
   reduction in misses on pages that had been selected before.
-- Code: `kvpolicy.py` (simulator and policies; 63 tests in the repo), `efficient_dev.py` (grid, LODO, allocation,
+- Code: `kvpolicy.py` (simulator and policies; `python3 -m pytest -q` runs 154 tests), `efficient_dev.py` (grid, LODO, allocation,
   learned models, gap analysis), `checks.py` (robustness, ablations). Raw outputs are backed up to
   Google Drive `rank-kv-cache/results_efficient_dev/` (misses per document × layer × config × budget).
 
@@ -27,8 +27,8 @@ leave-one-document-out (LODO) on the 14 dev documents unless the text says "fixe
 | LRU | 6.03% | 0 | 0 | — |
 | **score EMA** (α by LODO = 0.5 in every fold) | **5.42%** | **+0.279 [0.274, 0.284]** | 11.6% | 14/14 |
 | current score (no averaging; KVDrive-style) | 5.50% | +0.244 [0.236, 0.251] | 10.1% | 14/14 |
-| **per-layer allocation + score EMA** | **5.14%** | **+0.409** | ~16% | — |
-| per-layer allocation + LRU | 5.75% | +0.127 [0.113, 0.140] | 5.3% | — |
+| **per-layer allocation + score EMA** | **5.14%** | **+0.409**† | ~16% | — |
+| per-layer allocation + LRU | 5.75% | +0.127 [0.113, 0.140]† | 5.3% | — |
 | linear next-use regression (DAgger) | 5.38% | +0.300 [0.295, 0.305] | 12.4% | 14/14 |
 | InfLLM-style decayed sum, every resident, softmax (d by LODO = 0.5; d=0.1: G 0.264) | 5.44% | +0.269 [0.263, 0.274] | 11.2% | 14/14 |
 | InfLLM-style, updated only when selected (earlier proxy) | 5.97% | +0.028 | 1.2% | 14/14 |
@@ -36,6 +36,13 @@ leave-one-document-out (LODO) on the 14 dev documents unless the text says "fixe
 | rank policy from stage 1/2 (LODO) | 5.97% | +0.027 | 1.1% | 14/14 |
 | ARC / LRU-2 / LFU / FIFO | 6.04 / 6.13 / 7.85 / 8.18% | −0.01 / −0.05 / −0.84 / −1.00 | — | 3 / 0 / 0 / 0 |
 | Bélády (offline) | 3.86% | 1 | 41.5% | — |
+
+† G of the allocated rows is relative to **uniform-budget anchors** (LRU and Bélády with B slots in
+every layer). Once slots move between layers, uniform Bélády is not the optimum for that allocation,
+so these values are not a "fraction of the gap". At equal total slots (28·B) the comparison that holds
+is the miss rate or repeat-miss drop vs LRU. An allocation-aware oracle (Bélády at the same per-layer
+budgets) is needed before a gap fraction can be claimed; `validation/alloc_oracle.py dev TRACES`
+computes it from the raw traces (pending).
 
 **Score EMA** keeps one float per resident page. Each step it updates
 `e ← α·e + (1−α)·z`, with `z = (s − s_K) / (s_1 − s_K)`, where `s` is the page's current Quest score
@@ -82,6 +89,7 @@ miss starts at its current `z`.
 | normalised score z | **+0.279** | −1.596 |
 | raw score | +0.269 | — |
 | rank only (schema v1: (K−r+1)/K if selected, else 0) | +0.016 | −1.849 |
+| all-page percentile rank of the score (`signal="allrank"`, control) | pending | — |
 | current z, no averaging | +0.244 | — |
 
 7. **Which pages' scores are needed.** The gain depends entirely on updating unselected resident pages
@@ -90,10 +98,18 @@ miss starts at its current `z`.
      values pin pages that are no longer near the top-K.
    - The key information is therefore the **current score of candidate pages that were not selected**.
      Quest computes it for every page at every step anyway, so it costs nothing to obtain.
-8. **Magnitude versus rank.** Replacing scores by ranks, the only information in trace v1, removes
-   nearly all of the gain (G 0.279 → 0.016, about LRU).
-   - This explains the negative result of the rank project: the v1 trace discarded exactly the useful
-     signal.
+8. **Magnitude versus rank (unresolved).** Replacing scores by ranks among the selected pages, the
+   only information in trace v1, removes nearly all of the gain (G 0.279 → 0.016, about LRU).
+   - This ablation cannot distinguish score magnitude from ranking: it gives every unselected page the
+     same value 0, so it removes both the magnitude and the ordering among unselected pages. It does
+     show that the v1 trace (selected ranks only) lacks the useful signal, which is consistent with the
+     negative result of the rank project, but not which part of the score carries it.
+   - The decisive control is implemented and pending on the dev traces: `ScoreEMA(signal="allrank")`
+     averages each page's percentile rank among all eligible pages at the step (mid-rank ties), with
+     the same update scope, α grid and LODO selection as z. If it stays close to z, the ordering among
+     unselected pages carries the signal; if it falls to the selected-rank level, magnitude does. Run:
+     `python validation/rank_control_dev.py DEV_TRACES --out results/rank_control` (or the second part
+     of `notebooks/colab_rank_followup.ipynb`).
    - Averaging on top of the current score adds about +0.035 G.
    - "Score gap to the K-th page" orders candidates the same way as the current score within a step,
      so it is the same policy. Normalising the gap by (s_1 − s_K) matters only through the EMA (z vs
@@ -127,7 +143,8 @@ miss starts at its current `z`.
      LRU. This is the analogue of the MoE finding that non-admission is a sizeable share of Bélády's
      advantage.
    - Allocation and the score rule are close to additive: at B=96, EMA alone gives 0.279, allocation
-     with LRU 0.127, and allocation with EMA 0.409 (sum 0.406). At B=128 it is 0.540 against a sum of
+     with LRU 0.127, and allocation with EMA 0.409 (sum 0.406; allocated G relative to uniform-budget
+     anchors, see † above). At B=128 it is 0.540 against a sum of
      0.579, and at B=80 0.309 against 0.302.
 
 ### Gap analysis (LRU decisions at B=96)
@@ -200,7 +217,9 @@ the model.
 **Stable on dev:**
 - Score EMA beats LRU on every document, task, length band and budget, on a second model and on a
   second prompt.
-- The mechanism (current scores of unselected residents) and the failure of rank-only information.
+- The mechanism (current scores of unselected residents) and the failure of selected-only rank
+  information. Whether magnitude or the ordering among unselected pages matters is not settled
+  (item 8; all-page rank control pending).
 - LODO α choice per budget.
 - Allocation recovers about 90% of its oracle gain and adds to the score rule at B/K 1.25–2.
 
@@ -215,7 +234,7 @@ the model.
 ## Suggested GPU benchmark (2–3 policies)
 1. LRU (baseline).
 2. Score EMA with α frozen from dev (0.5 at B=96): the lowest-cost policy with most of the gain.
-3. Per-layer allocation + score EMA, the best G. If only two policies can be benchmarked, drop the
+3. Per-layer allocation + score EMA, the largest miss reduction at equal total slots. If only two policies can be benchmarked, drop the
    linear model; its 0.02–0.1 extra G costs more state.
 
 ## Held-out preregistration (approved 2026-11-23; executed once, all criteria met: see docs/heldout_results.md)
@@ -253,5 +272,3 @@ the model.
 6. How to frame the policy in the report: as InfLLM's decayed rule on Quest scores (recommended), with
    the contribution being the measurement and ablations.
 
-Housekeeping: `distill_kvrl.py` (abandoned RL distillation) is still untracked, unused and not
-deleted.

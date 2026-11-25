@@ -124,5 +124,5 @@ section; the other entries are abstract-level and must be checked before they ar
 **What we can claim (dev so far):**
 - A systematic comparison, under Quest upper-bound scores and a page-level recallable cache, of score-aware, frequency and learned (non-RL) policies, measured as the share of the Bélády gap closed, with LODO tuning and document-clustered CIs.
 - A decay-rate sweep showing the best decay rises with budget.
-- Ablations that isolate the needed information: the current scores of unselected residents. Rank-only information, as in trace v1, recovers almost nothing.
+- Ablations that isolate the needed information: the current scores of unselected residents. Selected-only rank information, as in trace v1, recovers almost nothing; that ablation also drops the ordering among unselected pages, so whether magnitude or that ordering carries the signal is pending the all-page rank control (`validation/rank_control_dev.py`).
 - The gap is concentrated in a few layers. Allocation by per-layer miss curves (equivalent to an exact knapsack) adds to the score rule. This is set against KVDrive's transfer-benefit criterion and HiSparse's "little cross-layer value".

@@ -14,6 +14,8 @@ import time
 
 import numpy as np
 import torch
+
+import bench_metrics as bm
 from torch.nn import functional as F
 from transformers import AttentionInterface, DynamicCache
 
@@ -216,7 +218,19 @@ def next_use(trace):
 @torch.inference_mode()
 def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing=False, warmup=8, zc=False):
     """Greedy decode `steps` tokens after the prefill. Returns per-step latencies (s), the ranked
-    pages per step [steps, L, K], generated ids, per-layer misses, and the timing breakdown."""
+    pages per step [steps, L, K], generated ids, per-layer misses, and the timing breakdown.
+
+    Raw arrays (`lat`, `misses`, `step_miss`, `breakdown`) cover every decode step; `warmup_mask`
+    marks the first `warmup` steps and `metrics` (bench_metrics.decode_metrics) reports raw and
+    steady-state (warm-up excluded) latency, misses and breakdown side by side.
+
+    Memory (bytes, torch.cuda.max_memory_allocated with a reset at each phase boundary):
+    `peak_prefill` (prefill forward), `peak_migration` (moving completed pages to the host tier;
+    tiered modes only), `peak_decode_warmup` / `peak_decode_steady` (decode steps before / from
+    `warmup`), `peak_mem` = the larger of the two decode peaks, and `mem_start` = allocated bytes at
+    the start of decode. The prefill ModelOutput and all views of the prefill cache are released
+    before the decode counters are reset, so tiered decode peaks no longer include the prefill KV."""
+    steps, warmup = bm.check_warmup(steps, warmup)
     cfg = model.config
     L = cfg.num_hidden_layers
     b = Bench(mode, budgets, alpha, timing=timing)
@@ -225,11 +239,17 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
     orig = cfg._attn_implementation
     try:
         cfg._attn_implementation = "sdpa"
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
         out = model(input_ids=ids, use_cache=True, logits_to_keep=1)
         cache = out.past_key_values
         tokn = out.logits[:, -1].argmax(-1, keepdim=True)
+        del out  # the ModelOutput also references the prefill cache
         gen = [tokn.item()]
+        peak_prefill = torch.cuda.max_memory_allocated()
+        torch.cuda.reset_peak_memory_stats()
         N = len(prompt)
+        peak_migration = None
         if mode in ("resident", "dense"):
             b.rb = {}
             if mode == "resident":
@@ -240,6 +260,7 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             if mode == "belady":
                 b.nxt_all = next_use(trace)
                 b.nxt_gpu = torch.as_tensor(b.nxt_all, device="cuda")
+            kf = vf = kp = vp = None
             for l in range(L):
                 kf, vf = cache.key_cache[l][0], cache.value_cache[l][0]
                 kvh, _, dim = kf.shape
@@ -248,7 +269,7 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
                 vp = vf[:, :n*PS].reshape(kvh, n, PS, dim).transpose(0, 1).cpu()
                 b.tiers[l] = Tier(kp, vp, kf[:, n*PS:].clone(), vf[:, n*PS:].clone(), budgets[l], pmax,
                                   mode, alpha, None)
-            del cache
+            del kf, vf, kp, vp, cache  # last-layer views would keep the prefill cache alive
             torch.cuda.empty_cache()
             cache = LenCache(N)
             for T in b.tiers.values():  # one dummy slot-table entry for masked scatters (zc path)
@@ -262,26 +283,56 @@ def run(model, prompt, mode, steps, budgets=None, alpha=None, trace=None, timing
             fn = b.quest_fused if zc == "fused" else (b.quest_zc if zc else b.quest_tiered)
             AttentionInterface.register(name, fn)
             cfg._attn_implementation = name
+            torch.cuda.synchronize()
+            peak_migration = torch.cuda.max_memory_allocated()
+        torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
+        mem_start = torch.cuda.memory_allocated()  # decode starting point (prefill KV freed for tiered modes)
+        peak_decode_warmup = None
         lat, ranks, brk = [], [], []
+        mg = [b.tiers[l].mgpu for l in range(L)] if (b.tiers and zc) else None
+        cum = torch.zeros((steps, L), dtype=torch.long, device="cuda") if mg else None
+        cum_host = [] if (b.tiers and not zc) else None
         for step in range(steps):
             b.step, b.rec, b.evs = step, [None] * L, []
             torch.cuda.synchronize()
+            if step == warmup and warmup > 0:  # phase boundary, outside the timed region
+                peak_decode_warmup = torch.cuda.max_memory_allocated()
+                torch.cuda.reset_peak_memory_stats()
             t0 = time.perf_counter()
             out = model(input_ids=tokn, past_key_values=cache, use_cache=True, logits_to_keep=1)
             cache = out.past_key_values
             tokn = out.logits[:, -1].argmax(-1, keepdim=True)
             gen.append(tokn.item())  # syncs
             lat.append(time.perf_counter() - t0)
+            if mg:  # outside the timed region; no host sync (copied once at the end)
+                torch.stack(mg, out=cum[step])
+            if cum_host is not None:
+                cum_host.append([b.tiers[l].misses for l in range(L)])
             if mode != "dense":
                 ranks.append(torch.stack(b.rec).cpu().numpy())
             if timing and b.evs:
                 torch.cuda.synchronize()
                 brk.append(np.array([[e[i].elapsed_time(e[i+1]) for i in range(5)] for e in b.evs]).sum(0))
+        torch.cuda.synchronize()
+        peak_decode_steady = torch.cuda.max_memory_allocated()
+        del out
         misses = ([int(b.tiers[l].mgpu) if zc else b.tiers[l].misses for l in range(L)]
                   if b.tiers else None)
-        return dict(lat=np.array(lat), ranks=np.array(ranks) if ranks else None, gen=gen, misses=misses,
-                    breakdown=np.array(brk) if brk else None, peak_mem=torch.cuda.max_memory_allocated())
+        step_miss = None
+        if mg:  # per-step, per-layer misses [steps, L] from the cumulative counters
+            step_miss = bm.step_misses(cum.cpu().numpy())
+        elif cum_host is not None:
+            step_miss = bm.step_misses(np.array(cum_host, dtype=np.int64))
+        lat, breakdown = np.array(lat), (np.array(brk) if brk else None)
+        metrics = bm.decode_metrics(lat, warmup, step_miss,
+                                    breakdown if breakdown is not None and len(breakdown) == steps else None)
+        return dict(lat=lat, ranks=np.array(ranks) if ranks else None, gen=gen, misses=misses,
+                    breakdown=breakdown, step_miss=step_miss, warmup=warmup,
+                    warmup_mask=bm.warmup_mask(steps, warmup), metrics=metrics,
+                    peak_mem=max(peak_decode_steady, peak_decode_warmup or 0), mem_start=mem_start,
+                    peak_prefill=peak_prefill, peak_migration=peak_migration,
+                    peak_decode_warmup=peak_decode_warmup, peak_decode_steady=peak_decode_steady)
     finally:
         cfg._attn_implementation = orig
         b.tiers.clear()

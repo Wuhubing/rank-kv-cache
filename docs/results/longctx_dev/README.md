@@ -5,6 +5,10 @@ Produced by `efficient_dev.py` (main study) and `checks.py` (checks A–E). Writ
 
 Shared columns: `doc` = task/doc id; `B` = per-layer slot budget (K=64); `misses` / `accesses` are page
 counts over all decode steps; `compulsory` = first-time accesses; G = (LRU − policy)/(LRU − Bélády) misses.
+For allocated policies (`alloc+*`, `checks_alloc*.csv`), LRU and Bélády are the uniform-budget anchors (B slots in every layer), so
+their G is not a fraction of the gap to the optimum at that allocation; `validation/alloc_oracle.py dev` adds same-allocation anchors
+when the raw traces are present. The all-page rank control (`validation/rank_control_dev.py`) is pending; its outputs belong in a new
+`rank_control/` subfolder, not in these files.
 
 | File | Contents | Doc section |
 |---|---|---|
