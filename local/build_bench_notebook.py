@@ -15,7 +15,16 @@ md(r"""
 
 Both are **GPU kernel times** summed with `torch.profiler` (launch gaps excluded), i.e. what an implementation without launch overhead (CUDA graphs / fused kernels) would see. Transfers are not overlapped with compute (worst case for the cache, best case for a better policy).
 
-**Run:** Runtime → Change runtime type → **L4** (A100/T4 also work; record which). Upload `miss_schedule.npz` (from `docs/results/mps_heldout/` on branch `xiaoyang/score-ema-final`) to `MyDrive/rank-kv-cache/` or when the upload prompt appears. Then **Runtime → Run all** (≈ 10–20 min). Results go to `MyDrive/rank-kv-cache/batch_bench/<GPU>-<time>/` (or a download if Drive is not mounted).
+**Run:** Runtime → Change runtime type → **L4** (A100/T4 also work). Then **Runtime → Run all**. The first code cell shows a **Choose Files** button: upload `miss_schedule.npz`. The rest runs by itself (≈ 10–20 min) and ends by downloading `batch_bench_<GPU>.zip` (`batch_bench.csv`, `batch_bench.png`, `meta.json`). Send that zip back.
+""")
+
+code(r"""
+# Step 1: upload miss_schedule.npz (click "Choose Files" below)
+from google.colab import files
+_up = files.upload()
+assert any(n.endswith(".npz") for n in _up), "please upload miss_schedule.npz"
+SCHED_NAME = next(n for n in _up if n.endswith(".npz"))
+print("uploaded", SCHED_NAME, len(_up[SCHED_NAME]) // 1024, "KiB")
 """)
 
 code(r"""
@@ -37,21 +46,7 @@ POOL = 8192                      # host pages in the pinned pool (2 x 256 MiB)
 """)
 
 code(r"""
-# Miss schedule: upload or Drive
-SCHED = Path("/content/miss_schedule.npz")
-OUT_ROOT = None
-try:
-    from google.colab import drive
-    drive.mount("/content/drive")
-    OUT_ROOT = Path("/content/drive/MyDrive/rank-kv-cache/batch_bench")
-    if not SCHED.exists() and Path("/content/drive/MyDrive/rank-kv-cache/miss_schedule.npz").exists():
-        SCHED = Path("/content/drive/MyDrive/rank-kv-cache/miss_schedule.npz")
-except Exception as e:
-    print("Drive not mounted:", e)
-if not SCHED.exists():
-    from google.colab import files
-    up = files.upload()
-    SCHED = Path("/content") / next(iter(up))
+SCHED = Path("/content") / SCHED_NAME
 Z = np.load(SCHED)
 RIDS = [str(r) for r in Z["rids"]]
 BUDGETS = [int(b) for b in Z["budgets"]]
@@ -62,7 +57,7 @@ for B in BUDGETS:
     print(f"B={B}: misses over {len(RIDS)} documents", tot,
           {p: f"{1 - tot[p] / tot['lru']:+.1%}" for p in POLICIES})
 stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-OUT = (OUT_ROOT or Path("/content/batch_bench")) / f"{GPU.replace(' ', '_')}-{stamp}"
+OUT = Path("/content/batch_bench") / f"{GPU.replace(' ', '_')}-{stamp}"
 OUT.mkdir(parents=True, exist_ok=True)
 print("results ->", OUT)
 """)
@@ -248,10 +243,10 @@ print("\n B  batch  policy      pages/step  transfer ms  decode ms  share   save
 for r in rows:
     print(f"{r['B']:3d} {r['batch']:5d}  {r['policy']:9s} {r['pages_per_step']:10.0f} {r['transfer_ms_mean']:11.3f} "
           f"{r['decode_ms']:10.3f} {r['transfer_share']:6.1%} {r['saved_vs_lru_ms']:9.3f} {r['speedup_vs_lru']:+7.2%}")
-print("saved to", OUT)
-if OUT_ROOT is None:
-    import shutil; from google.colab import files
-    shutil.make_archive("/content/batch_bench", "zip", OUT); files.download("/content/batch_bench.zip")
+import shutil
+zip_path = shutil.make_archive(f"/content/batch_bench_{GPU.replace(' ', '_')}", "zip", OUT)
+print("saved to", OUT, "and", zip_path, "(downloading; also in the Files panel on the left)")
+files.download(zip_path)
 """)
 
 nb = {"cells": cells, "metadata": {"accelerator": "GPU", "colab": {"provenance": []},
