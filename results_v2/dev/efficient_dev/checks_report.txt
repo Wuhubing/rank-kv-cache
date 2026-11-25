@@ -1,0 +1,184 @@
+== A1/A2/A4  G and repeat-miss drop vs LRU (doc bootstrap 95% CI), docs better of 14, worst doc rel. change
+B= 72 lru                        miss 11.68%  G +0.000 [+0.000,+0.000]  repdrop  +0.0% [+0.0,+0.0]  better 0/14  worst +0.0%  
+B= 72 fifo                       miss 13.08%  G -0.511 [-0.521,-0.501]  repdrop -12.9% [-13.2,-12.5]  better 0/14  worst +13.1%  
+B= 72 lfu                        miss 12.40%  G -0.262 [-0.279,-0.245]  repdrop  -6.6% [-7.1,-6.2]  better 0/14  worst +7.8%  
+B= 72 lru2                       miss 11.52%  G +0.058 [+0.054,+0.061]  repdrop  +1.5% [+1.4,+1.5]  better 14/14  worst -1.1%  
+B= 72 arc                        miss 12.03%  G -0.128 [-0.132,-0.124]  repdrop  -3.2% [-3.3,-3.1]  better 0/14  worst +3.3%  
+B= 72 score                      miss 11.07%  G +0.225 [+0.223,+0.228]  repdrop  +5.7% [+5.6,+5.8]  better 14/14  worst -4.9%  
+B= 72 belady                     miss  8.95%  G +1.000 [+1.000,+1.000]  repdrop +25.2% [+24.8,+25.5]  better 14/14  worst -22.4%  
+B= 72 rank(stage1-2) [lodo]      miss 11.39%  G +0.108 [+0.102,+0.113]  repdrop  +2.7% [+2.6,+2.8]  better 14/14  worst -2.1%  rank:0:2
+B= 72 hybrid [lodo]              miss 11.08%  G +0.223 [+0.220,+0.225]  repdrop  +5.6% [+5.5,+5.7]  better 14/14  worst -4.7%  hybrid:64:0
+B= 80 lru                        miss  9.01%  G +0.000 [+0.000,+0.000]  repdrop  +0.0% [+0.0,+0.0]  better 0/14  worst +0.0%  
+B= 80 fifo                       miss 10.98%  G -0.719 [-0.736,-0.700]  repdrop -24.1% [-24.9,-23.4]  better 0/14  worst +24.1%  
+B= 80 lfu                        miss 10.43%  G -0.517 [-0.544,-0.489]  repdrop -17.4% [-18.2,-16.4]  better 0/14  worst +18.5%  
+B= 80 lru2                       miss  8.90%  G +0.037 [+0.028,+0.045]  repdrop  +1.2% [+0.9,+1.5]  better 13/14  worst +0.2%  
+B= 80 arc                        miss  9.13%  G -0.044 [-0.047,-0.040]  repdrop  -1.5% [-1.6,-1.3]  better 0/14  worst +1.7%  
+B= 80 score                      miss  8.33%  G +0.246 [+0.243,+0.248]  repdrop  +8.2% [+8.1,+8.4]  better 14/14  worst -7.1%  
+B= 80 belady                     miss  6.26%  G +1.000 [+1.000,+1.000]  repdrop +33.6% [+33.3,+33.9]  better 14/14  worst -29.7%  
+B= 80 rank(stage1-2) [lodo]      miss  8.77%  G +0.087 [+0.077,+0.095]  repdrop  +2.9% [+2.6,+3.2]  better 14/14  worst -1.6%  rank:4:2
+B= 80 hybrid [lodo]              miss  8.32%  G +0.248 [+0.245,+0.250]  repdrop  +8.3% [+8.2,+8.4]  better 14/14  worst -7.1%  hybrid:64:0
+B= 96 lru                        miss  6.04%  G +0.000 [+0.000,+0.000]  repdrop  +0.0% [+0.0,+0.0]  better 0/14  worst +0.0%  
+B= 96 fifo                       miss  8.20%  G -0.995 [-1.018,-0.969]  repdrop -41.3% [-42.6,-40.1]  better 0/14  worst +40.0%  
+B= 96 lfu                        miss  7.89%  G -0.855 [-0.894,-0.810]  repdrop -35.5% [-37.0,-33.8]  better 0/14  worst +35.1%  
+B= 96 lru2                       miss  6.15%  G -0.052 [-0.062,-0.044]  repdrop  -2.2% [-2.6,-1.8]  better 0/14  worst +3.0%  
+B= 96 arc                        miss  6.06%  G -0.012 [-0.014,-0.009]  repdrop  -0.5% [-0.6,-0.4]  better 0/14  worst +0.7%  
+B= 96 score                      miss  5.52%  G +0.240 [+0.235,+0.246]  repdrop +10.0% [+9.7,+10.3]  better 14/14  worst -7.9%  
+B= 96 belady                     miss  3.87%  G +1.000 [+1.000,+1.000]  repdrop +41.5% [+41.0,+42.2]  better 14/14  worst -34.7%  
+B= 96 lru_hit_first              miss  6.13%  G -0.044 [-0.047,-0.042]  repdrop  -1.8% [-1.9,-1.7]  better 0/14  worst +1.9%  
+B= 96 lru_id                     miss  6.10%  G -0.029 [-0.030,-0.027]  repdrop  -1.2% [-1.2,-1.1]  better 0/14  worst +1.2%  
+B= 96 dsum_softmax:0.1           miss  5.47%  G +0.262 [+0.257,+0.267]  repdrop +10.9% [+10.6,+11.1]  better 14/14  worst -8.7%  
+B= 96 dsum_raw:0.1               miss  5.48%  G +0.255 [+0.250,+0.260]  repdrop +10.6% [+10.3,+10.9]  better 14/14  worst -8.5%  
+B= 96 dsum_softmax:0.5           miss  5.46%  G +0.266 [+0.261,+0.271]  repdrop +11.0% [+10.8,+11.3]  better 14/14  worst -8.8%  
+B= 96 dsum_raw:0.5               miss  6.15%  G -0.051 [-0.059,-0.042]  repdrop  -2.1% [-2.4,-1.7]  better 0/14  worst +2.6%  
+B= 96 dsum_softmax:0.9           miss  6.43%  G -0.183 [-0.207,-0.156]  repdrop  -7.6% [-8.6,-6.5]  better 0/14  worst +8.8%  
+B= 96 dsum_raw:0.9               miss  7.20%  G -0.538 [-0.558,-0.516]  repdrop -22.3% [-23.2,-21.5]  better 0/14  worst +22.2%  
+B= 96 dcount:0.5                 miss  5.99%  G +0.020 [+0.019,+0.021]  repdrop  +0.8% [+0.8,+0.9]  better 14/14  worst -0.5%  
+B= 96 dcount:0.8                 miss  5.95%  G +0.040 [+0.030,+0.051]  repdrop  +1.7% [+1.3,+2.1]  better 14/14  worst -0.4%  
+B= 96 dcount:0.9                 miss  6.17%  G -0.062 [-0.079,-0.043]  repdrop  -2.6% [-3.3,-1.8]  better 2/14  worst +3.9%  
+B= 96 dcount:0.95                miss  6.54%  G -0.230 [-0.253,-0.204]  repdrop  -9.6% [-10.4,-8.5]  better 0/14  worst +9.9%  
+B= 96 dcount:0.99                miss  7.24%  G -0.555 [-0.581,-0.526]  repdrop -23.1% [-24.1,-21.9]  better 0/14  worst +22.4%  
+B= 96 ema(z,all) [lodo]          miss  5.43%  G +0.279 [+0.274,+0.283]  repdrop +11.6% [+11.3,+11.8]  better 14/14  worst -9.3%  ema:0.5
+B= 96 ema(z,selected) [lodo]     miss  9.57%  G -1.627 [-1.699,-1.554]  repdrop -67.6% [-70.4,-64.8]  better 0/14  worst +66.1%  ema_sel:0.7
+B= 96 ema(rank,all) [lodo]       miss  6.00%  G +0.017 [+0.015,+0.019]  repdrop  +0.7% [+0.6,+0.8]  better 14/14  worst -0.4%  ema_rank:0.3
+B= 96 ema(rank,selected) [lodo]  miss 10.09%  G -1.868 [-1.934,-1.803]  repdrop -77.6% [-80.3,-74.9]  better 0/14  worst +74.7%  ema_rank_sel:0.5
+B= 96 ema(raw,all) [lodo]        miss  5.46%  G +0.267 [+0.262,+0.272]  repdrop +11.1% [+10.8,+11.4]  better 14/14  worst -8.9%  ema_raw:0.3
+B= 96 infllm [lodo]              miss  5.98%  G +0.026 [+0.022,+0.030]  repdrop  +1.1% [+0.9,+1.3]  better 14/14  worst -0.5%  infllm:0.5
+B= 96 rank(stage1-2) [lodo]      miss  5.97%  G +0.029 [+0.023,+0.035]  repdrop  +1.2% [+1.0,+1.5]  better 14/14  worst -0.4%  rank:4:2
+B= 96 hybrid [lodo]              miss  5.49%  G +0.250 [+0.247,+0.253]  repdrop +10.4% [+10.2,+10.6]  better 14/14  worst -8.6%  hybrid:64:0
+B= 96 InfLLM decayed sum (softmax, all residents) [lodo] miss  5.46%  G +0.266 [+0.261,+0.271]  repdrop +11.0% [+10.8,+11.3]  better 14/14  worst -8.8%  dsum_softmax:0.5
+B= 96 decayed sum (raw score) [lodo] miss  5.48%  G +0.255 [+0.250,+0.260]  repdrop +10.6% [+10.3,+10.9]  better 14/14  worst -8.5%  dsum_raw:0.1
+B= 96 decayed count (no score) [lodo] miss  5.95%  G +0.040 [+0.030,+0.051]  repdrop  +1.7% [+1.3,+2.1]  better 14/14  worst -0.4%  dcount:0.8
+B=128 lru                        miss  3.57%  G +0.000 [+0.000,+0.000]  repdrop  +0.0% [+0.0,+0.0]  better 0/14  worst +0.0%  
+B=128 fifo                       miss  5.26%  G -1.212 [-1.245,-1.182]  repdrop -61.1% [-63.7,-59.0]  better 0/14  worst +54.4%  
+B=128 lfu                        miss  5.13%  G -1.114 [-1.177,-1.050]  repdrop -56.2% [-59.1,-53.3]  better 0/14  worst +52.1%  
+B=128 lru2                       miss  3.76%  G -0.136 [-0.152,-0.119]  repdrop  -6.9% [-7.5,-6.1]  better 0/14  worst +7.2%  
+B=128 arc                        miss  3.59%  G -0.009 [-0.015,-0.003]  repdrop  -0.5% [-0.7,-0.2]  better 4/14  worst +1.1%  
+B=128 score                      miss  3.27%  G +0.216 [+0.202,+0.230]  repdrop +10.9% [+10.2,+11.6]  better 14/14  worst -5.9%  
+B=128 belady                     miss  2.18%  G +1.000 [+1.000,+1.000]  repdrop +50.4% [+49.5,+51.4]  better 14/14  worst -37.0%  
+B=128 lru_hit_first              miss  3.60%  G -0.019 [-0.020,-0.018]  repdrop  -0.9% [-1.0,-0.9]  better 0/14  worst +0.9%  
+B=128 lru_id                     miss  3.59%  G -0.012 [-0.013,-0.011]  repdrop  -0.6% [-0.6,-0.6]  better 0/14  worst +0.6%  
+B=128 dsum_softmax:0.1           miss  3.24%  G +0.239 [+0.225,+0.251]  repdrop +12.0% [+11.4,+12.7]  better 14/14  worst -7.1%  
+B=128 dsum_raw:0.1               miss  3.26%  G +0.226 [+0.212,+0.239]  repdrop +11.4% [+10.7,+12.0]  better 14/14  worst -6.4%  
+B=128 dsum_softmax:0.5           miss  3.21%  G +0.261 [+0.251,+0.271]  repdrop +13.2% [+12.7,+13.7]  better 14/14  worst -8.5%  
+B=128 dsum_raw:0.5               miss  3.78%  G -0.145 [-0.164,-0.125]  repdrop  -7.3% [-8.3,-6.4]  better 0/14  worst +9.4%  
+B=128 dsum_softmax:0.9           miss  3.80%  G -0.160 [-0.190,-0.131]  repdrop  -8.1% [-9.5,-6.7]  better 0/14  worst +10.7%  
+B=128 dsum_raw:0.9               miss  4.70%  G -0.808 [-0.860,-0.763]  repdrop -40.8% [-43.7,-38.5]  better 0/14  worst +41.3%  
+B=128 dcount:0.5                 miss  3.56%  G +0.009 [+0.008,+0.010]  repdrop  +0.5% [+0.4,+0.5]  better 14/14  worst -0.3%  
+B=128 dcount:0.8                 miss  3.50%  G +0.051 [+0.045,+0.056]  repdrop  +2.6% [+2.2,+2.9]  better 14/14  worst -1.4%  
+B=128 dcount:0.9                 miss  3.58%  G -0.002 [-0.020,+0.018]  repdrop  -0.1% [-1.0,+0.9]  better 7/14  worst +1.9%  
+B=128 dcount:0.95                miss  3.81%  G -0.170 [-0.203,-0.136]  repdrop  -8.6% [-10.2,-6.9]  better 0/14  worst +11.3%  
+B=128 dcount:0.99                miss  4.50%  G -0.668 [-0.718,-0.615]  repdrop -33.7% [-36.3,-31.1]  better 0/14  worst +32.3%  
+B=128 ema(z,all) [lodo]          miss  3.20%  G +0.267 [+0.258,+0.276]  repdrop +13.5% [+13.1,+13.9]  better 14/14  worst -8.8%  ema:0.6 ema:0.7
+B=128 ema(z,selected) [lodo]     miss  6.86%  G -2.362 [-2.489,-2.238]  repdrop -119.1% [-125.2,-113.0]  better 0/14  worst +108.2%  ema_sel:0.9
+B=128 ema(rank,all) [lodo]       miss  3.56%  G +0.007 [+0.005,+0.009]  repdrop  +0.4% [+0.3,+0.5]  better 14/14  worst -0.0%  ema_rank:0.3 ema_rank:0.5
+B=128 ema(rank,selected) [lodo]  miss  7.69%  G -2.956 [-3.070,-2.834]  repdrop -149.1% [-155.2,-142.8]  better 0/14  worst +127.3%  ema_rank_sel:0.5
+B=128 ema(raw,all) [lodo]        miss  3.21%  G +0.259 [+0.248,+0.270]  repdrop +13.1% [+12.6,+13.6]  better 14/14  worst -8.2%  ema_raw:0.5
+B=128 infllm [lodo]              miss  3.56%  G +0.012 [+0.009,+0.016]  repdrop  +0.6% [+0.4,+0.8]  better 14/14  worst -0.1%  infllm:0.5
+B=128 rank(stage1-2) [lodo]      miss  3.56%  G +0.007 [+0.006,+0.008]  repdrop  +0.4% [+0.3,+0.4]  better 13/14  worst +0.0%  rank:4:2
+B=128 hybrid [lodo]              miss  3.26%  G +0.228 [+0.222,+0.234]  repdrop +11.5% [+11.1,+11.9]  better 14/14  worst -8.0%  hybrid:64:0
+B=128 InfLLM decayed sum (softmax, all residents) [lodo] miss  3.21%  G +0.261 [+0.251,+0.271]  repdrop +13.2% [+12.7,+13.7]  better 14/14  worst -8.5%  dsum_softmax:0.5
+B=128 decayed sum (raw score) [lodo] miss  3.26%  G +0.226 [+0.212,+0.239]  repdrop +11.4% [+10.7,+12.0]  better 14/14  worst -6.4%  dsum_raw:0.1
+B=128 decayed count (no score) [lodo] miss  3.50%  G +0.051 [+0.045,+0.056]  repdrop  +2.6% [+2.2,+2.9]  better 14/14  worst -1.4%  dcount:0.8
+B=256 lru                        miss  1.36%  G +0.000 [+0.000,+0.000]  repdrop  +0.0% [+0.0,+0.0]  better 0/14  worst +0.0%  
+B=256 fifo                       miss  1.93%  G -1.437 [-1.516,-1.373]  repdrop -103.5% [-112.0,-97.0]  better 0/14  worst +47.0%  
+B=256 lfu                        miss  1.71%  G -0.898 [-1.022,-0.767]  repdrop -64.7% [-73.8,-55.7]  better 0/14  worst +37.5%  
+B=256 lru2                       miss  1.44%  G -0.198 [-0.239,-0.156]  repdrop -14.3% [-17.1,-11.3]  better 0/14  worst +9.4%  
+B=256 arc                        miss  1.35%  G +0.024 [+0.011,+0.037]  repdrop  +1.7% [+0.8,+2.7]  better 11/14  worst +0.6%  
+B=256 score                      miss  1.31%  G +0.116 [+0.073,+0.154]  repdrop  +8.4% [+5.3,+11.0]  better 13/14  worst +2.7%  
+B=256 belady                     miss  0.97%  G +1.000 [+1.000,+1.000]  repdrop +72.0% [+70.0,+74.3]  better 14/14  worst -21.4%  
+B=256 lru_hit_first              miss  1.36%  G -0.005 [-0.006,-0.004]  repdrop  -0.4% [-0.5,-0.3]  better 0/14  worst +0.3%  
+B=256 lru_id                     miss  1.36%  G -0.003 [-0.003,-0.002]  repdrop  -0.2% [-0.2,-0.2]  better 0/14  worst +0.1%  
+B=256 dsum_softmax:0.1           miss  1.30%  G +0.142 [+0.101,+0.177]  repdrop +10.2% [+7.5,+12.6]  better 13/14  worst +1.2%  
+B=256 dsum_raw:0.1               miss  1.31%  G +0.122 [+0.080,+0.160]  repdrop  +8.8% [+5.8,+11.4]  better 13/14  worst +2.3%  
+B=256 dsum_softmax:0.5           miss  1.28%  G +0.202 [+0.170,+0.229]  repdrop +14.6% [+12.5,+16.5]  better 14/14  worst -2.2%  
+B=256 dsum_raw:0.5               miss  1.43%  G -0.189 [-0.235,-0.146]  repdrop -13.6% [-17.1,-10.5]  better 0/14  worst +9.8%  
+B=256 dsum_softmax:0.9           miss  1.32%  G +0.091 [+0.060,+0.121]  repdrop  +6.5% [+4.3,+8.7]  better 12/14  worst +0.3%  
+B=256 dsum_raw:0.9               miss  1.80%  G -1.110 [-1.254,-0.972]  repdrop -80.0% [-91.3,-69.7]  better 0/14  worst +40.4%  
+B=256 dcount:0.5                 miss  1.36%  G +0.002 [+0.002,+0.003]  repdrop  +0.2% [+0.1,+0.2]  better 12/14  worst +0.0%  
+B=256 dcount:0.8                 miss  1.36%  G +0.013 [+0.012,+0.015]  repdrop  +1.0% [+0.8,+1.1]  better 14/14  worst -0.1%  
+B=256 dcount:0.9                 miss  1.35%  G +0.035 [+0.031,+0.039]  repdrop  +2.5% [+2.2,+2.8]  better 14/14  worst -0.5%  
+B=256 dcount:0.95                miss  1.33%  G +0.075 [+0.065,+0.086]  repdrop  +5.4% [+4.6,+6.3]  better 14/14  worst -1.1%  
+B=256 dcount:0.99                miss  1.49%  G -0.335 [-0.424,-0.241]  repdrop -24.1% [-30.4,-17.5]  better 0/14  worst +16.3%  
+B=256 ema(z,all) [lodo]          miss  1.27%  G +0.236 [+0.213,+0.257]  repdrop +17.0% [+15.4,+18.5]  better 14/14  worst -3.4%  ema:0.9
+B=256 ema(z,selected) [lodo]     miss  2.29%  G -2.364 [-2.672,-2.064]  repdrop -170.3% [-189.7,-150.3]  better 0/14  worst +104.3%  ema_sel:0.9
+B=256 ema(rank,all) [lodo]       miss  1.36%  G +0.002 [+0.000,+0.003]  repdrop  +0.1% [+0.0,+0.2]  better 10/14  worst +0.1%  ema_rank:0.5
+B=256 ema(rank,selected) [lodo]  miss  3.07%  G -4.338 [-4.661,-4.009]  repdrop -312.5% [-335.6,-290.2]  better 0/14  worst +162.6%  ema_rank_sel:0.5
+B=256 ema(raw,all) [lodo]        miss  1.28%  G +0.194 [+0.161,+0.222]  repdrop +14.0% [+11.8,+16.0]  better 14/14  worst -1.3%  ema_raw:0.7
+B=256 infllm [lodo]              miss  1.35%  G +0.020 [+0.010,+0.030]  repdrop  +1.4% [+0.7,+2.2]  better 12/14  worst +0.2%  infllm:0.9
+B=256 rank(stage1-2) [lodo]      miss  1.36%  G +0.001 [+0.000,+0.001]  repdrop  +0.0% [+0.0,+0.1]  better 10/14  worst +0.0%  rank:8:0
+B=256 hybrid [lodo]              miss  1.31%  G +0.141 [+0.132,+0.150]  repdrop +10.2% [+9.5,+10.8]  better 14/14  worst -2.5%  hybrid:64:0 hybrid:64:0.5
+B=256 InfLLM decayed sum (softmax, all residents) [lodo] miss  1.28%  G +0.202 [+0.170,+0.229]  repdrop +14.6% [+12.5,+16.5]  better 14/14  worst -2.2%  dsum_softmax:0.5
+B=256 decayed sum (raw score) [lodo] miss  1.31%  G +0.122 [+0.080,+0.160]  repdrop  +8.8% [+5.8,+11.4]  better 13/14  worst +2.3%  dsum_raw:0.1
+B=256 decayed count (no score) [lodo] miss  1.33%  G +0.075 [+0.065,+0.086]  repdrop  +5.4% [+4.6,+6.3]  better 14/14  worst -1.1%  dcount:0.95
+
+== A3  by task / length band (B=96)
+task=gov_report  n=10 ema:0.5      LRU 6.22% G +0.280 better 10/10
+task=gov_report  n=10 score        LRU 6.22% G +0.244 better 10/10
+task=gov_report  n=10 infllm:0.9   LRU 6.22% G -0.171 better 0/10
+task=gov_report  n=10 rank:4:2     LRU 6.22% G +0.024 better 10/10
+task=gov_report  n=10 arc          LRU 6.22% G -0.014 better 0/10
+task=gov_report  n=10 lru2         LRU 6.22% G -0.060 better 0/10
+task=qmsum       n= 4 ema:0.5      LRU 5.57% G +0.273 better 4/4
+task=qmsum       n= 4 score        LRU 5.57% G +0.231 better 4/4
+task=qmsum       n= 4 infllm:0.9   LRU 5.57% G -0.090 better 0/4
+task=qmsum       n= 4 rank:4:2     LRU 5.57% G +0.043 better 4/4
+task=qmsum       n= 4 arc          LRU 5.57% G -0.006 better 0/4
+task=qmsum       n= 4 lru2         LRU 5.57% G -0.032 better 0/4
+band=16-24K      n=10 ema:0.5      LRU 5.91% G +0.280 better 10/10
+band=16-24K      n=10 score        LRU 5.91% G +0.242 better 10/10
+band=16-24K      n=10 infllm:0.9   LRU 5.91% G -0.158 better 0/10
+band=16-24K      n=10 rank:4:2     LRU 5.91% G +0.027 better 10/10
+band=16-24K      n=10 arc          LRU 5.91% G -0.013 better 0/10
+band=16-24K      n=10 lru2         LRU 5.91% G -0.057 better 0/10
+band=24-32K      n= 4 ema:0.5      LRU 6.40% G +0.275 better 4/4
+band=24-32K      n= 4 score        LRU 6.40% G +0.236 better 4/4
+band=24-32K      n= 4 infllm:0.9   LRU 6.40% G -0.129 better 0/4
+band=24-32K      n= 4 rank:4:2     LRU 6.40% G +0.034 better 4/4
+band=24-32K      n= 4 arc          LRU 6.40% G -0.007 better 0/4
+band=24-32K      n= 4 lru2         LRU 6.40% G -0.042 better 0/4
+
+== B5  EMA decay sensitivity (G, all docs) and LODO choices
+B= 72 0.3:+0.253 0.5:+0.256 0.7:+0.232 0.9:+0.098   lodo picks {'ema:0.5': 14}
+B= 80 0.3:+0.271 0.5:+0.273 0.7:+0.256 0.9:+0.139   lodo picks {'ema:0.5': 14}
+B= 96 0.1:+0.251 0.2:+0.261 0.3:+0.269 0.4:+0.275 0.5:+0.279 0.6:+0.277 0.7:+0.267 0.8:+0.248 0.9:+0.195 0.95:+0.088   lodo picks {'ema:0.5': 14}
+B=128 0.1:+0.225 0.2:+0.236 0.3:+0.245 0.4:+0.254 0.5:+0.261 0.6:+0.267 0.7:+0.268 0.8:+0.259 0.9:+0.222 0.95:+0.170   lodo picks {'ema:0.6': 1, 'ema:0.7': 13}
+B=256 0.1:+0.124 0.2:+0.132 0.3:+0.144 0.4:+0.154 0.5:+0.166 0.6:+0.181 0.7:+0.194 0.8:+0.215 0.9:+0.236 0.95:+0.232   lodo picks {'ema:0.9': 14}
+
+== B6/C10  per-layer allocation: LODO vs oracle; additivity with the score rule
+B= 72 base=lru  uniform 2255960  alloc(lodo) 2255960  alloc(oracle) 2254578  lodo gets 0% of oracle gain; per-layer std across folds 0.0 slots
+B= 72 base=ema  uniform 2121074  alloc(lodo) 2121074  alloc(oracle) 2120523  lodo gets 0% of oracle gain; per-layer std across folds 0.0 slots
+B= 72 G: ema +0.256  alloc+lru +0.000  alloc+ema +0.256  (sum of separate gains +0.256)
+B= 80 base=lru  uniform 1738889  alloc(lodo) 1723964  alloc(oracle) 1720479  lodo gets 81% of oracle gain; per-layer std across folds 0.4 slots
+B= 80 base=ema  uniform 1594034  alloc(lodo) 1576772  alloc(oracle) 1572279  lodo gets 79% of oracle gain; per-layer std across folds 0.4 slots
+B= 80 G: ema +0.273  alloc+lru +0.028  alloc+ema +0.305  (sum of separate gains +0.301)
+B= 96 base=lru  uniform 1165712  alloc(lodo) 1113848  alloc(oracle) 1107333  lodo gets 89% of oracle gain; per-layer std across folds 0.5 slots
+B= 96 base=ema  uniform 1049018  alloc(lodo) 997098  alloc(oracle) 991638  lodo gets 90% of oracle gain; per-layer std across folds 0.5 slots
+B= 96 G: ema +0.279  alloc+lru +0.124  alloc+ema +0.402  (sum of separate gains +0.402)
+B=128 base=lru  uniform 690267  alloc(lodo) 612490  alloc(oracle) 605991  lodo gets 92% of oracle gain; per-layer std across folds 2.0 slots
+B=128 base=ema  uniform 618328  alloc(lodo) 547970  alloc(oracle) 543509  lodo gets 94% of oracle gain; per-layer std across folds 0.6 slots
+B=128 G: ema +0.268  alloc+lru +0.289  alloc+ema +0.529  (sum of separate gains +0.557)
+B=256 base=lru  uniform 262715  alloc(lodo) 262715  alloc(oracle) 262715  lodo gets nan% of oracle gain; per-layer std across folds 0.0 slots
+B=256 base=ema  uniform 244788  alloc(lodo) 244788  alloc(oracle) 244788  lodo gets nan% of oracle gain; per-layer std across folds 0.0 slots
+B=256 G: ema +0.236  alloc+lru +0.000  alloc+ema +0.236  (sum of separate gains +0.236)
+
+== allocation methods (LODO; total = 28*B): greedy vs exact knapsack vs gap-proportional
+B= 80 base=lru  G greedy +0.028  knapsack +0.028  gap-proportional -0.544
+B= 80 base=ema  G greedy +0.305  knapsack +0.305  gap-proportional -0.273
+B= 96 base=lru  G greedy +0.124  knapsack +0.124  gap-proportional -0.643
+B= 96 base=ema  G greedy +0.402  knapsack +0.402  gap-proportional -0.340
+B=128 base=lru  G greedy +0.289  knapsack +0.291  gap-proportional -1.145
+B=128 base=ema  G greedy +0.529  knapsack +0.528  gap-proportional -0.838
+
+== C10  evictions of pages admitted on the previous step and never hit (use-once)
+B= 96 belady  use-once share 18.1% of 709102 evictions
+B=128 belady  use-once share 13.0% of 371240 evictions
+B= 96 lru     use-once share 0.4% of 1128080 evictions
+B=128 lru     use-once share 0.0% of 640091 evictions
+
+== learned next-use regression (LODO)
+B= 96 linear-bc     miss 5.40%  G +0.292 [+0.288,+0.297]  better 14/14
+B=128 linear-bc     miss 3.14%  G +0.311 [+0.305,+0.316]  better 14/14
+B=256 linear-bc     miss 1.23%  G +0.331 [+0.317,+0.345]  better 14/14
+B= 96 linear-dagger miss 5.39%  G +0.300 [+0.295,+0.304]  better 14/14
+B=128 linear-dagger miss 3.14%  G +0.315 [+0.309,+0.321]  better 14/14
+B=256 linear-dagger miss 1.23%  G +0.334 [+0.319,+0.348]  better 14/14
