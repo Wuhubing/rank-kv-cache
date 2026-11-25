@@ -33,5 +33,23 @@ change.
 | EMA of z | 0.635 |
 | current z | 0.623 |
 
+## Censoring at the end of the trace (followup-v3, R8)
+The label "re-selected within 32 steps" cannot be observed for decisions in the last 32 steps of a trace: there every candidate
+was labelled "not re-selected". Rerun with those decisions removed (`analysis_v2/s4_dev.py predict`, mask `t + 32 < T`;
+`results_v2/dev/prediction_masked/incremental_auc.csv`, which also repeats the unmasked numbers):
+
+| Features (LODO logistic) | unmasked (as above) | **last 32 steps masked** |
+|---|---|---|
+| recency alone | 0.636 | 0.634 ± 0.009 |
+| frequency alone | 0.650 | 0.652 ± 0.005 |
+| recency + frequency | 0.707 | **0.707 ± 0.007** |
+| + current z | 0.733 | **0.734 ± 0.006** |
+| + EMA of z | 0.732 | 0.734 ± 0.006 |
+| + both | 0.734 | 0.735 ± 0.006 |
+| stratified AUC, EMA of z / current z | 0.635 / 0.623 | **0.638 / 0.624** |
+
+8.34 M decisions remain (of 8.65 M), base rate 0.779 (was 0.773). The conclusions do not change: the score adds about 0.027 AUC
+beyond recency and frequency, and inside equal-recency, equal-frequency strata the EMA of z has AUC 0.638.
+
 The Spearman ρ between Quest scores and the true attention mass needs the attention read-out and is reported in S6
 (0.6B dev: mean over layers 0.725, layer range 0.53–0.81).
