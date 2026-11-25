@@ -190,7 +190,9 @@ with torch.inference_mode():
         def step():
             global cache
             # crop back so every timed step attends to the same 1,088 + 1 tokens
-            cache.crop(CTX)
+            n = cache.get_seq_length()
+            if n > CTX:
+                cache.crop(CTX - n)   # negative = drop that many tokens; works in old and new transformers
             model(input_ids=tok, past_key_values=cache, use_cache=True)
         for _ in range(3): step()
         dec = kernel_ms(step, 10)
