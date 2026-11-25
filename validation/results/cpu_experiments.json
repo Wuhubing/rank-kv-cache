@@ -1,0 +1,267 @@
+{
+  "source_commit": "24e5018341f0a0910a2c6e7f41bd7081522a2bc0",
+  "source_sha256": {
+    "kvpolicy.py": "572524e0bb2ffd11c2527c2a6a64bbf1e2c3c554ed9f6831fca30b7f2bbb7065",
+    "heldout.py": "659fe6ce1a413605997510f49e3eddd8a5f2c8ed5aa1153cd0dd48a21b793875",
+    "gpu_bench.py": "78e47ff69f6f5a23ca52c889ef3f81042a9682798b1ffc45f61395e30d933787",
+    "efficient_dev.py": "d9ed63063ebfc357122e02f86ab22b3fdce3bb22e746558a75093355750283a3",
+    "checks.py": "33330a2db69ee39f9a73de708c8ac04f24ca2a4217131814581b402f5f8e9f6a"
+  },
+  "environment": {
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.1.3"
+  },
+  "rank_artifact_recalculation": [
+    {
+      "table": "eval",
+      "documents": 40,
+      "max_absolute_error": 0.0,
+      "success_matches": true,
+      "success": {
+        "budget": 128,
+        "s1_full_vs_lru_repeat_reduction": 0.003861946949391991,
+        "s1_ci": [
+          0.001962613335323309,
+          0.005724513132288811
+        ],
+        "s1_met": false,
+        "s2_repeat_misses_saved_full_vs_rf": 330,
+        "s2_ci": [
+          83,
+          600
+        ],
+        "s2_relative_to_rf": 0.0021822077329506757,
+        "s2_met": true
+      },
+      "full_policy_B128": {
+        "group": "all",
+        "budget": 128,
+        "policy": "full",
+        "misses": 368336,
+        "repeat_misses": 150893,
+        "accesses": 9103360,
+        "compulsory_misses": 217443,
+        "miss_rate": 0.04046154386951631,
+        "repeat_miss_rate": 0.01698113993187197,
+        "h2d_mib_per_token": 4.531692913385827,
+        "G": 0.005935290119010176,
+        "G_low": 0.0030445943525759657,
+        "G_high": 0.008777124083129584,
+        "repeat_reduction_vs_lru": 0.003861946949391991,
+        "reduction_low": 0.001962613335323309,
+        "reduction_high": 0.005724513132288811,
+        "documents": 40
+      }
+    },
+    {
+      "table": "eval_truncated",
+      "documents": 40,
+      "max_absolute_error": 0.0,
+      "success_matches": true,
+      "success": {
+        "budget": 128,
+        "s1_full_vs_lru_repeat_reduction": 0.0031196527690830933,
+        "s1_ci": [
+          0.0005902960462997421,
+          0.005795001810938066
+        ],
+        "s1_met": false,
+        "s2_repeat_misses_saved_full_vs_rf": 281,
+        "s2_ci": [
+          66,
+          551
+        ],
+        "s2_relative_to_rf": 0.00293239830526162,
+        "s2_met": true
+      },
+      "full_policy_B128": {
+        "group": "all",
+        "budget": 128,
+        "policy": "full",
+        "misses": 278793,
+        "repeat_misses": 95545,
+        "accesses": 5101824,
+        "compulsory_misses": 183248,
+        "miss_rate": 0.05464575022580159,
+        "repeat_miss_rate": 0.01942533774002882,
+        "h2d_mib_per_token": 6.120324025289778,
+        "G": 0.004951970851275257,
+        "G_low": 0.000943370430122228,
+        "G_high": 0.009133922416494328,
+        "repeat_reduction_vs_lru": 0.0031196527690830933,
+        "reduction_low": 0.0005902960462997421,
+        "reduction_high": 0.005795001810938066,
+        "documents": 40
+      }
+    }
+  ],
+  "synthetic_regimes": [
+    {
+      "rho": 0.98,
+      "seeds": 12,
+      "steps_per_seed": 400,
+      "pages": 32,
+      "K": 8,
+      "B": 12,
+      "misses": {
+        "lru": 1743,
+        "score": 1566,
+        "ema": 1576,
+        "belady": 1224
+      },
+      "G_ema": 0.3217726396917148,
+      "ema_documents_better": 12,
+      "fp16_minus_fp32_misses_by_seed": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "rho": 0.0,
+      "seeds": 12,
+      "steps_per_seed": 400,
+      "pages": 32,
+      "K": 8,
+      "B": 12,
+      "misses": {
+        "lru": 24065,
+        "score": 24051,
+        "ema": 24044,
+        "belady": 17204
+      },
+      "G_ema": 0.003060778312199388,
+      "ema_documents_better": 6,
+      "fp16_minus_fp32_misses_by_seed": [
+        0,
+        0,
+        -1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "rho": -0.9,
+      "seeds": 12,
+      "steps_per_seed": 400,
+      "pages": 32,
+      "K": 8,
+      "B": 12,
+      "misses": {
+        "lru": 25119,
+        "score": 35962,
+        "ema": 31322,
+        "belady": 19426
+      },
+      "G_ema": -1.0895836992798174,
+      "ema_documents_better": 0,
+      "fp16_minus_fp32_misses_by_seed": [
+        2,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        -1,
+        -2,
+        0,
+        -2
+      ]
+    }
+  ],
+  "ema_counterexample": {
+    "seed": 17,
+    "search_trial": 1,
+    "B": 3,
+    "alpha": 0.5,
+    "scores": [
+      [
+        0.0,
+        2.0,
+        3.0,
+        1.0
+      ],
+      [
+        1.0,
+        3.0,
+        2.0,
+        0.0
+      ],
+      [
+        1.0,
+        0.0,
+        2.0,
+        3.0
+      ],
+      [
+        3.0,
+        2.0,
+        0.0,
+        1.0
+      ],
+      [
+        1.0,
+        2.0,
+        3.0,
+        0.0
+      ],
+      [
+        0.0,
+        2.0,
+        3.0,
+        1.0
+      ]
+    ],
+    "ranked": [
+      [
+        2,
+        1
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        3,
+        2
+      ],
+      [
+        0,
+        1
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        1
+      ]
+    ],
+    "misses": {
+      "lru": 4,
+      "ema": 5,
+      "belady": 4
+    }
+  },
+  "external_long_context_traces": "Not supplied; excluded at user request. Reported long-context results are not independently reproduced."
+}

@@ -1,0 +1,374 @@
+{
+  "environment": {
+    "python": "3.13.5",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "torch": "2.7.1+cu128",
+    "cuda": "12.8",
+    "transformers": "4.53.3",
+    "gpu": "NVIDIA GeForce RTX 5080 Laptop GPU",
+    "dtype": "bfloat16"
+  },
+  "component_runs": [
+    {
+      "tail": 0,
+      "B": 64,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1001,
+      "simulator_misses": 1001,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 0,
+      "B": 64,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1001,
+      "simulator_misses": 1001,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 0,
+      "B": 64,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1001,
+      "simulator_misses": 1001,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 0,
+      "B": 96,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 453,
+      "simulator_misses": 453,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 0,
+      "B": 96,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 434,
+      "simulator_misses": 434,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 0,
+      "B": 96,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 282,
+      "simulator_misses": 282,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 64,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1002,
+      "simulator_misses": 1002,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 64,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1002,
+      "simulator_misses": 1002,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 64,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1002,
+      "simulator_misses": 1002,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 96,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 424,
+      "simulator_misses": 424,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 96,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 405,
+      "simulator_misses": 405,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 7,
+      "B": 96,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 279,
+      "simulator_misses": 279,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 64,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1071,
+      "simulator_misses": 1071,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 64,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1071,
+      "simulator_misses": 1071,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 64,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 1071,
+      "simulator_misses": 1071,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 96,
+      "policy": "lru",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 472,
+      "simulator_misses": 472,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 96,
+      "policy": "ema",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 464,
+      "simulator_misses": 464,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    },
+    {
+      "tail": 15,
+      "B": 96,
+      "policy": "belady",
+      "steps": 40,
+      "page_bytes": 65536,
+      "gpu_misses": 307,
+      "simulator_misses": 307,
+      "rank_mismatches": 0,
+      "max_attention_error": 0.0,
+      "resident_kv_exact": true
+    }
+  ],
+  "tiny_random_qwen3_runs": [
+    {
+      "prompt_tokens": 2048,
+      "policy": "lru",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        346,
+        340
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2048,
+      "policy": "ema",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        341,
+        335
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2048,
+      "policy": "belady",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        241,
+        223
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2055,
+      "policy": "lru",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        297,
+        291
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2055,
+      "policy": "ema",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        287,
+        272
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2055,
+      "policy": "belady",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        206,
+        194
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2063,
+      "policy": "lru",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        283,
+        294
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2063,
+      "policy": "ema",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        269,
+        284
+      ],
+      "raw_latency_samples": 24
+    },
+    {
+      "prompt_tokens": 2063,
+      "policy": "belady",
+      "decode_steps": 24,
+      "tokens_equal": true,
+      "rankings_equal": true,
+      "misses": [
+        195,
+        196
+      ],
+      "raw_latency_samples": 24
+    }
+  ],
+  "memory_lifetime_probe": {
+    "observations": [
+      {
+        "decode_step": 0,
+        "prefill_cache_alive": true,
+        "prefill_kv_tensors_alive": 4,
+        "allocated_bytes": 11409408
+      },
+      {
+        "decode_step": 1,
+        "prefill_cache_alive": false,
+        "prefill_kv_tensors_alive": 0,
+        "allocated_bytes": 10887168
+      },
+      {
+        "decode_step": 2,
+        "prefill_cache_alive": false,
+        "prefill_kv_tensors_alive": 0,
+        "allocated_bytes": 10887168
+      },
+      {
+        "decode_step": 3,
+        "prefill_cache_alive": false,
+        "prefill_kv_tensors_alive": 0,
+        "allocated_bytes": 10887168
+      }
+    ],
+    "warmup_argument": 2,
+    "steps": 4,
+    "returned_latency_samples": 4,
+    "reported_peak_bytes": 12217856
+  },
+  "zero_copy": "not executed: Triton unavailable on this Windows environment",
+  "wall_seconds": 3.964220500085503,
+  "scope": "Synthetic correctness only; no external traces, pretrained weights, or general speedup claims."
+}

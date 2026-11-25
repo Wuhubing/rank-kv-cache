@@ -1,0 +1,8 @@
+.................................................................        [100%]
+============================== warnings summary ===============================
+tests/test_kvpolicy.py::test_efficient_dev_smoke
+  C:\Users\hp\anaconda3\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1437: RuntimeWarning: All-NaN slice encountered
+    return _nanquantile_unchecked(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+65 passed, 1 warning in 4.42s

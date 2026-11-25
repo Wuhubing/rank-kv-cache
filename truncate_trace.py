@@ -7,8 +7,11 @@ This removes MultiFieldQA's repeated "Answer: ..." tail without re-running the m
 Requests of other tasks are copied unchanged. Needs transformers for the tokenizer.
 """
 import argparse
+import gzip
 import json
 from pathlib import Path
+
+from replay import open_trace
 
 
 def cut_step(generated, decode, stop):
@@ -22,7 +25,8 @@ def cut_step(generated, decode, stop):
 def main():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("run_dir", type=Path, help="directory with trace.jsonl and manifests/")
+    parser.add_argument("run_dir", type=Path,
+                        help="directory with trace.jsonl (or a v2 trace.jsonl.gz) and manifests/")
     parser.add_argument("--tasks", nargs="+", default=["multifieldqa_en"])
     parser.add_argument("--stop", default="\n")
     parser.add_argument("--out", type=Path, help="default: <run_dir>/trace_truncated.jsonl")
@@ -41,10 +45,15 @@ def main():
         keep[m["request_id"]] = steps
         answer = tokenizer.decode(m["generated_token_ids"][:steps + 1]).strip()
         print(f"{m['request_id']}: keep {steps} of {m['decode_steps']} steps | {answer[:90]!r}")
-    out = args.out or args.run_dir / "trace_truncated.jsonl"
+    source_path = args.run_dir / "trace.jsonl"
+    if not source_path.exists():
+        source_path = args.run_dir / "trace.jsonl.gz"
+    gz = source_path.suffix == ".gz"
+    out = args.out or args.run_dir / ("trace_truncated.jsonl" + (".gz" if gz else ""))
     kept = dropped = 0
-    with (args.run_dir / "trace.jsonl").open(encoding="utf-8") as source, \
-            out.open("w", encoding="utf-8") as target:
+    with open_trace(source_path) as source, \
+            (gzip.open(out, "wt", encoding="utf-8") if out.suffix == ".gz"
+             else out.open("w", encoding="utf-8")) as target:
         for line in source:
             row = json.loads(line)
             limit = keep.get(row["request_id"])
@@ -53,7 +62,7 @@ def main():
                 continue
             target.write(line)
             kept += 1
-    (out.with_suffix(".json")).write_text(json.dumps(dict(stop=args.stop, tasks=args.tasks,
+    (out.parent / (out.name.split(".")[0] + ".json")).write_text(json.dumps(dict(stop=args.stop, tasks=args.tasks,
                                                           kept_steps=keep), indent=2) + "\n")
     print(f"Wrote {out}: kept {kept} rows, dropped {dropped}")
 
