@@ -424,7 +424,7 @@ dev 与 held-out 几乎一致。S2 在 dev 上不显著、在 held-out 上显著
 2. **layer-level GPU benchmark 是否还做**。完整策略每 token 只省 0.01 MiB 的 H2D（约 0.2%），benchmark 预期测不出可见差异，建议降为可选或不做。
 3. **是否把"选择对 GPU 型号敏感"写进报告**，作为附带发现。
 4. **是否在 trace 中记录未选中 page 的分数**，以便加入 ArkVale 式 baseline。这需要新采集，而 held-out 已经用过一次，只能在 dev 上做探索性分析。
-5. **成员名单**：proposal 写 Xihang Yu，README 写 Jimmy Yu。
+5. ~~**成员名单**~~：已确定为 Xihang Yu（与 proposal 一致），README 已更新。
 
 ---
 
@@ -708,7 +708,7 @@ p90 比中位数高 1.5–2.5 ms，重复运行之间最多差约 1.5 ms，**四
 2. 按层分配（需要离线、和模型相关的曲线）是否算作报告里的"策略"。
 3. 延迟结论怎么写：只报"融合后开销与 LRU 相同、字节少约 9.3–9.8%（EMA 单独）或 13–19%（加按层分配）、batch 1 下延迟持平"，还是再投入去实测大 batch（按单序列线性外推（batch 未实现），batch 32 时 EMA 每步约省 2.3 ms），以及 static-cache 的公平对照。
 4. 是否需要用真实注意力质量重做 InfLLM 对比（要新的采集字段）。
-5. 成员名单仍未统一（见 §7 第 5 项）。
+5. ~~成员名单~~：已确定为 Xihang Yu。
 
 ### 9.8 复现
 
