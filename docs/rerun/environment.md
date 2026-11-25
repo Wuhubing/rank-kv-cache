@@ -19,6 +19,8 @@
 
 与原 L4 环境的差别：原来用 Colab L4 和 torch 2.14.1+cu130；wulab2 驱动只支持 CUDA 12.4，所以换成 torch 2.6.0+cu124。数值行为可能不同，这本来就是跨硬件复现的一部分。
 
+后来补装（同一个 `.venv`）：`setuptools`（triton 3.2.0 编译 kernel 需要它；没有它时 `gpu_bench.py` 的 `import triton` 会静默失败，fused 路径不可用）、`pandas` 和 `pyarrow`（读 RULER 的 parquet）。S6 另外下载了 `Qwen/Qwen3-8B@b968826d9c46dd6066d109eabc6255188de91218`（16 GB）、`microsoft/SCBench@283310bb…` 的 `scbench_summary`/`scbench_qa_eng`、`simonjegou/ruler@24adceac…` 的 16384 配置，都在 `HF_HOME` 下。
+
 ## 检查
 - mini（uv Python 3.11，仅 CPU）：`pytest tests validation` → 213 passed，2 skipped（需要 CUDA）。
 - wulab2（`CUDA_VISIBLE_DEVICES=0`）：`pytest tests validation` → 218 passed，2 xpassed（`test_gpu_contracts.py` 的 F7/F8 在 #7 修复后预期通过，标记仍是 xfail(strict=False)），0 skipped。
