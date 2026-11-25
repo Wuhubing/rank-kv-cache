@@ -228,5 +228,33 @@ def fig3():
     save(fig, "f3_per_document")
 
 
+# ---------------------------------------------------------------- F4 batch scaling (L4)
+def fig4():
+    rows = list(csv.DictReader(open(R / "batch_bench_l4/batch_bench.csv")))
+    get = lambda B, p, k: [float(r[k]) for r in rows if int(r["B"]) == B and r["policy"] == p]
+    bs = [int(r["batch"]) for r in rows if int(r["B"]) == 96 and r["policy"] == "lru"]
+    fig, ax = plt.subplots(1, 2, figsize=(11, 4.3))
+    for B, colr in ((96, INK), (128, GRAY)):
+        y = [100 * v for v in get(B, "lru", "transfer_share")]
+        ax[0].plot(bs, y, color=colr, lw=2.5, marker="o", ms=8, mec="white", mew=2)
+        ax[0].text(bs[-1] * 1.15, y[-1], f"B = {B}", va="center", fontsize=11.5)
+    ax[0].set_ylabel("LRU page transfer, % of GPU step time"); ax[0].set_ylim(0, 16)
+    ax[0].set_title("Transfer share plateaus with batch", loc="left", fontsize=13.5, weight="bold", pad=10)
+    for label, p, colr, ls in (("Bélády (oracle)", "belady", GRAY, "--"), ("Score EMA + allocation", "alloc_ema", AQUA, "-"),
+                               ("Score EMA", "ema", BLUE, "-")):
+        y = [100 * v for v in get(96, p, "speedup_vs_lru")]
+        ax[1].plot(bs, y, color=colr, lw=2.5, ls=ls, marker="o", ms=8, mec="white", mew=2)
+        ax[1].text(bs[-1] * 1.15, y[-1], f"{label}  {y[-1]:+.1f}%", va="center", fontsize=11.5)
+    ax[1].set_ylabel("Step-time speedup vs LRU (%)"); ax[1].set_ylim(0, 6.5)
+    ax[1].set_title("B = 96: saved misses become time, capped by that share", loc="left", fontsize=13.5, weight="bold", pad=10)
+    for a in ax:
+        a.set_xscale("log", base=2); a.set_xticks(bs, [str(b) for b in bs]); a.set_xlim(0.8, 64 * 3.2)
+        a.set_xlabel("batch size"); a.yaxis.grid(True, color=GRID, lw=1); a.set_axisbelow(True)
+    fig.text(0.0, -0.04, "L4, zero-copy Triton gather at 5.3 µs per 64 KiB page (12.3 GB/s); step = Qwen3-0.6B decode over "
+             "1,088 tokens + Quest scoring + transfer, GPU kernel time, no overlap.", fontsize=9.5, color=INK2)
+    fig.tight_layout()
+    save(fig, "f4_batch_scaling")
+
+
 if __name__ == "__main__":
-    fig1(); fig2(); fig3()
+    fig1(); fig2(); fig3(); fig4()
