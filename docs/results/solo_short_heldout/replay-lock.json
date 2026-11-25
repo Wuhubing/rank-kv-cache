@@ -1,0 +1,33 @@
+{
+  "grid": [
+    0,
+    1,
+    2,
+    4,
+    8
+  ],
+  "primary_budget": 128,
+  "rf": [
+    0,
+    2
+  ],
+  "rrank": [
+    2,
+    0
+  ],
+  "full": [
+    4,
+    2
+  ],
+  "tie_break": [
+    "misses",
+    "delta+beta",
+    "delta"
+  ],
+  "sha256": {
+    "development": "0d0656528229a10f0cb034780bd39388b97548840434b7bf3dea26bd9f89e306",
+    "heldout": "24e5cfc913352ac8b85451dc77f0e4f72052b76584f449ad82b1ec8cc05c82f3"
+  },
+  "dev_gpu": "NVIDIA A100-SXM4-80GB",
+  "heldout_gpu": "NVIDIA L4"
+}
