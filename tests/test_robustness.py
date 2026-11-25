@@ -349,3 +349,20 @@ def test_committed_dev_tables_are_complete():
     assert (L, len(docs)) == (28, 14)
     checks.check_complete(base, docs, L, "misses.csv")
     checks.check_complete(ext, docs, L, "misses_ext.csv")
+
+
+def test_prune_incomplete_repairs_torn_final_line(tmp_path):
+    # A process killed mid-append leaves a final line without a newline, possibly cut inside a
+    # number. Resume must drop it (and the unit it belongs to) rather than fail or keep it.
+    path = tmp_path / "misses_ext.csv"
+    rows = [",".join(checks.HEADER)]
+    rows += [f"a,{l},cfg,96,100,10,5" for l in range(2)]
+    rows += ["b,0,cfg,96,100,10,5", "b,1,cfg,96,100,10,"]
+    path.write_text("\n".join(rows))  # no trailing newline: last line is torn
+    units = checks.prune_incomplete(path, 2)
+    assert units == {("a", "cfg", 96)}
+    assert path.read_text().endswith("\n")
+    assert checks.read_table(path).keys() == {("a", "cfg", 96, 0), ("a", "cfg", 96, 1)}
+
+    path.write_text("\n".join(rows[:-1]) + "\nb,1,cfg,96,100,10,5")  # cut after a digit
+    assert checks.prune_incomplete(path, 2) == {("a", "cfg", 96)}

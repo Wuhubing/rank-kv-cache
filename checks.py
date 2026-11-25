@@ -113,8 +113,29 @@ def check_complete(table, docs, L, path):
         raise ValueError(f"{path}: incomplete table ({len(bad)} config/budget groups):\n  " + "\n  ".join(bad[:20]))
 
 
+def drop_torn_tail(path):
+    """Repair a table whose last line was cut off by a killed process.
+
+    Rows are appended and flushed one unit at a time, so a crash can leave a final line with
+    no trailing newline (possibly cut inside a number, which would still parse). Such a line is
+    removed; the unit it belonged to is then incomplete and is re-run. Returns True if repaired.
+    """
+    data = Path(path).read_bytes()
+    if not data or data.endswith(b"\n"):
+        return False
+    cut = data.rfind(b"\n") + 1
+    if cut == 0:
+        raise ValueError(f"{path}: header line is incomplete")
+    tmp = Path(path).with_name(Path(path).name + ".tmp")
+    tmp.write_bytes(data[:cut])
+    tmp.replace(path)
+    print(f"{path}: dropped a torn final line from an interrupted append", flush=True)
+    return True
+
+
 def prune_incomplete(path, L):
     """Keep only complete units in a resumable table (atomic rewrite); returns the complete set."""
+    drop_torn_tail(path)
     table = read_table(path)
     units = complete_units(table, L)
     keep = sorted(k for k in table if k[:3] in units)

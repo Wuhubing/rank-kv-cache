@@ -27,7 +27,9 @@ ema:*, ema_rank:*), so a different trace file fails loudly. Outputs under --out:
   summary.json  trace hashes, settings and the B=96 headline
 
 Reading the result: allrank close to z means the ordering among unselected pages carries the signal
-and magnitude adds little; allrank close to rank (G ~ 0.016 at B=96) means magnitude is what matters.
+and magnitude adds little; allrank close to rank means magnitude is what matters. The archived
+G ~ 0.016 for rank at B=96 used only alpha in {0.3, 0.5, 0.7, 0.9}; this runner gives every signal
+the same 10-value grid, so its rank row can differ slightly. Compare signals within contrast.csv.
 Dev only: this is not part of the frozen held-out evaluation (splits/heldout_frozen_v1.json).
 """
 

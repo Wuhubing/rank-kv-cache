@@ -100,6 +100,9 @@ def run(jobs, M, traces, out, workers):
         comp = M["lru", B][doc][2]
         if sum(per) > len(per) * B:
             raise ValueError(f"{label} {doc} B={B}: allocation uses more than L*B slots")
+        if all(b == B for b in per) and (lru_a, opt_a) != (lru_u, opt_u):
+            raise ValueError(f"{label} {doc} B={B}: uniform plan but same-allocation anchors "
+                             f"{(lru_a, opt_a)} differ from the archived uniform {(lru_u, opt_u)}")
         if label == "alloc+lru" and pol != lru_a:
             raise ValueError(f"{doc} B={B}: archived alloc+lru misses {pol} differ from replay {lru_a}")
         by_doc.append((label, B, doc, pol, lru_u, opt_u, lru_a, opt_a, comp, " ".join(map(str, per))))
