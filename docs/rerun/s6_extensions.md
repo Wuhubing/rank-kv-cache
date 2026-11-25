@@ -106,7 +106,8 @@ G at B/K = 1.5 (`results_v2/ext/sweep/sweep_table.csv` has B/K = 1.25, 1.5, 2, 4
 
 The EMA beats LRU on 14/14 documents in all 12 cells; its G rises slightly with larger pages and larger K (0.27 → 0.31), and its
 lead over the current score (0.03–0.05) and the all-page rank's closeness to it (within 0.013) hold everywhere. Each cell is its
-own collection (the selector changes, so the generated text changes too); collection stops: mostly EOS.
+own collection (the selector changes, so the generated text changes too). Stops per cell: 9–14 of 14 at EOS, the rest at
+1024 tokens or on the loop rule; 127–1023 decode steps per document.
 
 ## 5. Sampled decoding (0.6B dev, T=0.6, top-k 20, top-p 0.95, 3 seeds)
 | Seed | LRU miss % | current score G | EMA (LODO) G [CI] | all-page rank EMA G | EMA wins |
