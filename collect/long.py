@@ -127,8 +127,10 @@ class QuestPages:
     selector="arkvale-mean" replaces the selection (exploratory, see the module docstring)."""
 
     def __init__(s, page_size, top_k, record_attn_mass=False, record_true_attn_rank=False,
-                 record_arkvale_digest=False, selector="quest", arkvale_sink=1, arkvale_recent=1):
+                 record_arkvale_digest=False, selector="quest", arkvale_sink=1, arkvale_recent=1,
+                 record_attn_all=False):
         s.page_size, s.top_k, s.bounds, s.step = page_size, top_k, {}, None
+        s.record_attn_all = record_attn_all
         s.record_attn_mass, s.record_true_attn_rank = record_attn_mass, record_true_attn_rank
         if selector not in ("quest", "arkvale-mean"):
             raise ValueError(f"unknown selector {selector}")
@@ -188,12 +190,15 @@ class QuestPages:
             mass_sorted = w[:, :n*s.page_size].reshape(-1, n, s.page_size).sum((0, 2))
             inv = torch.searchsorted(sel, ranked)                          # ranked order
             s.ATTN[s.step, layer, :len(ranked)] = mass_sorted[inv].to(torch.float16)
-        if s.record_true_attn_rank and hp >= 2:
+        if (s.record_true_attn_rank and hp >= 2) or (s.record_attn_all and hp >= 1):
             qf = query[0, :, 0].float()
             kt = key[0, :, :length].float().repeat_interleave(g, 0)         # [H, length, d]
             full = torch.einsum("hd,hnd->hn", qf, kt) * scaling
             p = full.softmax(-1)[:, :hp*s.page_size].reshape(-1, hp, s.page_size).sum(2).mean(0)
-            s.RHO[s.step, layer] = spearman(scores.float(), p)
+            if s.record_true_attn_rank and hp >= 2:
+                s.RHO[s.step, layer] = spearman(scores.float(), p)
+            if s.record_attn_all:  # dense attention mass of every completed page (mean over query heads)
+                s.ATTN_ALL[s.step, layer, :hp] = p.to(torch.float16)
         if s.record_arkvale_digest:
             st = s.dstats[layer]
             for name in DIGESTS:
@@ -211,7 +216,7 @@ def looping(gen, n=32):
 @torch.inference_mode()
 def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
             record_attn_mass=False, record_true_attn_rank=False, device="cuda", **sel_kw):
-    """sel_kw: record_arkvale_digest, selector, arkvale_sink, arkvale_recent (QuestPages)."""
+    """sel_kw: record_arkvale_digest, selector, arkvale_sink, arkvale_recent, record_attn_all (QuestPages)."""
     from transformers import AttentionInterface
     cfg = model.config
     L = cfg.num_hidden_layers
@@ -226,6 +231,8 @@ def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
     if be.record_arkvale_digest:
         be.DIGEST = {n: torch.full((max_new, L, pmax), float("nan"), dtype=torch.float16, device=device)
                      for n in DIGESTS}
+    if be.record_attn_all:
+        be.ATTN_ALL = torch.full((max_new, L, pmax), float("nan"), dtype=torch.float16, device=device)
     AttentionInterface.register("quest_npz", be)
     ids = torch.tensor([prompt], device=device)
     orig = cfg._attn_implementation
@@ -259,12 +266,15 @@ def capture(model, prompt, page_size=16, top_k=64, max_new=1024, eos_ids=(),
         if be.record_arkvale_digest:
             for name in DIGESTS:
                 extra[f"digest_{name}"] = be.DIGEST[name][:n, :, :npages].cpu().numpy()
+        if be.record_attn_all:
+            extra["attn_all"] = be.ATTN_ALL[:n, :, :npages].cpu().numpy()
         return be.RANK[:n].cpu().numpy(), be.SCORE[:n, :, :npages].cpu().numpy(), gen, stop, extra
     finally:
         cfg._attn_implementation = orig
         be.bounds.clear()
         be.dstats.clear()
         be.__dict__.pop("DIGEST", None)
+        be.__dict__.pop("ATTN_ALL", None)
         del be.RANK, be.SCORE
 
 
@@ -503,6 +513,8 @@ def main(argv=None):
     ap.add_argument("--record-attn-mass", action="store_true")
     ap.add_argument("--record-true-attn-rank", action="store_true")
     ap.add_argument("--record-arkvale-digest", action="store_true")
+    ap.add_argument("--record-attn-all", action="store_true",
+                    help="dense attention mass of every completed page per layer and step, float16 [T, L, P] (followup-v3 B4)")
     ap.add_argument("--selector", choices=["quest", "arkvale-mean"], default="quest",
                     help="exploratory: arkvale-mean changes the selection (see module docstring)")
     ap.add_argument("--arkvale-sink", type=int, default=1, help="with --selector arkvale-mean")
@@ -560,6 +572,7 @@ def main(argv=None):
                flags=dict(record_attn_mass=args.record_attn_mass,
                           record_true_attn_rank=args.record_true_attn_rank,
                           record_arkvale_digest=args.record_arkvale_digest, selector=args.selector,
+                          record_attn_all=args.record_attn_all,
                           arkvale_sink=args.arkvale_sink if args.selector != "quest" else None,
                           arkvale_recent=args.arkvale_recent if args.selector != "quest" else None,
                           dense_reference=args.dense_reference, temperature=args.temperature,
@@ -582,13 +595,16 @@ def main(argv=None):
         if args.record_arkvale_digest or args.selector != "quest":
             sel_kw = dict(record_arkvale_digest=args.record_arkvale_digest, selector=args.selector,
                           arkvale_sink=args.arkvale_sink, arkvale_recent=args.arkvale_recent)
+        if args.record_attn_all:
+            sel_kw["record_attn_all"] = True
         if len(turns) == 1 and not args.temperature:   # the original path, unchanged
             R, S, gen, stop, extra = capture(model, prompt, ps, top_k, max_new, eos_ids,
                                              args.record_attn_mass, args.record_true_attn_rank, **sel_kw)
             turn_gens, turn_stops = None, None
         else:
             if sel_kw:
-                sys.exit("--record-arkvale-digest / --selector are only supported on the single-turn greedy path")
+                sys.exit("--record-arkvale-digest / --selector / --record-attn-all are only supported on the single-turn "
+                         "greedy path")
             sampler = make_sampler(args.temperature, args.seed)
             R, S, turn_gens, turn_stops, extra = capture_session(
                 model, turns, ps, top_k, max_new, eos_ids, sampler,

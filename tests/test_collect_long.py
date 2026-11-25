@@ -34,6 +34,8 @@ def run_backend(be, steps, *, kvh=2, g=3, dim=8, ps=4, start=9, seed=0, L=2):
         be.RHO = torch.full((T, L), float("nan"))
     if getattr(be, "record_arkvale_digest", False):
         be.DIGEST = {n: torch.full((T, L, pmax), float("nan"), dtype=torch.float16) for n in cl.DIGESTS}
+    if getattr(be, "record_attn_all", False):
+        be.ATTN_ALL = torch.full((T, L, pmax), float("nan"), dtype=torch.float16)
     keys = torch.randn(L, 1, kvh, start + T, dim, generator=gen)
     vals = torch.randn(L, 1, kvh, start + T, dim, generator=gen)
     outs = []
@@ -107,6 +109,43 @@ def test_recording_does_not_change_selection():
     assert torch.isfinite(m[sel]).all() and (m[sel] > 0).all()
     assert (m.nan_to_num().sum(-1) <= 6 + 1e-2).all()
     assert torch.isfinite(rec.RHO).all() and (rec.RHO.abs() <= 1 + 1e-6).all()
+
+
+def test_attn_all_does_not_change_selection_and_matches_dense_softmax():
+    plain = cl.QuestPages(4, 3)
+    rec = cl.QuestPages(4, 3, record_attn_all=True)
+    oa, _, _ = run_backend(plain, 25, seed=12, start=17)
+    ob, keys, _ = run_backend(rec, 25, seed=12, start=17)
+    assert torch.equal(plain.RANK, rec.RANK)
+    assert torch.equal(plain.SCORE.nan_to_num(), rec.SCORE.nan_to_num())
+    assert torch.equal(plain.SCORE.isnan(), rec.SCORE.isnan())
+    for x, y in zip(oa, ob):
+        assert torch.equal(x, y)
+    # finite exactly where a score exists (completed pages), mean over heads of the page's dense mass
+    assert torch.equal(rec.ATTN_ALL.isnan(), rec.SCORE.isnan())
+    tot = rec.ATTN_ALL.float().nan_to_num().sum(-1)
+    assert ((tot > 0) & (tot <= 1 + 1e-2)).all()
+
+
+def test_attn_all_value_matches_explicit_softmax():
+    torch.manual_seed(5)
+    kvh, g, dim, ps = 2, 3, 4, 4
+    q = torch.randn(1, kvh*g, 1, dim)
+    k = torch.randn(1, kvh, 23, dim)
+    v = torch.randn_like(k)
+    be = cl.QuestPages(ps, 2, record_attn_all=True)
+    be.RANK = torch.full((1, 1, 2), -1, dtype=torch.int16)
+    be.SCORE = torch.full((1, 1, 6), float("nan"), dtype=torch.float16)
+    be.ATTN_ALL = torch.full((1, 1, 6), float("nan"), dtype=torch.float16)
+    be.step = 0
+    be(SimpleNamespace(layer_idx=0), q, k, v, None, scaling=0.5)
+    hp = (23 - 1) // ps
+    kk = k[0].repeat_interleave(g, 0)                                  # [H, 23, d]
+    w = ((q[0, :, 0][:, None] @ kk.transpose(-1, -2))[:, 0] * 0.5).softmax(-1)   # [H, 23]
+    for p in range(hp):
+        ref = w[:, p*ps:(p+1)*ps].sum(-1).mean().item()
+        assert abs(be.ATTN_ALL[0, 0, p].item() - ref) < 2e-3
+    assert torch.isnan(be.ATTN_ALL[0, 0, hp:]).all()
 
 
 def test_attn_mass_matches_explicit_softmax():
