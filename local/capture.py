@@ -36,6 +36,9 @@ sys.path.insert(0, str(ROOT / "notebooks"))
 from long_trace_capture import USER, looping  # noqa: E402  (prompt templates and stop rule)
 
 MODEL_ID, DATA_ID = "Qwen/Qwen3-0.6B", "zai-org/LongBench"
+# longctx_v1 templates, plus one new task used only as an out-of-distribution held-out group.
+TEMPLATES = {**USER, "narrativeqa": "Story:\n\n{context}\n\nWrite a detailed summary of the whole story, "
+                                   "covering every part of the plot, in at least eight paragraphs."}
 PAGE, TOPK, MAX_NEW = 16, 64, 1024
 
 
@@ -166,9 +169,19 @@ def capture(model, prompt, device, *, max_new=MAX_NEW, chunk=1024, eos_ids=(), c
 
 
 def chat_prompt(tok, task, context):
-    msg = [{"role": "user", "content": USER[task].format(context=context)}]
+    msg = [{"role": "user", "content": TEMPLATES[task].format(context=context)}]
     ids = tok.apply_chat_template(msg, tokenize=True, add_generation_prompt=True, enable_thinking=True)
     return list(ids["input_ids"] if isinstance(ids, dict) else ids)
+
+
+def build_context(tok, context, trunc):
+    """LongBench-style middle truncation: keep the first `head` and last `tail` context tokens."""
+    if not trunc:
+        return context
+    ids = tok.encode(context, add_special_tokens=False)
+    if len(ids) != trunc["context_tokens"]:
+        raise ValueError(f"context has {len(ids)} tokens, split expects {trunc['context_tokens']}")
+    return tok.decode(ids[:trunc["head"]]) + tok.decode(ids[len(ids) - trunc["tail"]:])
 
 
 def load_split(path):
@@ -219,7 +232,7 @@ def run(args):
             sys.exit(f"unknown rid(s): {sorted(set(args.rids) - {e['rid'] for e in chosen})}")
     else:
         chosen = [e for e in entries if e["split"] == args.subset]
-    if any(e["split"] == "heldout" for e in chosen) and not args.allow_heldout:
+    if any(e["split"].startswith("heldout") for e in chosen) and not args.allow_heldout:
         sys.exit("refusing to capture held-out documents without --allow-heldout")
     chosen = chosen[:args.limit] if args.limit else chosen
     args.out.mkdir(parents=True, exist_ok=True)
@@ -232,7 +245,7 @@ def run(args):
     for e in todo:
         rid, task = e["rid"], e["task"]
         index, row = rows[rid]
-        prompt = chat_prompt(tok, task, row["context"])
+        prompt = chat_prompt(tok, task, build_context(tok, row["context"], e.get("truncate")))
         ctx = hashlib.sha256(row["context"].encode()).hexdigest()[:16]
         if len(prompt) != e["prompt_tokens"] or index != e["row"]:
             msg = f"{rid}: {len(prompt)} tokens / row {index}; split says {e['prompt_tokens']} / {e['row']}"
@@ -245,7 +258,7 @@ def run(args):
         stem = args.out / rid.replace("/", "__")
         np.savez(str(stem) + ".tmp.npz", ranked=ranked, scores=scores, rid=np.array(rid))
         Path(str(stem) + ".tmp.npz").replace(str(stem) + ".npz")
-        manifest = dict(rid=rid, task=task, split=e["split"], split_file=str(args.split), split_sha256=split_sha,
+        manifest = dict(rid=rid, task=task, split=e["split"], truncate=e.get("truncate"), split_file=str(args.split), split_sha256=split_sha,
                         row_index=index, context_sha16=ctx, context_hash_matches=(ctx == e.get("ctx")),
                         prompt_tokens=len(prompt), prompt_ids_sha256=hashlib.sha256(json.dumps(prompt).encode()).hexdigest(),
                         model=split["model"], data=split["data"], dtype=args.dtype, prefill_chunk=args.chunk,
