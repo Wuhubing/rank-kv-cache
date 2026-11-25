@@ -44,12 +44,14 @@ FAMILIES = {"ema(lodo)": "ema:", "ema_allrank(lodo)": "ema_allrank:", "infllm_lr
 
 
 def run(job):
-    path, budgets = job
+    path, budgets, only = job
     with np.load(path, allow_pickle=False) as z:
         A = z["attn_mass"].astype(np.float32) if "attn_mass" in z.files else None
     R, S, rid = kp.load(path)
     out = []
     for name, (pol, kw, true) in configs(A is not None).items():
+        if only and name not in only:
+            continue
         for B in budgets:
             for l in range(R.shape[1]):
                 c = kp.simulate(R[:, l], S[:, l], B, pol, attn=(A[:, l] if true else None), **kw)
@@ -77,6 +79,7 @@ def main():
     ap.add_argument("--procs", type=int, default=32)
     ap.add_argument("--min-steps", type=int, default=0)
     ap.add_argument("--glob", default="*.npz")
+    ap.add_argument("--only", nargs="*", help="run only these fixed configs (no LODO tuning), e.g. on held-out data")
     a = ap.parse_args()
     paths = sorted(str(p) for p in a.traces.glob(a.glob))
     with np.load(paths[0]) as z:
@@ -97,7 +100,7 @@ def main():
     if rho_rows:
         write(a.out / "rho.csv", ["doc", "layer", "mean_rho", "median_rho"], rho_rows)
     with Pool(a.procs) as pool:
-        rows = [r for part in pool.imap_unordered(run, [(p, budgets) for p, _, _ in keep]) for r in part]
+        rows = [r for part in pool.imap_unordered(run, [(p, budgets, a.only) for p, _, _ in keep]) for r in part]
     write(a.out / "misses.csv", ["doc", "layer", "config", "B", "accesses", "misses", "compulsory"], rows)
     M = defaultdict(lambda: defaultdict(lambda: np.zeros(3, np.int64)))
     for d, l, c, B, acc, m, comp in rows:
