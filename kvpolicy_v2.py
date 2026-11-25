@@ -148,8 +148,10 @@ class SIEVE(Policy):
             self.visited[p] = False
 
 
-class S3FIFO(Policy):
-    """S3-FIFO (SOSP 2023, Algorithm 1): small FIFO S (10% of B), main FIFO M, ghost FIFO G
+class S3FIFO_v2orig(Policy):
+    """replication-v2 version, kept unchanged for side-by-side reporting (followup-v3 A5: it stops scanning S
+    once S drops below its target size, so it differs from Algorithm 1 when the small queue holds > 1 page;
+    use S3FIFO). S3-FIFO (SOSP 2023, Algorithm 1): small FIFO S (10% of B), main FIFO M, ghost FIFO G
     (B - |S target| entries), 2-bit frequency kept when a page moves from S to M. A step's hits raise
     their frequency before eviction; pages selected at this step are skipped (left in place) by the
     eviction scan, which takes the oldest unselected page of the queue."""
@@ -225,6 +227,111 @@ class S3FIFO(Policy):
                 self.S[p] = None
 
 
+class S3FIFO(Policy):
+    """S3-FIFO, SOSP 2023 Algorithm 1 (followup-v3 A5 fix). Small FIFO S, main FIFO M, ghost FIFO G; 2-bit
+    frequency (capped at 3), kept when a page moves from S to M.
+      EVICT:  if |S| >= small*B: EVICTS else EVICTM
+      EVICTS: repeat while nothing was evicted and S has a candidate: t = tail of S; if freq(t) > 1, move t to
+              M and, if M is then full (|M| >= (1-small)*B), EVICTM; else move t to G (evicted).
+      EVICTM: repeat while nothing was evicted: t = tail of M; if freq(t) > 0: freq -= 1, reinsert at the
+              head; else evict t.
+    G keeps at most (1-small)*B entries (as many as M holds). Batched adaptation (same as the other
+    policies): a step's hits raise their frequency before eviction; pages selected at this step are not
+    candidates, so "tail" means the oldest unselected page of the queue and selected pages stay in
+    place. EVICT is repeated until at least n pages are gone; like Algorithm 1 a single EVICT can remove
+    two pages (one from M inside EVICTS and one from S), so a step may free more than n slots. If
+    EVICTM finds no candidate in M (all of M selected), the oldest unselected page of S is evicted."""
+    needs_budget = True
+
+    def __init__(self, K, B=None, small=0.1, **kw):
+        super().__init__(K, **kw)
+        self.cap, self.small = B, small
+        self.s_target = small * B
+        self.m_cap = (1 - small) * B
+        self.S, self.M, self.G = OrderedDict(), OrderedDict(), OrderedDict()  # first = oldest (tail)
+        self.freq = {}
+
+    def begin(self, t, ranked, srow):
+        super().begin(t, ranked, srow)
+        for p in ranked:
+            if p in self.freq:
+                self.freq[p] = min(self.freq[p] + 1, 3)
+
+    @staticmethod
+    def _oldest(Q, cands):
+        for p in Q:
+            if p in cands:
+                return p
+        return None
+
+    def _gone(self, p, out, cands):
+        out.append(p)
+        cands.discard(p)
+        del self.freq[p]
+
+    def _evict_m(self, cands, out):
+        while True:
+            pm = self._oldest(self.M, cands)
+            if pm is None:
+                ps = self._oldest(self.S, cands)
+                if ps is None:
+                    return False
+                del self.S[ps]
+                self.G[ps] = None
+                self._trim_ghost()
+                self._gone(ps, out, cands)
+                return True
+            if self.freq[pm] > 0:
+                self.freq[pm] -= 1
+                self.M.move_to_end(pm)
+            else:
+                del self.M[pm]
+                self._gone(pm, out, cands)
+                return True
+
+    def _trim_ghost(self):
+        while len(self.G) > self.m_cap:
+            self.G.popitem(last=False)
+
+    def _evict_s(self, cands, out):
+        while True:
+            ps = self._oldest(self.S, cands)
+            if ps is None:
+                return False
+            del self.S[ps]
+            if self.freq[ps] > 1:
+                self.M[ps] = None
+                if len(self.M) >= self.m_cap:
+                    self._evict_m(cands, out)
+            else:
+                self.G[ps] = None
+                self._trim_ghost()
+                self._gone(ps, out, cands)
+                return True
+
+    def evict(self, cands, n):
+        cands = set(cands)
+        out = []
+        while len(out) < n:
+            if len(self.S) >= self.s_target and self._evict_s(cands, out):
+                continue
+            if len(out) >= n:
+                break
+            if not self._evict_m(cands, out):
+                raise RuntimeError("S3-FIFO: no eviction candidate")
+        return out
+
+    def admit(self, hits, misses):
+        super().admit(hits, misses)
+        for p in sorted(misses):
+            self.freq[p] = 0
+            if p in self.G:
+                del self.G[p]
+                self.M[p] = None
+            else:
+                self.S[p] = None
+
+
 class LazyEMA(ScoreEMA):
     """ScoreEMA refreshed only on steps with t % r == 0 (InertiaKV-style lazy update); newly
     admitted pages still start at their current value. alpha=1 is the frozen ranking (each page
@@ -277,6 +384,41 @@ class Holt(Policy):
             self.tr[p] = 0.0
 
 
+class HoltStd(Policy):
+    """Standard Holt linear trend (followup-v3 A2), for comparison with the PRR-style Holt above:
+    l_t = alpha*x + (1-alpha)*(l + v) ; v_t = beta*(l_t - l) + (1-beta)*v ; evict the lowest l + gamma*v.
+    The trend is the change of the level (Delta level) and the level includes the trend; alpha weights the
+    new observation. Starts at l = x, v = 0."""
+    needs_scores = True
+
+    def __init__(self, K, alpha=0.5, beta=0.3, gamma=0.5, **kw):
+        super().__init__(K, **kw)
+        self.a, self.b, self.g = alpha, beta, gamma
+        self.lv, self.tr = {}, {}
+
+    def begin(self, t, ranked, srow):
+        super().begin(t, ranked, srow)
+        for p in self.lv:
+            x = _z(srow, ranked, p)
+            l0, v0 = self.lv[p], self.tr[p]
+            l1 = self.a * x + (1 - self.a) * (l0 + v0)
+            self.tr[p] = self.b * (l1 - l0) + (1 - self.b) * v0
+            self.lv[p] = l1
+
+    def key(self, p):
+        return self.lv[p] + self.g * self.tr[p], self.last[p], self.hit[p], -p
+
+    def dropped(self, p):
+        super().dropped(p)
+        del self.lv[p], self.tr[p]
+
+    def admit(self, hits, misses):
+        super().admit(hits, misses)
+        for p in misses:
+            self.lv[p] = _z(self.srow, self.ranked, p)
+            self.tr[p] = 0.0
+
+
 def powerlaw_mixture(gamma, horizon=1024, terms=10):
     """Non-negative weights w for sum_j w_j * r_j**a ~ (a+1)**-gamma over ages a = 0..horizon-1,
     with fixed rates r_j = 1 - 2**-j' (half-lives ~1, 2.4, 5.2, 11, 22, 44... steps: j' = 1, 2, ...)
@@ -300,39 +442,82 @@ def powerlaw_mixture(gamma, horizon=1024, terms=10):
 
 class PowerLawDecay(Policy):
     """Power-law age kernel instead of exponential decay (NoHairCache-style): the page value is the
-    sum over steps since admission of z_tau * (t - tau + 1)**-gamma, computed with an exponential
-    mixture (powerlaw_mixture) so that the state stays O(1) per resident."""
+    sum over steps since admission of x_tau * (t - tau + 1)**-gamma, computed with an exponential
+    mixture (powerlaw_mixture) so that the state stays O(1) per resident.
+
+    Optional variants (followup-v3 A1/B1; the defaults are the replication-v2 behaviour):
+      normalize  False: the plain (unnormalised) sum. True: divided by the sum of the kernel weights over the
+                 page's residency, sum_tau (t - tau + 1)**-gamma (same mixture), i.e. a weighted mean.
+      zero       where x = 0 lies: "kth" = the K-th selected score (x = z, kvpolicy._z); "median" / "min" = the
+                 median / minimum of all eligible pages' scores at this step; x = (s - ref) / (top1 - kth).
+                 With the unnormalised sum the zero point decides whether residency adds or subtracts value:
+                 most unselected pages have z < 0, so with zero="kth" a page loses value every step it stays.
+      shift      constant added to x (e.g. +1 moves the zero point to one (top1 - kth) unit below the K-th)."""
     needs_scores = True
     _cache = {}
+    ZEROS = ("kth", "median", "min")
 
-    def __init__(self, K, gamma=1.0, **kw):
+    def __init__(self, K, gamma=1.0, normalize=False, zero="kth", shift=0.0, **kw):
         super().__init__(K, **kw)
+        if zero not in self.ZEROS:
+            raise ValueError("bad zero")
         if gamma not in self._cache:
             self._cache[gamma] = powerlaw_mixture(gamma)
         self.rates, self.w, self.err = self._cache[gamma]
         keep = [j for j in range(len(self.w)) if self.w[j] > 0]
         self.rates, self.w = [float(self.rates[j]) for j in keep], [float(self.w[j]) for j in keep]
-        self.acc = {}
+        self.normalize, self.zero, self.shift = normalize, zero, shift
+        self.acc, self.norm = {}, {}
+
+    def x(self, p):
+        if self.zero == "kth":
+            return _z(self.srow, self.ranked, p) + self.shift
+        kth, top = self.srow[self.ranked[-1]], self.srow[self.ranked[0]]
+        return (self.srow[p] - self.ref) / (top - kth + 1e-6) + self.shift
 
     def begin(self, t, ranked, srow):
         super().begin(t, ranked, srow)
+        if self.zero != "kth":
+            a = np.asarray(srow, dtype=np.float64)
+            a = a[np.isfinite(a)]
+            self.ref = float(np.median(a)) if self.zero == "median" else float(a.min())
         rates = self.rates
         for p, a in self.acc.items():
-            x = _z(srow, ranked, p)
+            x = self.x(p)
             for j, r in enumerate(rates):
                 a[j] = r * a[j] + x
+            if self.normalize:
+                nm = self.norm[p]
+                for j, r in enumerate(rates):
+                    nm[j] = r * nm[j] + 1.0
+
+    def value(self, p):
+        v = sum(w * x for w, x in zip(self.w, self.acc[p]))
+        if self.normalize:
+            v /= sum(w * x for w, x in zip(self.w, self.norm[p]))
+        return v
 
     def key(self, p):
-        return sum(w * x for w, x in zip(self.w, self.acc[p])), self.last[p], self.hit[p], -p
+        return self.value(p), self.last[p], self.hit[p], -p
 
     def dropped(self, p):
         super().dropped(p)
         del self.acc[p]
+        self.norm.pop(p, None)
 
     def admit(self, hits, misses):
         super().admit(hits, misses)
         for p in misses:
-            self.acc[p] = [_z(self.srow, self.ranked, p)] * len(self.rates)
+            self.acc[p] = [self.x(p)] * len(self.rates)
+            if self.normalize:
+                self.norm[p] = [1.0] * len(self.rates)
+
+
+def powerlaw_direct(xs, gamma):
+    """Reference for tests: sum_i xs[i] * (n - i)**-gamma for the signal history xs (oldest first), i.e. the
+    exact power-law kernel value that PowerLawDecay approximates with an exponential mixture."""
+    n = len(xs)
+    return float(sum(x * (n - i) ** -gamma for i, x in enumerate(xs)))
 
 
 class CO2(ScoreEMA):
@@ -371,7 +556,8 @@ class CO2(ScoreEMA):
 
 
 V2_POLICIES = dict(random=RandomEvict, arkvale=ArkVale, infllm_eq1=InfLLMEq1, infllm_lrus=InfLLMLruS,
-                   sieve=SIEVE, s3fifo=S3FIFO, lazy=LazyEMA, holt=Holt, powerlaw=PowerLawDecay, co2=CO2)
+                   sieve=SIEVE, s3fifo=S3FIFO, s3fifo_v2orig=S3FIFO_v2orig, lazy=LazyEMA, holt=Holt,
+                   holt_std=HoltStd, powerlaw=PowerLawDecay, co2=CO2)
 
 
 # ------------------------------------------------------------------ ArkVale, full version

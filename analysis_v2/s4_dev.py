@@ -399,6 +399,19 @@ def predict_doc(args):
     return out
 
 
+def collect_masked(path):
+    """LRU decisions at B=PRIMARY with the per-decision flag complete_horizon (t + H < T)."""
+    import efficient_dev as ed
+    return ed.collect(path, PRIMARY, track_horizon=True)
+
+
+def mask_tail(d):
+    """Drop decisions in the last H steps of a trace (followup-v3 A7): there 'not re-selected within H' is
+    censored by the end of the trace, not observed."""
+    m = d["complete_horizon"]
+    return dict(d, X=d["X"][m], soon=d["soon"][m])
+
+
 def cmd_predict(args):
     import efficient_dev as ed
     from gap_analysis import auc as tie_auc
@@ -411,7 +424,17 @@ def cmd_predict(args):
               ["doc", "layer", "steps", "adjacent_overlap", "topk_churn"] + [f"ema_pred_overlap_a{a}" for a in alphas],
               rows)
         # incremental predictive power of the score signal beyond recency and frequency
-        data = pool.starmap(ed.collect, [(p, PRIMARY) for p in paths])
+        raw = pool.map(collect_masked, paths)
+    res = []
+    for label, data in (("masked_last_H", [mask_tail(d) for d in raw]), ("unmasked_v2", raw)):
+        res += auc_tables(data, label)
+    write(args.out / "incremental_auc.csv", ["mask", "kind", "item", "value", "sd"], res)
+    print(*res, sep="\n")
+
+
+def auc_tables(data, mask_label):
+    import efficient_dev as ed
+    from gap_analysis import auc as tie_auc
     feats = list(kp.FEATURES)
     ia, iz, ize, ic = feats.index("age"), feats.index("z"), feats.index("z_ema"), feats.index("log_cnt")
     res = []
@@ -431,7 +454,8 @@ def cmd_predict(args):
         w, mu, sd = model
         return np.column_stack([(X - mu) / sd, np.ones(len(X))]) @ w
 
-    sets = {"recency+freq": [ia, ic], "+z": [ia, ic, iz], "+z_ema": [ia, ic, ize], "+z+z_ema": [ia, ic, iz, ize]}
+    sets = {"recency": [ia], "frequency": [ic], "recency+freq": [ia, ic], "+z": [ia, ic, iz], "+z_ema": [ia, ic, ize],
+            "+z+z_ema": [ia, ic, iz, ize]}
     names = [d["rid"] for d in data]
     for name, cols in sets.items():
         aucs = []
@@ -462,8 +486,7 @@ def cmd_predict(args):
         res.append(("stratified_auc_age_decile_x_count", fname, num / den if den else float("nan"), ""))
     res.append(("n_decisions", "lru_B96_candidates", int(len(y)), ""))
     res.append(("base_rate", f"reused_within_{ed.H}", float(y.mean()), ""))
-    write(args.out / "incremental_auc.csv", ["kind", "item", "value", "sd"], res)
-    print(*res, sep="\n")
+    return [(mask_label, *r) for r in res]
 
 
 # ------------------------------------------------------------------------------ noise injection

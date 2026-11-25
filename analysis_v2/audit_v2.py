@@ -4,7 +4,8 @@
   python -m analysis_v2.audit_v2 TRACES --misses results_v2/dev/efficient_dev/misses.csv \
       [--misses more.csv ...] --out results_v2/dev/audit.txt [--budgets 72 96 128 256] [--procs 32]
 
-Exit status 1 on any mismatch. Also checks Belady <= LRU per layer and a nonzero miss rate.
+Exit status 1 on any mismatch, and on any independent replay that has no kvpolicy row to compare with (a
+missing reference row; followup-v3 A6). Also checks Belady <= LRU per layer and a nonzero miss rate.
 """
 import argparse
 import csv
@@ -30,6 +31,20 @@ def doc_counts(args):
     return out
 
 
+def compare(ref, ind):
+    """ref, ind: {(doc, layer, policy, B): (accesses, misses, compulsory)} from the kvpolicy tables and from
+    replay.py. Returns (mismatches [(key, ref, ind)], keys of ind without a ref row, number compared)."""
+    bad, missing, checked = [], [], 0
+    for key, v in sorted(ind.items()):
+        if key not in ref:
+            missing.append(key)
+            continue
+        checked += 1
+        if ref[key] != v:
+            bad.append((key, ref[key], v))
+    return bad, missing, checked
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("traces", type=Path)
@@ -52,12 +67,7 @@ def main():
         ind = {}
         for part in pool.imap_unordered(doc_counts, [(p, args.budgets) for p in paths]):
             ind.update(part)
-    bad, checked = [], 0
-    for key, v in ind.items():
-        if key in ref:
-            checked += 1
-            if ref[key] != v:
-                bad.append((key, ref[key], v))
+    bad, missing, checked = compare(ref, ind)
     order = []
     for (rid, l, pol, B), v in ind.items():
         if pol == "lru":
@@ -66,9 +76,11 @@ def main():
                 order.append((rid, l, B, v[1], o[1]))
     zero = sum(1 for (rid, l, pol, B), v in ind.items() if pol == "lru" and v[1] == 0)
     lines = [f"traces: {len(paths)}; independent replays: {len(ind)}; matched against kvpolicy rows: {checked}",
-             f"mismatches: {len(bad)}", f"layers with Belady > LRU: {len(order)}",
+             f"mismatches: {len(bad)}", f"missing reference rows: {len(missing)}",
+             f"layers with Belady > LRU: {len(order)}",
              f"layer streams with zero LRU misses: {zero}"]
     lines += [f"MISMATCH {k}: kvpolicy {a} replay.py {b}" for k, a, b in bad[:50]]
+    lines += [f"MISSING kvpolicy row for {k}" for k in missing[:50]]
     tot = defaultdict(lambda: [0, 0])
     for (rid, l, pol, B), v in ind.items():
         tot[pol, B][0] += v[0]
@@ -78,7 +90,7 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
-    sys.exit(1 if (bad or order or checked == 0) else 0)
+    sys.exit(1 if (bad or missing or order or checked == 0) else 0)
 
 
 if __name__ == "__main__":
