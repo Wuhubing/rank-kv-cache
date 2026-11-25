@@ -1,8 +1,8 @@
 # 在 wulab2 上从头重跑：目标、指标、基线和执行步骤
 
-草拟于 2026-11-25，**待审阅，尚未开始执行**。配套文档：[README.md](README.md)（投稿准备）和 [papers/](papers/)（论文阅读笔记）。
+写于 2026-11-25。**本文是交给 mac mini 上的 Claude 自主执行的完整任务说明**（用 `/goal` 盯到完成），执行过程中不需要人工审查。配套文档：[README.md](README.md)（投稿准备）和 [papers/](papers/)（论文阅读笔记）。
 
-本计划按依赖顺序写成一条连续的流水线，目标是一口气做完。每一步都写明输入、做法、输出和**检查条件**：检查不通过就停下修，不往下走。
+本计划按依赖顺序写成一条连续的流水线，目标是一口气做完。每一步都写明输入、做法、输出和**检查条件**：检查不通过就按第 10 节的规则修复后重试，修不好就停下并写明原因，不往下走。
 
 ---
 
@@ -44,7 +44,7 @@
 2. **原有 held-out 只再评估一次**：用冻结参数在新 GPU 上重新采集，按事先提交的复现预注册评估一次。不在新的 held-out 上调任何参数。
 3. **探索只在 dev 上做**：全 page 排名对照、预算扫描、各种消融都只用 dev。
 4. **新模型或新任务的确认性结论要用新的 held-out**：另抽文档，先写预注册再采集。
-5. **一个分支只让一台机器写**：`rerun/wulab2` 只从 wulab2 推送。
+5. **一个分支只让一台机器写**：`rerun/wulab2` 只从 mini 提交和推送（wulab2 上没有 GitHub 凭据）。wulab2 只负责跑，代码通过 `git pull` 从 GitHub 同步过去（仓库是公开的），小结果文件用 `rsync` 拉回 mini 再提交。
 6. **不备份到 Drive**：原始 trace 只放在 `/data/weibing`；仓库里只提交小的结果文件和带 sha256 的 manifest。
 7. **只用一张卡**：开跑前用 `nvidia-smi` 挑一张空闲的卡，用 `CUDA_VISIBLE_DEVICES` 固定。全部采集和 benchmark 都在这张卡上做，卡号和 GPU UUID 写进 manifest。长任务放在 tmux 里跑。
 
@@ -59,15 +59,15 @@
 | CPU / 内存 | 48 核，503 GB | CPU 回放开多进程 |
 | 网络 | 能访问 Hugging Face 和 GitHub | — |
 
-## 4. 开跑前要决定的事
+## 4. 已定的决定（执行时直接照做）
 
-| # | 决定 | 建议 |
+| # | 决定 | 内容 |
 |---|---|---|
-| D1 | 原 held-out 怎么用 | 冻结参数做跨硬件复现，评估一次 |
-| D2 | 代码基线 | 先合并 #6 和 #7，再从合并后的 `efficient-policy` 开 `rerun/wulab2` |
-| D3 | 谁来执行 | mini 上的 Claude 通过 SSH 操作 wulab2；每个检查条件的结果写成文件，由 MacBook 这边审 |
-| D4 | 第二个模型 | Qwen3-8B；备选 Llama-3.1-8B |
-| D5 | thesis | 按第 1.2 节，或者团队给出修改版 |
+| D1 | 原 held-out | 冻结参数做跨硬件复现，评估一次（S5） |
+| D2 | 代码基线 | 不等 PR 合并。从 `origin/review-fixes/efficient-policy`（PR #7，已包含 #5）开 `rerun/wulab2`，再合并 `origin/review-fixes/stage1-2`（PR #6）。冲突如果只在文档里，以 efficient-policy 一侧为准，但保留 #6 新增的 `posthoc_rank_increment.py`、它的测试和结果目录。不合并、不关闭任何 PR |
+| D3 | 第二个模型 | Qwen3-8B |
+| D4 | thesis | 按第 1.2 节执行；S4 第 2 项出结果后，按结果把第 1.2 节第 2 点改成"分数大小"或"全局排序"，并在 `docs/rerun/thesis.md` 写明依据 |
+| D5 | 第 1.3 节的缺口 | proposal 原文和投稿目标暂时缺失，不阻塞执行；以 `docs/preregistration.md` 和两份冻结配置为准 |
 
 ---
 
@@ -155,13 +155,13 @@
 
 ## 7. 执行步骤（按依赖顺序，一口气做完）
 
-### S0：确认决定
-- 输入：第 4 节的 D1–D5。
-- 输出：`docs/rerun/decisions.md`，记录确认结果。
-- 检查：D1、D2、D5 有明确答复。
+### S0：准备分支
+1. 在 mini 的 `~/work/rank-kv-cache` 克隆或更新仓库，按 D2 建 `rerun/wulab2` 并推送。
+2. 把本文和 `docs/workshop/` 复制进这个分支（来自 `docs/workshop-readiness`），建立 `docs/rerun/STATUS.md`（见第 10 节格式）。
+- 检查：分支已推送；本地单元测试在 mini 上通过（mini 只有 Python 3.9，用 `uv` 建 3.10 以上的环境）。
 
 ### S1：环境
-1. 在 `/data/weibing/rank-kv-cache` 克隆仓库，切到 `rerun/wulab2`。
+1. 在 wulab2 的 `/data/weibing/projects/rank-kv-cache` 用 https 克隆仓库，切到 `rerun/wulab2`。
 2. 设置 `HF_HOME=/data/weibing/hf` 和 `TMPDIR=/data/weibing/tmp`。
 3. 用 uv 建环境：`transformers==4.53.3`，cu124 的 torch（版本写进 `docs/rerun/environment.md`），numpy、pytest、`rouge==1.0.1`。
 4. 按 split 文件里固定的 revision 下载 Qwen3-0.6B 和 LongBench；后面 S6 再下 Qwen3-8B。
@@ -232,7 +232,7 @@
 ### S8：汇总
 1. 更新 README、STATUS_REPORT 和 workshop README 中的数字和图，原 L4 结果保留并并排展示。
 2. 按第 1.2 节（或团队修改后）的 thesis 逐条核对：每一条都有对应的结果和图，没有证据的说法删掉或改弱。
-3. 开 PR，说明做了什么、结果是什么、和原结果的差异、所有偏离。
+3. 开 PR（`rerun/wulab2` → `efficient-policy`），说明做了什么、结果是什么、和原结果的差异、所有偏离。不合并。
 
 ---
 
@@ -247,7 +247,55 @@
 | 原始 trace 只有一份 | manifest 记录 sha256；丢失后按同一配置重采 |
 
 ## 9. 交付物
-- `rerun/wulab2` 分支：采集脚本、新基线和分析脚本、`results_wulab2/` 下的小结果文件。
+- `rerun/wulab2` 分支和对应的 PR：采集脚本、新基线和分析脚本、`results_wulab2/` 下的小结果文件。
 - `docs/rerun/`：决定记录、环境、每一步的结论、复现报告、扩展和系统测量报告。
 - `docs/replication_wulab2.md`：复现预注册（S5 之前提交）。
 - 更新后的 README、STATUS_REPORT 和 workshop 文档。
+
+---
+
+## 10. 给 mini 上的 Claude 的执行说明
+
+### 10.1 连接和分工
+| 机器 | 做什么 | 怎么连 |
+|---|---|---|
+| mini（`~/work/rank-kv-cache`） | 写代码、提交、推送；调度和检查 | 本机 |
+| wulab2（`/data/weibing/projects/rank-kv-cache`） | 采集 trace、CPU 回放、GPU 测量 | 在 mini 上 `ssh wulab2`（已配好免密） |
+
+- wulab2：Ubuntu，Python 3.10，`uv` 在 `~/.local/bin`，tmux 3.2a，**没有 gh、没有 git 身份和凭据**。
+- 原始 trace 放在 `/data/weibing/projects/rank-kv-cache/data/`（加进 `.gitignore`），**不提交、不上传 Drive**。
+- 代码同步：mini 推送后，在 wulab2 上 `git pull`。结果同步：`rsync -a wulab2:/data/weibing/projects/rank-kv-cache/results_wulab2/ ~/work/rank-kv-cache/results_wulab2/`，只同步 CSV、JSON、TXT、PNG 等小文件。
+
+### 10.2 必须遵守
+1. 第 2 节的规则全部有效。特别是：不改冻结文件；held-out 只在 S5 预注册提交之后采集、只评估一次；探索只用 dev。
+2. 不合并、不关闭任何 PR；不改 `main`、`stage1-2`、`efficient-policy` 等已有分支。
+3. 每完成一个有意义的单元就提交并推送，提交信息写清楚做了什么。
+4. wulab2 是共享服务器：只用一张卡；不 kill 别人的进程；不往根分区写大文件。
+5. 等待长任务时不要反复调用模型：用 tmux 跑，进度写进文件，定时用普通命令检查。
+6. 指南里记录过的坑（`mac-mini-guide.md` 第 11 节）：远程命令在远程机器上生成，不要在 mini 上展开 `~` 再发过去；`while read` 循环里的 `ssh` 要加 `-n`；实验进程要脱离调度脚本独立运行；macOS 没有 `timeout`。
+
+### 10.3 检查不通过时
+1. 先定位原因并修复，重新执行这一步；同一个检查最多重试 3 次。
+2. 修复不能违反第 2 节。如果唯一的修法会违反（例如需要改冻结文件、需要重新评估 held-out），就**停下**。
+3. 停下时在 `docs/rerun/STATUS.md` 写 `BLOCKED`、原因、已经试过的办法和需要人决定的问题，提交推送后结束。
+4. 结果不符合预期（例如 EMA 在新 trace 上不再胜过 LRU）**不算**检查失败，照实记录并继续。
+
+### 10.4 进度文件 `docs/rerun/STATUS.md`
+每完成一步更新一次并推送：
+
+```
+当前步骤: S3
+状态: RUNNING | DONE | BLOCKED
+使用的 GPU: 卡号 + UUID
+已完成: S0 (commit abc123), S1 (commit def456), ...
+最近一次检查: 通过/不通过 + 一句话
+下一步: ...
+BLOCKED 原因（如有）: ...
+```
+
+### 10.5 停止开关
+如果 wulab2 上存在 `/data/weibing/projects/rank-kv-cache/STOP`，不要开始新的采集或回放任务，正在跑的任务让它跑完；在 STATUS.md 写明"按停止开关暂停"。
+
+### 10.6 完成的定义
+- S0–S8 全部是 DONE，或者停在 BLOCKED 并写明原因。
+- S8 的 PR 已开，PR 描述里逐条对照第 1.2 节的 thesis 写明哪些被证据支持、哪些被改弱或删除。
