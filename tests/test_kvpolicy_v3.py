@@ -19,7 +19,8 @@ ALL = {"kernel": [dict(kernel="exp", a=0.5), dict(kernel="power", gamma=1.0, nor
        "ema_age": [dict(lam=0.5), dict(lam=0.5, clock="since_sel")], "ema_deficit": [dict(lam=1.0), dict(lam=math.inf)],
        "ema_unsel": [dict(lam=0.5)], "twoscale": [dict(fast=0.2, slow=0.9, w=0.5)],
        "lookahead": [dict(H=4), dict(H=16, tie="ema")], "scoped_ema": [dict(M=2), dict(M=2, which="bottom")],
-       "refrank_ema": [dict(R=16)], "shrink_ema": [dict(c=0.5), dict(c=0.5, prior="zero")]}
+       "refrank_ema": [dict(R=16)], "shrink_ema": [dict(c=0.5), dict(c=0.5, prior="zero")],
+       "protect": [dict(rho=0.25), dict(base="ema", rho=0.25), dict(sink=2, recent=2), dict(base="ema", sink=1, recent=1)]}
 
 
 @pytest.mark.parametrize("name", sorted(ALL))
@@ -51,6 +52,9 @@ def test_reductions(B):
     same("scoped_ema", "ema", B, dict(alpha=0.5, M=10 ** 6), dict(alpha=0.5))
     same("refrank_ema", "ema", B, dict(alpha=0.5, R=8), dict(alpha=0.5, signal="rank"))  # K = 8, float32 scores
     same("shrink_ema", "ema", B, dict(alpha=0.5, c=0.0), dict(alpha=0.5))
+    same("protect", "lru", B, dict(base="lru"))
+    same("protect", "ema", B, dict(base="ema", alpha=0.5), dict(alpha=0.5))
+    same("protect", "co2", B, dict(base="ema", alpha=0.5, rho=0.25), dict(alpha=0.5, rho=0.25, N=0))
 
 
 def test_lookahead_monotone_on_average():

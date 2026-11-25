@@ -101,7 +101,35 @@ def b7():
     return e
 
 
-REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7)}
+def c3():
+    e = Exp("c3", doc="C3: shrunken initial value of newly admitted pages (no noise; the noisy case is analysis_v3.noise)")
+    e.base(ema_signals=("z", "allrank"))
+    for sig in ("z", "allrank"):
+        for prior in ("mean", "zero"):
+            for a in (0.3, 0.5, 0.7):
+                for c in (0.25, 0.5, 0.75):
+                    e.add(f"shrink_{sig}_{prior}", f"shrink_{sig}_{prior}:{a}:{c}", "shrink_ema", alpha=a, c=c,
+                          prior=prior, signal=sig)
+        for prior in ("mean", "zero"):
+            e.contrasts.append((f"shrink_{sig}_{prior}(lodo)", f"ema_{sig}(lodo)"))
+    return e
+
+
+def d5():
+    e = Exp("d5", doc="D5: FIFO protection zone (rho) and pinned sink / recent pages on LRU and EMA")
+    e.base()
+    for base in ("lru", "ema"):
+        for rho in (0.05, 0.1, 0.2, 0.3, 0.5):
+            e.add(f"prot_{base}_rho{rho}", f"prot_{base}_rho{rho}", "protect", base=base, alpha=0.5, rho=rho)
+        pins = [(n, 0) for n in range(1, 5)] + [(0, n) for n in range(1, 5)] + [(n, n) for n in range(1, 5)]
+        for sk, rc in pins:
+            e.add(f"pin_{base}_s{sk}r{rc}", f"pin_{base}_s{sk}r{rc}", "protect", base=base, alpha=0.5, sink=sk,
+                  recent=rc)
+    e.add("ema_fixed", "ema_fixed:0.5", "ema", alpha=0.5)
+    return e
+
+
+REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5)}
 
 
 def get(name):

@@ -17,6 +17,9 @@ B7  ScopedEMA     EMA updated each step for the selected residents plus M unsele
                   highest ("top") or lowest ("bottom") current score; the rest keep their stale values.
     RefRankEMA    EMA of the rank among the R highest-scoring eligible pages: (R - r + 1)/R if r <= R else 0
                   (R = K: rank among the selected; R = None: all eligible pages).
+D5  Protect       LRU or EMA(z) with a FIFO protection zone (the floor(rho*B) most recently admitted residents) and
+                  pinned pages (the first `sink` pages and the `recent` most recent completed pages): protected
+                  residents are evicted only when no unprotected candidate is left (then in base-key order).
 C3  ShrinkEMA     EMA(z) whose newly admitted page starts at a shrunken value: (1 - c) * x + c * prior, prior = the
                   running mean of the layer's admission values (or 0), or a count-weighted mean (c = k / (k + n)).
 Also: simulate_steps (per-step miss counts, for the phase analysis), and score_transform helpers.
@@ -319,8 +322,51 @@ class ShrinkEMA(ScoreEMA):
             self.cnt += 1
 
 
+class Protect(ScoreEMA):
+    needs_budget = True
+
+    def __init__(self, K, base="lru", alpha=0.5, rho=0.0, sink=0, recent=0, B=None, **kw):
+        super().__init__(K, alpha=alpha, **kw)
+        if base not in ("lru", "ema"):
+            raise ValueError("bad base")
+        self.base, self.rho, self.sink, self.recent, self.cap = base, rho, sink, recent, B
+        self.adm = {}
+        self.needs_scores = True
+
+    def bkey(self, p):
+        if self.base == "lru":
+            return self.last[p], self.hit[p], -p
+        return self.ema[p], self.last[p], self.hit[p], -p
+
+    def evict(self, cands, n):
+        cands = list(cands)
+        prot = set()
+        nprot = int(self.rho * self.cap)
+        if nprot:
+            prot = set(heapq.nlargest(nprot, self.adm, key=lambda p: (self.adm[p], p)))
+        if self.sink or self.recent:
+            from kvpolicy_v2 import eligible_pages
+            hp = eligible_pages(self.srow)
+            prot |= set(range(self.sink)) | set(range(max(0, hp - self.recent), hp))
+        free = [p for p in cands if p not in prot]
+        out = heapq.nsmallest(n, free, key=self.bkey)
+        if len(out) < n:
+            rest = [p for p in cands if p in prot]
+            out += heapq.nsmallest(n - len(out), rest, key=self.bkey)
+        return out
+
+    def dropped(self, p):
+        super().dropped(p)
+        del self.adm[p]
+
+    def admit(self, hits, misses):
+        super().admit(hits, misses)
+        for p in misses:
+            self.adm[p] = self.t
+
+
 V3_POLICIES = dict(kernel=Kernel, ema_age=EMAAge, ema_deficit=EMADeficit, ema_unsel=EMAUnsel, twoscale=TwoScale,
-                   lookahead=Lookahead, scoped_ema=ScopedEMA, refrank_ema=RefRankEMA, shrink_ema=ShrinkEMA)
+                   lookahead=Lookahead, scoped_ema=ScopedEMA, refrank_ema=RefRankEMA, shrink_ema=ShrinkEMA, protect=Protect)
 kp.POLICIES.update(V3_POLICIES)
 
 
