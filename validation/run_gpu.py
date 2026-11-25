@@ -139,6 +139,8 @@ def memory_lifetime_probe(model):
         post.remove()
     return {"observations": observations, "warmup_argument": 2,
             "steps": 4, "returned_latency_samples": len(result["lat"]),
+            "steady_latency_samples": (result["metrics"]["lat_steady"]["n"]
+                                       if "metrics" in result else len(result["lat"])),
             "reported_peak_bytes": result["peak_mem"]}
 
 

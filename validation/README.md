@@ -1,6 +1,6 @@
 # Comprehensive systems validation
 
-Read [the evaluation](REPORT.md) for conclusions, defects, measured results, and the remaining experimental limits. This branch evaluates `efficient-policy` at `24e5018341f0a0910a2c6e7f41bd7081522a2bc0`.
+Read [the systems review](SYSTEMS_REVIEW.md) for conclusions, defects, measured results, and the remaining experimental limits. This branch evaluates `efficient-policy` at `24e5018341f0a0910a2c6e7f41bd7081522a2bc0`.
 
 Production Python and notebook code are unchanged. The only corrective change outside `validation/` is `.gitattributes`, which preserves LF bytes in JSON files so frozen split hashes survive Windows checkouts. Existing split contents and hashes are unchanged in Git.
 

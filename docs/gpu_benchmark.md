@@ -1,16 +1,43 @@
 # GPU latency benchmark: two-tier Quest KV cache (Colab L4, 2026-11-23)
 
-**Result in one line:** in a real host-offloaded cache the replacement policy reaches the
-simulator's miss counts exactly. It does not reduce decode latency, though: PCIe transfer is not
-the bottleneck here. Score EMA cuts host→GPU traffic by 9–10 % but adds about 6.5 ms per token of
-policy work, so it is slower than LRU in this implementation. Even Bélády, with 34 % fewer misses
-than LRU, is no faster than LRU.
+**Summary.** In a real host-offloaded two-tier cache the replacement policy reproduces the
+simulator: LRU and Bélády miss counts match exactly, EMA within 39 of about 45K misses (fp16 trace
+scores). It does not reduce decode latency:
+- **Final (fused Triton kernels, last section):** all four tiered policies run at about 62 ms per
+  token at B=96 (LRU 62.3, EMA 62.3, allocation + EMA 61.6, Bélády 62.1), within the run-to-run
+  noise of about 1.5 ms. EMA's policy kernel costs about 0.08 ms per token more GPU time than LRU's,
+  which its transfer saving roughly cancels. **EMA ties LRU in latency; it is neither slower nor
+  faster.**
+- **Bytes:** score EMA moves 9.3–9.8 % fewer host→GPU bytes than LRU (B=96 / B=128), and
+  allocation + EMA 13–19 %. At batch 1 on a 0.6B model this is worth about 0.07 ms per token.
+- **Why no latency win:** the step is bound by CPU dispatch of the HF model, not by PCIe. Even
+  Bélády, with 34 % fewer misses than LRU, is not measurably faster.
+- **Earlier unfused implementation** (the sections up to "Follow-up", kept for the record): there
+  EMA was about 6.5 ms per token slower than LRU. That overhead was kernel launches and syncs of
+  the unfused PyTorch policy step, and it is gone in the fused version.
+- Savings at larger batch (for example batch 32) are **linear extrapolations** from single-sequence
+  measurements. Batching is not implemented in `gpu_bench.py`, so they are not measurements.
+
+**Measurement caveats (these numbers have not been re-measured since the fixes):**
+- *Warm-up.* The setup below excludes the first 8 decode steps as warm-up, but when these runs were
+  made `gpu_bench.run` ignored its `warmup` argument and returned every step's latency and the miss
+  total over all steps. Whether the outer Colab harness sliced them off is not recorded, so the
+  latencies and miss counts may include the warm-up steps. `run` now validates `warmup` and returns
+  raw and steady-state (warm-up excluded) metrics side by side (`metrics`, `warmup_mask`,
+  `step_miss`).
+- *Memory.* The reported decode peak (3.5–5.1 GB) was read after `reset_peak_memory_stats`, but at
+  that point the prefill model output still referenced the full prefill cache, so for the tiered
+  modes the peak includes the prefill KV. `run` now releases it first and reports the prefill,
+  migration, warm-up decode and steady decode peaks separately.
+- The two-tier cache still materialises the full prefill cache on the GPU before offloading, so it
+  does not show support for prompts whose prefill does not fit on the GPU.
 
 ## Setup
 - Model: Qwen3-0.6B (bf16, 28 layers, 8 KV heads, head dim 128), HF transformers 4.53.3, PyTorch
   SDPA, greedy decoding, on an NVIDIA L4 with 52 GB host RAM.
 - Inputs: 3 held-out documents (2 gov_report, 1 qmsum; prompts 20–30K tokens), with the same prompt
-  as the traces. 384 decode steps after the prefill; the first 8 steps are warm-up. Latency is the
+  as the traces. 384 decode steps after the prefill; the first 8 steps are meant as warm-up (see the
+  caveats above: the benchmark function did not apply this itself). Latency is the
   wall time of one full model step (`torch.cuda.synchronize` → next token on the CPU).
 - Two-tier cache (`gpu_bench.py`):
   - After the prefill, every completed 16-token page of every layer is moved to pinned host memory
@@ -38,7 +65,7 @@ than LRU, is no faster than LRU.
   - EMA and allocation + EMA differ by at most 39 of 45K misses (<0.1 %). The trace stores scores
     as fp16, while the live run uses fp32, so a few near-ties break differently.
 
-## Latency (median of 3 documents; p90 within +4 to +8 ms of the median)
+## Latency, unfused implementation (median of 3 documents; p90 within +4 to +8 ms of the median)
 | Config | ms/token, B=96 | ms/token, B=128 | PCIe MB/token, B=96 | PCIe MB/token, B=128 |
 |---|---|---|---|---|
 | Resident Quest (no offload) | 57.1 | – | 0 | – |
@@ -48,8 +75,10 @@ than LRU, is no faster than LRU.
 | Tiered allocation + EMA | 93.0 | 90.3 | 7.38 | 4.31 |
 | Tiered Bélády (oracle) | 87.3 | – | 5.61 | – |
 
-Peak GPU memory during decode is 3.5–5.1 GB in every config. The prefill and the 0.6B model
-dominate it, so the offload's memory saving (about 2–3 GB of KV) does not show in this peak.
+Peak GPU memory during decode was reported as 3.5–5.1 GB in every config, so the offload's memory
+saving (about 2–3 GB of KV) did not show in this peak. For the tiered modes this peak still included
+the prefill cache, which the benchmark kept alive into decode (see the caveats at the top); it needs
+re-measuring with the fixed harness before any memory comparison.
 
 ## Where the time goes (CUDA events, attention backend summed over 28 layers, B=96, mean ms/step)
 | Phase | LRU | EMA | What it is |
@@ -72,8 +101,8 @@ launches (the EMA update over B slots, the z normalisation, a second sort key). 
 per token (about 0.24 ms) and its latency stays within 1 ms of LRU, which confirms that misses
 hardly move latency in this regime.
 
-## What this means
-- The policy's benefit is real in bytes: 9–10 % less PCIe traffic for EMA and 13–19 % for
+## What this means (unfused implementation; see the fused section for the final numbers)
+- The policy's benefit is real in bytes: 9.3–9.8 % less PCIe traffic for EMA and 13–19 % for
   allocation + EMA on these documents, consistent with the held-out miss reductions. At this scale
   it does not turn into latency, because the per-layer fixed overheads of an unfused PyTorch
   implementation (about 30 ms per token over resident) dwarf the 0.5–0.7 ms of actual PCIe time.
@@ -98,10 +127,10 @@ hardly move latency in this regime.
 
 ## Files
 - `gpu_bench.py`: the tiered cache, the baselines and the timing harness.
+- `bench_metrics.py`: warm-up handling and raw vs steady-state metrics used by `gpu_bench.run`.
 - On Drive, `MyDrive/rank-kv-cache/results_gpu_benchmark/`: `bench.pkl` (per-step latencies,
   per-layer misses and the breakdown for every run), `bench_summary.csv`, and a copy of
   `gpu_bench.py`.
-- `distill_kvrl.py` remains untracked and unused.
 
 ## Follow-up: sync-free zero-copy path and launch-free GPU cost (same day)
 To check whether the per-layer sync and the CPU gather were hiding the policy effect,
@@ -143,8 +172,94 @@ What these numbers show:
   worth only about 3 % of GPU time, and EMA's share of that is under 1 %. Misses only matter where
   transfer is a large share of the step. KV bytes per page and layer do not grow with model width
   under 8-head GQA, so the relevant lever is **batching** (each sequence brings its own misses). At
-  batch 32, LRU would move about 400 MB per step (about 33 ms at 12 GB/s), and EMA's 9–10 % byte
-  saving would be about 3 ms per step. This is an extrapolation; it was not measured.
+  batch 32, LRU would move about 400 MB per step (about 33 ms at 12 GB/s), and EMA's 9.3–9.8 %
+  byte saving would be about 3 ms per step. This is a linear extrapolation from one sequence;
+  batching is not implemented in `gpu_bench.py`, and contention or transfer overlap could change it.
 
 Latency wall times above are wall-clock with `torch.cuda.synchronize`; GPU-busy times come from one
 profiled run per config on one document, so treat them as indicative (±0.2 ms).
+
+## Fused kernels (same day): the policy overhead is gone, and the policy still does not change latency
+`gpu_bench.run(..., zc="fused")` replaces the per-layer policy step with two Triton kernels plus one
+gather kernel:
+- **`_policy`** (one CTA per layer):
+  - EMA update over all slots;
+  - victim ranking by pairwise comparison of the (prim, last, hit, −page) keys over B ≤ 256 slots;
+  - assignment of misses to victims;
+  - next per-slot state.
+- **`_slotup`**: a write-only update of the page→slot table.
+- **`_gather2`**: K and V pages read zero-copy from pinned host memory, missed pages only.
+
+Bugs found and fixed while building it:
+- **Race in the first version.** It updated the slot tables in place inside the kernel. Triton may
+  re-issue a load after a store, so about 15 % of replays of one captured state produced duplicate
+  target slots. On allocation layers (B=88/112) this caused an illegal memory access (Xid 43) that
+  killed the Colab kernel.
+- **Fix.** The per-slot state is now ping-ponged between two buffers: the kernel reads set A and
+  writes set B. The page→slot update moved into a separate write-only kernel whose two address sets
+  are disjoint.
+- **Check.** After the fix, two full passes of all four policies are bit-identical, and a 300-replay
+  stress test of the failing state passed.
+
+**Correctness (3 held-out docs × 384 steps, all configs):**
+- Rankings and tokens are identical to the trace (rank_eq = 1.0 on every run).
+- LRU and Bélády miss counts equal the simulator exactly.
+- EMA and allocation + EMA are within 39 misses of about 45K (the trace stores fp16 scores).
+
+**Wall-clock latency** (median ms/token, mean over 3 documents; LRU and EMA at B=96 run twice):
+
+| Config | B=96 | B=128 | vs unfused (B=96) |
+|---|---|---|---|
+| Resident Quest (no offload, HF DynamicCache) | 57.3 | – | – |
+| Tiered LRU | 62.3 | 62.0 | 86.6 → 62.3 |
+| Tiered score EMA | 62.3 | 61.7 | 93.1 → 62.3 |
+| Tiered allocation + EMA | 61.6 | 61.7 | 93.0 → 61.6 |
+| Tiered Bélády (oracle) | 62.1 | – | 87.3 → 62.1 |
+
+p90 is 1.5–2.5 ms above the median, and repeat runs differ by up to about 1.5 ms. **All four tiered
+policies are within noise of one another**, so EMA is no longer slower than LRU. Even the oracle is
+not measurably faster, because the step is still bound by CPU dispatch of the HF model (about 60
+ms per token of Python and launches for a 0.6B model).
+
+**GPU-busy time per decode step** (profiler started after the prefill and 16 warm-up steps;
+32 profiled steps; doc gov_report/00dfb; B=96):
+
+| Config | GPU ms/step | `_policy` | `_slotup` | `_gather2` (H2D) | Misses/step |
+|---|---|---|---|---|---|
+| Resident Quest | 36.32 | – | – | – | 0 |
+| Tiered LRU, fused | 14.86 | 0.806 | 0.038 | 0.901 | 194 |
+| Tiered score EMA, fused | 14.87 | 0.890 | 0.038 | 0.835 | 184 |
+| Tiered allocation + EMA, fused | 14.90 | 0.948 | 0.038 | 0.813 | 182 |
+| Tiered Bélády, fused | 14.72 | 0.970 | 0.038 | 0.613 | 155 |
+| Tiered LRU, unfused (zc) | 16.94 | | | | 194 |
+| Tiered score EMA, unfused (zc) | 17.60 | | | | 184 |
+
+What the GPU-busy numbers show:
+- **EMA overhead is now near zero.** EMA's policy kernel costs +0.084 ms per token over LRU
+  (28 layers, about 3 µs per layer), against +0.66 ms unfused. **"Near-zero overhead" now holds in
+  the implementation**, not just on paper.
+- **Transfer time scales with misses** at about 7.3 µs per 64 KiB page (zero-copy gather). EMA saves
+  0.066 ms per token of gather time, allocation + EMA 0.088 ms, and Bélády 0.29 ms.
+- **Net GPU effect at batch 1:** EMA ≈ LRU (−0.07 transfer + 0.08 policy, within ±0.01 ms);
+  allocation + EMA is +0.04 ms; Bélády is −0.14 ms. All are ≤ 1 % of the 14.9 ms GPU step.
+- **The offloaded cache uses much less GPU time than the resident path** (14.9 vs 36.3 ms), mostly
+  because HF's DynamicCache copies the whole KV every step. It still has a higher wall time, because
+  both paths are bound by CPU dispatch.
+
+**Verdict.** With fused kernels the score-EMA policy costs the same as LRU on the GPU and moves
+9.3–9.8 % fewer bytes (13–19 % with allocation). At batch 1 on a 0.6B model, that byte saving is worth only about 0.07 ms per
+token, so the policy is a tie with LRU in latency, not a win. A latency win needs transfer to be a
+real fraction of the step: large batch or long K, a slower host link, or no prefetch overlap. The
+measured per-page cost (7.3 µs) and the measured miss reductions let that be estimated directly:
+saving per step ≈ 7.3 µs × misses saved × batch. For EMA that is about 10 misses × batch; a
+linear extrapolation to batch 32 gives about 2.3 ms per step. Batching is not implemented, so this
+is an estimate, not a measurement.
+
+Data, all in `MyDrive/rank-kv-cache/results_gpu_benchmark/`:
+- `bench_fused.pkl`: per-step latencies, per-layer misses, simulator counts and tokens for every
+  run;
+- `bench_fused_summary.csv`;
+- `gpu_busy_fused.json`;
+- `gpu_bench.py` (copy).
+
+A local copy of the summary files is in `results_gpu/` (the per-step pickle is on Drive only).

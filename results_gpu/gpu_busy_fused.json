@@ -1,0 +1,7 @@
+{"resident": {"gpu_ms_per_step": 36.324, "_policy": 0.0, "_slotup": 0.0, "_gather2": 0.0},
+ "lru": {"gpu_ms_per_step": 14.858, "_policy": 0.8061, "_slotup": 0.0381, "_gather2": 0.9012},
+ "ema": {"gpu_ms_per_step": 14.874, "_policy": 0.8898, "_slotup": 0.0382, "_gather2": 0.8350},
+ "alloc_ema": {"gpu_ms_per_step": 14.898, "_policy": 0.9482, "_slotup": 0.0380, "_gather2": 0.8132},
+ "belady": {"gpu_ms_per_step": 14.719, "_policy": 0.9696, "_slotup": 0.0381, "_gather2": 0.6126},
+ "lru_unfused": {"gpu_ms_per_step": 16.937},
+ "ema_unfused": {"gpu_ms_per_step": 17.604}}

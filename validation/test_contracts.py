@@ -1,7 +1,8 @@
 """Independent contracts and strict reproductions of defects at 24e5018.
 
 Run: python -m pytest -q validation/test_contracts.py
-Known defects are strict xfails; --runxfail exposes their failing assertions.
+The defects F1-F9 reproduced here were strict xfails at 24e5018; they are fixed in #5/#7,
+so these are now ordinary regression tests.
 """
 import itertools
 import json
@@ -114,7 +115,6 @@ def test_frozen_split_and_allocations_are_internally_consistent():
         assert sum(allocation) <= 28 * int(budget)
 
 
-@pytest.mark.xfail(strict=True, reason="F1: heldout.configs ignores frozen alpha")
 def test_frozen_alpha_controls_evaluation():
     frozen = {"alpha": {"96": 0.123}, "linear": {}}
     assert heldout.configs(96, frozen)["ema"][1]["alpha"] == 0.123
@@ -129,7 +129,6 @@ class InlinePool:
         return list(map(fn, jobs))
 
 
-@pytest.mark.xfail(strict=True, reason="F2: heldout validates filenames only, not document IDs")
 def test_renamed_development_trace_is_rejected(tmp_path, monkeypatch):
     split = json.loads((ROOT / "splits/longctx_v1.json").read_text())
     dev = next(p["rid"] for p in split["prompts"] if p["split"] == "dev")
@@ -145,20 +144,17 @@ def test_renamed_development_trace_is_rejected(tmp_path, monkeypatch):
         heldout.evaluate(args)
 
 
-@pytest.mark.xfail(strict=True, reason="F4: equal scores get arbitrary ordinal AUC ranks")
 @pytest.mark.parametrize("labels", [[0, 0, 1, 1], [1, 1, 0, 0]])
 def test_auc_ties_are_half_credit_and_order_invariant(labels):
     assert ed.auc(np.ones(4), labels) == 0.5
 
 
-@pytest.mark.xfail(strict=True, reason="F6: NPZ simulator silently accepts malformed selections")
 @pytest.mark.parametrize("ranked", [np.array([[0, 0]]), np.array([[0.5, 1.5]])])
 def test_invalid_ranked_pages_are_rejected(ranked):
     with pytest.raises(ValueError):
         kp.simulate(ranked, np.array([[2.0, 1.0]]), 2, "ema")
 
 
-@pytest.mark.xfail(strict=True, reason="F6: NPZ load accepts nonfinite scores for selected pages")
 def test_nonfinite_selected_score_is_rejected(tmp_path):
     path = tmp_path / "invalid.npz"
     np.savez(path, ranked=np.array([[[0, 1]]]), scores=np.array([[[np.nan, 1.0]]]), rid="d")
@@ -166,26 +162,22 @@ def test_nonfinite_selected_score_is_rejected(tmp_path):
         kp.load(path)
 
 
-@pytest.mark.xfail(strict=True, reason="F9: greedy allocation exceeds an infeasible total")
 def test_allocator_rejects_infeasible_budget():
     curves = {0: {8: 10, 16: 1}, 1: {8: 10, 16: 1}}
     with pytest.raises(ValueError):
         kp.allocate(curves, 2, 8, [8, 16])
 
 
-@pytest.mark.xfail(strict=True, reason="F9: zero allocation weights produce scalar raw and IndexError")
 def test_zero_weights_produce_feasible_allocation():
     allocation = kp.allocate_proportional({0: 0, 1: 0}, 2, 24, [8, 12, 16])
     assert len(allocation) == 2 and sum(allocation.values()) <= 24
 
 
-@pytest.mark.xfail(strict=True, reason="F5: RankFull omits the hit/miss LRU tie key")
 def test_zero_weight_rank_policy_preserves_lru_baseline():
     ranked = np.array([[0, 2], [1, 2], [3, 0], [2, 3]])
     assert kp.simulate(ranked, None, 3, "rank", delta=0, beta=0) == kp.simulate(ranked, None, 3, "lru")
 
 
-@pytest.mark.xfail(strict=True, reason="F3: resume treats one document as a completed config/budget")
 def test_partial_check_resume_schedules_missing_document(tmp_path, monkeypatch):
     traces, result = tmp_path / "traces", tmp_path / "result"
     traces.mkdir()

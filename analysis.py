@@ -2,10 +2,11 @@
 
 Three samples define which pages are observed at decode step t:
   selected   pages selected at t; rank is their rank at t (H1-selected, for contrast)
-  candidate  pages selected before t but not at t: the pages any replacement policy
-             chooses among (H1-candidate, the primary sample; policy independent)
+  candidate  pages selected before t but not at t (H1-candidate, the primary sample;
+             policy independent). A superset of any policy's eviction candidates: it
+             includes pages a finite cache already evicted and steps with no eviction
   lru        candidates that an LRU cache of --lru-budget slots actually holds when
-             step t arrives, i.e. the residents LRU must choose among
+             step t arrives, i.e. the residents LRU chooses among if it must evict
 
 For each observation: last rank is the rank at the page's most recent selection tau
 (tau = t for selected pages), recency = t - tau (None for a first selection), frequency
