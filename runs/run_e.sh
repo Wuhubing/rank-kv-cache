@@ -10,12 +10,12 @@ touch out/v3/PAUSE
 trap 'rm -f out/v3/PAUSE' EXIT
 # wait until no replay of this task is running (the queues stop between jobs while PAUSE exists)
 while pgrep -u weibing -f "analysis_v3.(run|noise|c4_alloc|instrument|learn|b2_model|b2_stats) " > /dev/null; do sleep 60; done
-pick() {  # free card without other processes, preferring not card 2; empty if none
+pick() {  # free card without other processes; card 2 is never used (three CUDA faults on it: ArkVale task, followup-v3
+          # smoke test, and the first E2 attempt "illegal memory access" at 04:22Z); empty if none
   for g in $(free-gpus | tr ',' ' '); do
     [ "$g" = 2 ] && continue
     [ -z "$(nvidia-smi -i $g --query-compute-apps=pid --format=csv,noheader)" ] && { echo $g; return; }
   done
-  g=$(free-gpus 1); [ -n "$g" ] && [ -z "$(nvidia-smi -i $g --query-compute-apps=pid --format=csv,noheader)" ] && echo $g
 }
 ready() {  # sets GPU; returns 1 after 6 h of waiting
   for i in $(seq 0 12); do
