@@ -67,8 +67,44 @@ Every policy has the same tail: one step in 16 completes a page (bounds, write-b
 and +16 ms at batch 32. LRU has no extra tail of its own. Replication-v2's LRU tail at batch 32 (std 23 ms vs 7 ms) came from the old
 batched path (pageable host tier, per-layer synchronising copies) and the fixed run order, not from the policy (R4).
 
-## E5, E6
-E5_PLACEHOLDER
+## E5 (simulated slow tier): speedup against the transfer share — **simulation, not a measurement of a real slower link**
+A GPU-side spin on the fetch path adds (missed bytes of the layer) × d ns per byte before each fetch, read on the GPU without a
+host sync (`gpu_bench_batch2._spin`). Effective bandwidth = 64 KiB / (D2 per-miss cost). The d values bracket the published link
+speeds: PCIe 4.0 ×16 ≈ 25–32 GB/s (our gather reaches ≈ 26 GB/s), a PCIe 4.0 NVMe SSD ≈ 7 GB/s sequential (vendor read
+specifications, e.g. ~7.4 GB/s), 100 GbE ≈ 12.5 GB/s and 25 GbE ≈ 3.1 GB/s line rate. `results_v3/e/slow_06b/`; 5 rounds,
+randomised order, batch 8 and 32.
+
+| batch 32, d (ns/B) | effective bandwidth (D2) | LRU transfer share (D2) | LRU median step | EMA | allocation + EMA | Bélády |
+|---|---|---|---|---|---|---|
+| 0 (measured, E2) | 26.4 GB/s | 12.5 % | 76.8 ms | 1.001 [1.001, 1.001] | 1.006 [1.006, 1.007] | 1.042 [1.042, 1.043] |
+| 0.04 | 12.9 GB/s | 22.9 % | 86.2 ms | 1.013 [1.012, 1.013] | 1.023 [1.022, 1.023] | 1.081 [1.080, 1.082] |
+| 0.12 | 6.3 GB/s (≈ NVMe) | 38.6 % | 104.8 ms | 1.029 [1.028, 1.030] | 1.047 [1.047, 1.048] | 1.146 [1.146, 1.147] |
+| 0.28 | 3.1 GB/s (≈ 25 GbE) | 57.2 % | 142.6 ms | 1.050 [1.050, 1.051] | 1.080 [1.080, 1.081] | 1.235 [1.234, 1.236] |
+| 0.6 | 1.6 GB/s | 75.4 % | 218.5 ms | 1.072 [1.071, 1.072] | 1.113 [1.113, 1.114] | 1.336 [1.335, 1.337] |
+
+The speedup rises monotonically with the transfer share for every policy, and it is what the miss reductions predict: with misses
+cut by 9.4 % (EMA), 14.0 % (allocation + EMA) and 33.5 % (Bélády) and transfer share s, the D2 model gives 1 / (1 − s·r), e.g.
+at s = 0.754: 1.076 / 1.118 / 1.338 against measured 1.072 / 1.113 / 1.336 (`summary/speedup_curve.csv`). Break-even: the EMA's
+throughput gain has a CI above 0 already at the measured 12.5 % share (+0.1 %), but it exceeds 1 % only from a ~20 % share and 5 %
+from a ~55 % share. At batch 8 the results are noisier (launch-bound; e.g. EMA 1.051 [1.039, 1.061] and Bélády 1.229 at d = 0.6).
+(In the slow-tier runs the "nofetch" reference still pays the simulated delay for its bookkeeping misses, so it is not a
+zero-transfer reference there; the transfer share comes from the D2 fit.) No unsimulated slowdown (concurrent H2D traffic on the
+same link) was measured.
+
+## E6: the policy's own GPU time (CUDA events, `results_v3/e/timing_06b/`, 2 rounds, 64 timed steps)
+Per decode step, summed over 28 layers (ms):
+
+| batch, policy | append | selection (Quest scores + top-K) | **policy kernels** | fetch + index | attention |
+|---|---|---|---|---|---|
+| 1, LRU / EMA / Bélády | 1.11 / 1.11 / 1.13 | 5.2 | **2.94 / 2.99 / 3.16** | 5.2–5.3 | 3.9 |
+| 16, LRU / EMA / Bélády | 0.68 | 6.0 | **0.95 / 1.40 / 1.07** | 5.9 / 5.3 / 5.0 | 18.5–18.6 |
+
+At batch 16 the fused policy step costs 34 µs per layer for LRU and 50 µs for the EMA (+0.45 ms per decode step, 1.4 % of the
+GPU time); at batch 1 the phase is inflated by launch gaps (the GPU waits for the CPU). The arithmetic is tiny (the EMA update is
+≈ 3·B operations per layer and request, `results_v2/gpu/flops.csv`: 10⁻⁵ of the model's), so the measured cost is kernel latency, not
+FLOPs. (Event timing adds overhead; these runs are separate from the throughput runs.)
+
+E5_MORE_PLACEHOLDER
 
 ## Comparison with Xiaoyang Wu's L4 benchmark (PR #9; `external_xiaoyang.md`)
 His transfer-only decomposition on an L4 (5.3 µs per page, LRU transfer share ~14 % at B=96 from batch 8 on, ceilings EMA +1.5 %,
