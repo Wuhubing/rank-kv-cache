@@ -19,4 +19,6 @@ RUNNING: E（等待空闲且非卡 2 的显卡）
 - 2026-11-26T04:21Z 所有 CPU 队列完成。B1–B7、C1–C5、D1、D3–D7、F、G1、G2 页全部写完；thesis_v3 和 pr_description 只差 E/P5/N2。
 - 04:22Z E 第一次尝试在卡 2 上报 illegal memory access（卡 2 第三次故障），之后 E 不再使用卡 2；04:31Z 重新开始等待（全局上限 6 小时，到 10:31Z）。
 - 04:40Z 复测卡 2：两次都在 batch 4 报 illegal instruction（同样的运行在卡 1 上通过），卡 2 继续排除。04:31Z 起卡 0/1/3 都被他人占用（约 2.5 GB、50% 利用率）。全部测试在 wulab2 上通过（464 passed）。
+- 05:00Z E 在卡 0 上段错误：原因是 gpu_bench_batch2 的 record_stream（不是卡），已修复并在卡 0 上多轮复测通过；05:12Z 重启 E，等 load < 4。
+- 2026-11-26 用户新增：整合 Xiaoyang Wu 的 PR #9/#10 四项结果（docs/v3/external_xiaoyang.md，关键数字已从他提交的文件重算核对，未重跑、未复制原始数据）；最后自己试 gh pr create。
 - 下一步：E 跑完后写 e_systems.md、d2_step_model.md，补 thesis/PR，写 REPORT.md，清理 wulab2，STATUS 改 DONE。
