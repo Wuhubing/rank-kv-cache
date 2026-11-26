@@ -44,7 +44,7 @@ both models (0.6B 627 669 of 1 011 386; 8B 815 808 of 1 319 238). Where they are
 | returns after (steps) | 1–3 | 166 360 | 0.98 | 26 % | 0.93 | 25 % |
 | | 4–15 | 331 319 | 0.85 | 45 % | 0.83 | 41 % |
 | | 16–63 | 258 186 | 0.57 | 23 % | 0.61 | 25 % |
-| | ≥ 64 / never | 255 521 | 0.26 / 0 | 6 % | 0.33 / 0 | 9 % |
+| | ≥ 64 / never | 255 521 | 0.28 / 0 | 6 % | 0.34 / 0 | 9 % |
 | phase | thinking / answer | 423 532 / 587 854 | 0.63 / 0.61 | | 0.64 / 0.59 | |
 
 Reading: the typical error is a page ranked just below the selection cut (percentile 0.8–0.9 of all pages; the cut is near
