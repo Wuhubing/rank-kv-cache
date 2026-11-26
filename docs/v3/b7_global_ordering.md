@@ -11,7 +11,7 @@ value it had when it was last selected, i.e. a high one, so pages that have gone
 
 Source: `analysis_v3.run b7` (`kvpolicy_v3.ScopedEMA`, `RefRankEMA`; tests: M=0 equals `ScoreEMA(mode="selected")`, M=all
 equals the full EMA, R=K equals `signal="rank"`), 14 0.6B dev documents, α tuned LODO over {0.3, 0.5, 0.7} for every point.
-Results `results_v3/b7/b7_dev/`; LRU and Bélády re-checked with `replay.py`: 3 136 streams, 0 mismatches. [8B: see the end.]
+Results `results_v3/b7/b7_dev/`; LRU and Bélády re-checked with `replay.py`: 3 136 streams, 0 mismatches. Qwen3-8B dev repeats every curve (section at the end).
 
 ## Update scope: selected pages + M unselected residents (EMA of z; G)
 | M | B=80 bottom | B=80 top | **B=96 bottom** | B=96 top | B=128 bottom | B=128 top | B=256 bottom | B=256 top |
@@ -58,5 +58,15 @@ their stored values and their current z, selected-only vs full, `results_v3/inst
   pages' *current* scores, so it lands near LRU. The bottom-M curve shows what is missing: the current score of the
   low-ranked residents.
 
-## 8B dev
-(pending: `results_v3/b7/b7_8b/`)
+## 8B dev (`results_v3/b7/b7_8b/`; audit 4 032 streams, 0 mismatches)
+| | B=80 | B=96 | B=128 | B=256 |
+|---|---|---|---|---|
+| selected only (M=0) | −1.317 | −2.154 | −3.266 | −4.844 |
+| + 4 / 8 / 16 / 32 lowest-scoring residents | 0.155 / 0.229 / 0.261 / 0.270 | 0.142 / 0.222 / 0.249 / 0.265 | 0.145 / 0.199 / 0.213 / 0.227 | 0.106 / 0.116 / 0.110 / 0.096 |
+| + 4 / 8 / 16 / 32 highest-scoring residents | −1.373 / −1.118 / −0.205 / 0.253 | −2.285 / −2.092 / −1.219 / 0.096 | −3.549 / −3.447 / −2.606 / −1.011 | −5.667 / −6.055 / −5.675 / −3.432 |
+| all residents (EMA) | 0.270 | 0.272 | 0.256 | 0.232 |
+| rank reference R = K / 2K / 4K / 512 / all | 0.025 / 0.262 / 0.263 / 0.263 / 0.263 | 0.007 / 0.256 / 0.261 / 0.260 / 0.260 | −0.001 / 0.245 / 0.252 / 0.238 / 0.237 | −0.009 / 0.250 / 0.307 / 0.220 / 0.151 |
+
+The 8B curves have the same shape: selected-only is catastrophic (worse than on 0.6B), refreshing the 16 lowest-scoring
+residents recovers 92 % of the EMA's G at B=96, refreshing the highest-scoring ones does not help until M=32, and ordering the top
+2K pages recovers 94 % while ordering the top K recovers nothing.
