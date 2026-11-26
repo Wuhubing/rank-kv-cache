@@ -119,3 +119,10 @@ def test_b4_signal(tmp_path):
     for r in rows:
         assert r[2] > 0.99          # attention is a monotone function of the score here
         assert 0.5 < r[4] <= 1 and abs(r[4] - r[5]) < 0.02
+
+
+def test_d1_iso_interpolation():
+    from analysis_v3.d1_iso import iso
+    grid, lru = [64, 72, 80], [300, 200, 100]
+    assert iso(grid, lru, 200) == 72 and iso(grid, lru, 150) == 76
+    assert np.isnan(iso(grid, lru, 400)) and iso(grid, lru, 50) == float("inf")

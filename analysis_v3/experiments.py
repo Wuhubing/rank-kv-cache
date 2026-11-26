@@ -142,7 +142,17 @@ def base():
     return e
 
 
-REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine, base)}
+def g1():
+    e = Exp("g1", budgets=[96, 128], doc="G1 (post hoc, exploratory): fixed configurations on the evaluated held-out sets")
+    for n in ("lru", "belady"):
+        e.add(n, n, n)
+    for a in (0.5, 0.6, 0.7):
+        e.add(f"ema_{a}", f"ema_z:{a}", "ema", alpha=a)
+    e.add("c1", "pow_norm_kth:1.0", "kernel", kernel="power", gamma=1.0, normalize=True, zero="kth")
+    return e
+
+
+REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine, base, g1)}
 
 
 def get(name):
