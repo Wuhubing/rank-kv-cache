@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--delay-ns-per-byte", type=float, nargs="+", default=[0.0])
     ap.add_argument("--alpha", type=float, help="EMA alpha (default: frozen value for --budget)")
     ap.add_argument("--timing", action="store_true", help="CUDA-event breakdown (E6; adds overhead, separate runs)")
+    ap.add_argument("--overlap", action="store_true", help="side-stream fetch (faulted in long runs; off by default)")
     a = ap.parse_args()
     import torch
     import gpu_bench_batch as gbb
@@ -81,7 +82,7 @@ def main():
         P = [p for _, p in reqs_all[:R]]
 
         def one(pol, delay=0.0, steps=a.steps, timing=False, nxt=None):
-            kw = dict(K=a.top_k, warmup=a.warmup, delay_ns_per_byte=delay, timing=timing)
+            kw = dict(K=a.top_k, warmup=a.warmup, delay_ns_per_byte=delay, timing=timing, overlap=a.overlap)
             if pol == "belady":
                 return gb2.run(model, P, "belady", steps, a.budget, nxt=nxt, **kw)
             if pol == "score":

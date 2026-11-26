@@ -75,6 +75,14 @@ def test_slow_tier_spin_adds_time_only(model):
     assert slow["lat"][:4].sum() > fast["lat"][:4].sum()
 
 
+@pytest.mark.parametrize("overlap", [False, True])
+def test_overlap_modes_agree(model, overlap):
+    P = prompts(2, 2048, seed=7)
+    a = gb2.run(model, P, "ema", 20, 96, alpha=0.5, overlap=overlap)
+    b = gbb.run(model, P, "ema", 20, 96, alpha=0.5)
+    assert a["gen"] == b["gen"] and np.array_equal(a["ranks"], b["ranks"])
+
+
 def test_timing_breakdown(model):
     P = prompts(2, 2048, seed=6)
     res = gb2.run(model, P, "ema", 10, 96, alpha=0.5, timing=True, warmup=2)

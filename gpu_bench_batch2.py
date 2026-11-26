@@ -203,11 +203,15 @@ class BTier2:
 
 
 class BatchBench2:
-    def __init__(s, policy, budgets, alpha, K, nxt=None, timing=False, delay_ns_per_byte=0.0, record_scores=False):
+    def __init__(s, policy, budgets, alpha, K, nxt=None, timing=False, delay_ns_per_byte=0.0, record_scores=False,
+                 overlap=False):
         s.policy, s.budgets, s.alpha, s.K, s.timing = policy, budgets, alpha, K, timing
         s.nxt = nxt
         s.tiers, s.step, s.rec, s.evs = {}, 0, None, []
-        s.side = torch.cuda.Stream()
+        # overlap=False: fetch and write-back run on the main stream (no overlap). The side-stream version (overlap=True)
+        # passed the CUDA tests but faulted nondeterministically ("illegal memory access") in long multi-run benchmarks and
+        # not under CUDA_LAUNCH_BLOCKING=1, i.e. an unresolved race; part E uses overlap=False.
+        s.side = torch.cuda.Stream() if overlap else torch.cuda.current_stream()
         s.delay = delay_ns_per_byte
         s.record_scores, s.scores = record_scores, None
         s.keep = []   # tensors read by the side stream; released after each step instead of record_stream
@@ -312,7 +316,7 @@ class BatchBench2:
 
 @torch.inference_mode()
 def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmup=8, timing=False,
-        delay_ns_per_byte=0.0, record_scores=False):
+        delay_ns_per_byte=0.0, record_scores=False, overlap=False):
     """Same interface and outputs as gpu_bench_batch.run, plus per-step miss counts (step_misses [steps]) and
     page-completion flags (page_step [steps]). Latency per step is wall time from the forward call to the token
     read-out (which synchronises)."""
@@ -324,7 +328,7 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
     L = cfg.num_hidden_layers
     if isinstance(budgets, int):
         budgets = [budgets] * L
-    b = BatchBench2(policy, budgets, alpha, K, nxt, timing, delay_ns_per_byte, record_scores)
+    b = BatchBench2(policy, budgets, alpha, K, nxt, timing, delay_ns_per_byte, record_scores, overlap)
     name = "bench_batch2"
     orig = cfg._attn_implementation
     pmax = (N + steps + 2) // PS + 1
