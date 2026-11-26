@@ -1,4 +1,4 @@
-RUNNING: B/C/D（CPU 回放队列）
+RUNNING: F3 采集；B/C/D CPU 队列
 - 2026-11-25T21:00Z 开始。前提：rkv-arkvale DONE；wulab2 无 wb-rkv- 会话。
 - A 完成（replication-v2）：08db627、fb0a8fa、a8fb184、42c2b06、851d567、9058540（R10 更正：8B 的 1023 步包含思考结束和 180–627 步回答）、STATUS_fixes.md。已合并进 mechanism-v3。
 - F1 完成：2262 篇候选，取 21 篇（splits/longctx_v3.json）。
@@ -9,4 +9,7 @@ RUNNING: B/C/D（CPU 回放队列）
 - 正在跑（wulab2）：wb-rkv-fu-b-cpu → wb-rkv-fu-cd-cpu → wb-rkv-fu-more-cpu → wb-rkv-fu-g2-cpu（CPU，nice 10，16 进程）。GPU 当前未用。
 - 卡 2 两次报 "illegal instruction"，脚本优先避开卡 2。
 - 2026-11-26T00:02Z 按用户新决定：所有 CPU 计算放在 wulab2（上限 32 进程，nice 10，load > 44 不加进程）。mini 上只让已在跑的 C4（0.6B 已完成，8B 进行中）跑完，之后不在 mini 开计算。学习模型（C2/B3）改为 wulab2 队列 wb-rkv-fu-learn（与 B 队列并行）。
-- 下一步：C4 出结果后定 P4 → F2 预注册 → F3 采集；E 在 CPU 队列结束后、主机 load < 4 时做。
+- C4 完成（mini 上跑完，结果 results_v3/c4/）：全局池（百分位 EMA）过 C 门槛，作为 P4 候选；B=96 达到离线分配收益的 95%/93%。
+- F2 完成：docs/preregistration_v3.md + splits/heldout_frozen_v3.json，提交 087d53f，推送并用 ls-remote 确认于 2026-11-26T00:15:31Z。
+- F3 采集开始 2026-11-26T00:15:39Z，wulab2 卡 1（GPU-7ee1d08f-1ddf-05b7-9480-8047c2574e74），tmux wb-rkv-fu-f3-collect。
+- 下一步：F3 评估（采集完成后）；剩余 B/C/D 页；E 在 CPU 队列结束后、主机 load < 4 时做。
