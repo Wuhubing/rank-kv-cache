@@ -13,6 +13,11 @@ the selector's own score (G −0.86), any mismatch between the two pushes evicti
 current score of the residents just below the cut (refreshing only 16 of them recovers 91 %), and richer learned models do not
 beat the power-law kernel. E: E_SUMMARY_PLACEHOLDER
 
+External evidence integrated with attribution (`docs/v3/external_xiaoyang.md`): Xiaoyang Wu's M1 Max replication and new-task
+results (PR #9), his L4 batched transfer benchmark (PR #9; transfer share ~14 % caps speedups at a few percent) and his
+rank-decision analysis (PR #10). Not re-run; key numbers re-computed from his committed files (`analysis_v3/xy_check.py`); his
+data files are referenced, not copied.
+
 ## Candidate conclusions P1–P6 (details: `thesis_v3.md`)
 | | Verdict | Confirmatory? |
 |---|---|---|

@@ -8,7 +8,8 @@ in part A, `docs/rerun/STATUS_fixes.md`). **Confirmatory** = preregistered held-
 > In a sparse-attention KV cache with host offload, the replacement policy's job is to predict **which pages the selector will pick
 > in the next few steps**. The selector's own scores of the pages just below the selection cut, remembered over time, are the
 > signal for that.
-> 1. A per-page EMA of that signal closes ~28 % of the LRU–Bélády gap on two models, three document sets (confirmatory), and every
+> 1. A per-page EMA of that signal closes ~28 % of the LRU–Bélády gap on two models, three document sets (confirmatory), three
+>    collection hardware types (L4, RTX 6000 Ada, and an independent replication on Apple M1 Max by Xiaoyang Wu, PR #9), and every
 >    setting tried; a **power-law-weighted mean** of the same signal closes ~32–33 % (confirmatory on the third set), and a
 >    **global pool** ranked by the same signal's percentile replaces offline per-layer budget curves at tight budgets
 >    (confirmatory against uniform budgets).
@@ -36,6 +37,16 @@ in part A, `docs/rerun/STATUS_fixes.md`). **Confirmatory** = preregistered held-
 | N5 | α too large is worse than LRU | Holds at small budgets; the best α grows with B/K (0.4 → 0.9 (0.6B) and 0.5 → 0.95 (8B) from B/K 1.25 to 4 on dev; the synthetic model reproduces the trend and the collapse at α → 1). Mechanism: at small B the candidates return within a few steps, so the latest score matters and a long memory keeps stale values; at large B they sit deeper below the cut where averaging helps. A tuning-free per-layer α rule derived from the synthetic model fails (−0.02 to −0.08 vs LODO); per-layer LODO α adds only +0.002–0.007; α ≈ 0.5 at B/K ≤ 1.5 rising to 0.9–0.95 at B/K 4 is the practical rule. | `b2_stability.md`, `d6_alpha.md` |
 | N6 | Pinned pages and protection zones hurt | Pinning the first page or the newest pages is neutral (they are selected 83–98 % of the time); pinning 2–4 sink pages costs 0.03–0.08 G (pages 1–3 are selected only 5–10 % of steps). A FIFO protection zone hurts LRU and the EMA at every budget, in every layer group, and in every synthetic regime. The flip to "protection helps" appears with an H₂O-style accumulated score, which is biased against new entries (CO2's setting): there a zone of ρ ≈ 0.2–0.3 halves the loss (0.6B −0.77 → −0.39, 8B −0.98 → −0.47). | `d5_pins_protection.md` |
 | N7 | Wide CI of G at high budgets | A property of the metric: above B/K = 4 the LRU–Bélády gap is a few thousand misses, 97 % of misses are compulsory. Report absolute savings and iso-miss capacity there (EMA still worth 3–7 % more slots; repeat-miss drop grows to 25 %). | `d7_high_budget.md` |
+
+## External evidence (Xiaoyang Wu, PR #9 / #10; `external_xiaoyang.md`)
+Not re-run by us; key numbers re-computed from his committed result files. (a) M1 Max (MPS) replication of the original held-out
+test: EMA G 0.280 [0.276, 0.283], 21/21, allocation + EMA ΔG +0.120 (all three preregistered criteria pass; checked). (b) New
+documents / task, exploratory: NarrativeQA G 0.283 (8/8), truncated GovReport 0.284 (3/3) (checked; some documents overlap our 64K
+dev setting). (c) L4 batched transfer benchmark: ~5.3 µs per page, LRU transfer share saturating at ~14 % of the step at B=96,
+hence step-speedup ceilings of +5.4 % (Bélády), +2.1 % (allocation + EMA), +1.5 % (EMA) — transfer and compute timed separately
+and added, not end to end (checked from his CSV). Used next to our part E to explain why the ceiling is the transfer share, not as
+a replacement. (d) Adding the rank term changes 2.93 % of eviction decisions and saves 0.072 % of repeat misses on his 20 dev
+documents (checked), consistent with stage 1–2's post-hoc result and B7.
 
 ## Corrections carried over from part A (replication-v2)
 The power-law explanation, the Holt sentence, the 97 % baseline, the batch-32 "gain", S3-FIFO, the tests, the AUC censoring,
