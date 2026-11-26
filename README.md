@@ -1,5 +1,7 @@
 # Can Selection Rank Improve KV Cache Replacement?
 
+**队友及其 agent 请从[完整复验任务书](FULL_REPRODUCTION.md)开始。** 每位复验者独立完成 CPU 回放、L4 重采、两次硬件实测和配对统计；固定输入、notebook 和报告均从该入口获取。
+
 独立项目的实验顺序、本地复现结果和下一步见 [项目大纲](docs/SOLO_PROJECT_PLAN.md)。
 
 A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2026, Project 10).

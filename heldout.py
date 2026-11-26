@@ -8,6 +8,7 @@ Nothing here is tuned on held-out data: `eval` only reads the frozen file.
 import argparse
 import csv
 import json
+import hashlib
 from multiprocessing import Pool
 from pathlib import Path
 
@@ -24,7 +25,7 @@ LINEAR_B = (96, 128, 256)
 
 
 def configs(B, frozen=None):
-    out = {"lru": ("lru", {}), "belady": ("belady", {}), "ema": ("ema", dict(alpha=ALPHA[B])),
+    out = {"lru": ("lru", {}), "belady": ("belady", {}), "ema": ("ema", dict(alpha=frozen["alpha"][str(B)] if frozen is not None else ALPHA[B])),
            "score": ("score", {}), "dsum": ("dsum", dict(decay=0.5, v="softmax")),
            "dcount": ("dsum", dict(decay=0.8, v="indicator"))}
     if frozen and str(B) in frozen["linear"]:
@@ -78,37 +79,76 @@ def freeze(args):
     json.dump(out, open(args.out, "w"), indent=1)
 
 
-def evaluate(args):
-    frozen = json.load(open(args.frozen))
-    paths = [str(p) for p in sorted(args.traces.glob("*.npz"))]
-    assert not set(Path(p).name for p in paths) & set(frozen["dev_docs"]), "dev doc in held-out set"
-    args.out.mkdir(parents=True, exist_ok=True)
-    pool = Pool(args.procs)
-    jobs, keys = [], []
-    for B in CURVE:
-        for cfg, (name, kw) in configs(B, frozen).items():
-            for p in paths:
-                jobs.append((p, name, kw, [B])); keys.append(cfg)
-        # allocation + EMA: each layer at its frozen budget
-        for g in sorted(set(frozen["alloc"][str(B)])):
-            for p in paths:
-                jobs.append((p, "ema", dict(alpha=ALPHA[B]), [g])); keys.append(f"alloc_ema@{B}")
+def replay_document(job):
+    path, doc, frozen = job
+    with np.load(path, allow_pickle=False) as trace:
+        rid = str(trace["rid"])
+        if rid != doc["rid"] or int(trace["prompt_tokens"]) != doc["prompt_tokens"]:
+            raise ValueError(f"Trace identity or prompt length mismatch in {path}")
+        ranked, scores = trace["ranked"], trace["scores"]
+    if (ranked.ndim != 3 or ranked.shape[1:] != (28, 64) or not len(ranked)
+            or scores.ndim != 3 or scores.shape[:2] != ranked.shape[:2]
+            or scores.dtype.kind != "f" or ranked.dtype.kind not in "iu"
+            or ranked.min() < 0 or ranked.max() >= scores.shape[2]
+            or np.any(np.diff(np.sort(ranked, axis=2), axis=2) == 0)):
+        raise ValueError(f"Invalid ranks or dimensions in {path}")
+    with path.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
     rows = []
-    for cfg, part in zip(keys, pool.map(per_layer, jobs)):
-        rows += [(cfg,) + r for r in part]
-    # keep only the layer/budget pairs of the frozen plan for alloc rows; relabel to the total budget
-    keep = []
-    for cfg, rid, l, B, acc, mis, comp in rows:
-        if cfg.startswith("alloc_ema@"):
-            tot = int(cfg.split("@")[1])
-            if frozen["alloc"][str(tot)][l] != B:
-                continue
-            keep.append(("alloc_ema", rid, l, tot, acc, mis, comp))
-        else:
-            keep.append((cfg, rid, l, B, acc, mis, comp))
-    with open(args.out / "misses.csv", "w", newline="") as f:
-        w = csv.writer(f); w.writerow(["config", "doc", "layer", "B", "accesses", "misses", "compulsory"]); w.writerows(keep)
-    print("rows", len(keep))
+    for layer in range(28):
+        ranks = ranked[:, layer]
+        values = scores[:, layer].astype(np.float32)
+        for t, limit in enumerate(np.maximum.accumulate(ranks.max(axis=1))):
+            if not np.isfinite(values[t, :int(limit)+1]).all():
+                raise ValueError(f"Missing score for {rid}, layer {layer}, step {t}")
+        for B in CURVE:
+            for cfg, (policy, kw) in configs(B, frozen).items():
+                counts = kp.simulate(ranks, values, B, policy, **kw)
+                rows.append((cfg, rid, layer, B, *[counts[k] for k in METRICS]))
+                if cfg == "ema":
+                    capacity = frozen["alloc"][str(B)][layer]
+                    allocated = (counts if capacity == B else
+                                 kp.simulate(ranks, values, capacity, policy, **kw))
+                    rows.append(("alloc_ema", rid, layer, B, *[allocated[k] for k in METRICS]))
+    return (rid, doc["prompt_tokens"], len(ranked), digest), rows
+
+
+METRICS = ("accesses", "misses", "compulsory")
+
+
+def evaluate(args):
+    frozen = json.loads(args.frozen.read_text())
+    split = json.loads(Path(__file__).with_name("splits").joinpath("longctx_v1.json").read_text())
+    docs = [d for d in split["prompts"] if d["split"] == "heldout"]
+    expected = {d["rid"].replace("/", "__") + ".npz": d for d in docs}
+    dev = {d["rid"].replace("/", "__") + ".npz" for d in split["prompts"] if d["split"] == "dev"}
+    actual = {p.name for p in args.traces.glob("*.npz")}
+    if (len(expected) != 21 or len(docs) != 21 or expected.keys() & dev
+            or set(frozen["dev_docs"]) != dev or actual != expected.keys()):
+        raise ValueError(f"Held-out split mismatch: missing {sorted(expected.keys()-actual)}, "
+                         f"extra {sorted(actual-expected.keys())}")
+    for B in CURVE:
+        allocation = frozen["alloc"][str(B)]
+        if (len(allocation) != 28 or sum(allocation) != 28 * B
+                or any(type(x) is not int or x < 64 for x in allocation)
+                or not 0 < frozen["alpha"][str(B)] <= 1):
+            raise ValueError(f"Invalid frozen allocation or alpha at B={B}")
+    jobs = [(args.traces / name, d, frozen) for name, d in sorted(expected.items())]
+    rows, inputs = [], []
+    with Pool(args.procs) as pool:
+        for meta, part in pool.imap_unordered(replay_document, jobs):
+            inputs.append(meta)
+            rows.extend(part)
+            print(f"{len(inputs)}/{len(jobs)} replayed {meta[0]}", flush=True)
+    args.out.mkdir(parents=True, exist_ok=True)
+    for filename, header, data in [
+        ("inputs.csv", ["doc", "prompt_tokens", "steps", "sha256"], inputs),
+        ("misses.csv", ["config", "doc", "layer", "B", *METRICS], rows),
+    ]:
+        with (args.out / filename).open("w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerows(sorted(data))
 
 
 def main():

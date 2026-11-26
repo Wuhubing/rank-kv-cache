@@ -11,3 +11,5 @@ __pycache__/
 *.synctex.gz
 *.pdf
 .DS_Store
+/data/short/
+/.venv-audit/
