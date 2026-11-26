@@ -1,4 +1,4 @@
-RUNNING: E（等待空闲且非卡 2 的显卡）
+DONE
 - 2026-11-25T21:00Z 开始。前提：rkv-arkvale DONE；wulab2 无 wb-rkv- 会话。
 - A 完成（replication-v2）：08db627、fb0a8fa、a8fb184、42c2b06、851d567、9058540（R10 更正：8B 的 1023 步包含思考结束和 180–627 步回答）、STATUS_fixes.md。已合并进 mechanism-v3。
 - F1 完成：2262 篇候选，取 21 篇（splits/longctx_v3.json）。
@@ -21,4 +21,7 @@ RUNNING: E（等待空闲且非卡 2 的显卡）
 - 04:40Z 复测卡 2：两次都在 batch 4 报 illegal instruction（同样的运行在卡 1 上通过），卡 2 继续排除。04:31Z 起卡 0/1/3 都被他人占用（约 2.5 GB、50% 利用率）。全部测试在 wulab2 上通过（464 passed）。
 - 05:00Z E 在卡 0 上段错误：原因是 gpu_bench_batch2 的 record_stream（不是卡），已修复并在卡 0 上多轮复测通过；05:12Z 重启 E，等 load < 4。
 - 2026-11-26 用户新增：整合 Xiaoyang Wu 的 PR #9/#10 四项结果（docs/v3/external_xiaoyang.md，关键数字已从他提交的文件重算核对，未重跑、未复制原始数据）；最后自己试 gh pr create。
-- 下一步：E 跑完后写 e_systems.md、d2_step_model.md，补 thesis/PR，写 REPORT.md，清理 wulab2，STATUS 改 DONE。
+- E 完成（2026-11-26 05:29–22:32Z，卡 0，无重叠模式）：e_systems.md、d2_step_model.md；thesis/PR 描述补全。
+- 全部测试在 wulab2 通过（480 passed，含 GPU 测试）；wulab2 无本任务 tmux 会话和 GPU 进程。
+- PR #11 已开：https://github.com/Wuhubing/rank-kv-cache/pull/11（mechanism-v3 → replication-v2，未合并）。
+- 报告：~/work/rkv-followup/REPORT.md。
