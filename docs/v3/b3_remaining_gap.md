@@ -4,8 +4,9 @@
 H steps ahead (and orders the pages not needed within H by LRU or by the EMA) closes 24–38 % of the gap with H = 1, 65–69 %
 with H = 4, 96 % with H = 16 and 99.9 % with H = 64 at B=96 on 0.6B dev (8B: 23–38 %, 62–67 %, 94 %, 99.7 %). The EMA's 0.279 is
 about what one step of perfect lookahead with LRU ordering buys (0.237); with EMA ordering a single step of lookahead is worth
-0.376. The needed horizon grows with the budget (B=256 needs H ≈ 64 for 70 %). [Error classes and the learned upper bound:
-sections below.]
+0.376. The needed horizon grows with the budget (B=256 needs H ≈ 64 for 70 %). 62 % of the EMA's evictions are wrong in
+hindsight, typically pages just below the selection cut that return within 16 steps; boosted trees on 15 features reach only the
+level of the single normalised power-law kernel (0.315–0.321 at B=96), so the rest of the gap is not in these features.
 
 Source: `analysis_v3.run b3` (`kvpolicy_v3.Lookahead`; tests: H = 0 equals LRU / the EMA, H = ∞ equals Bélády, misses fall with H);
 `results_v3/b3/{b3_dev,b3_8b}/`; audits 3 136 / 4 032 streams, 0 mismatches.
@@ -54,4 +55,21 @@ equally frequent in thinking and answering, and slightly more frequent for long-
 most stale).
 
 ## Learned upper bound (boosted trees, richer features, LODO + DAgger)
-(pending: `results_v3/learn/`)
+Gradient-boosted trees (scikit-learn `HistGradientBoostingRegressor`, 200 trees, 31 leaves) on the 13 features of C2 plus layer
+index and position in the decode, regressing log next-use distance; behaviour cloning on LRU's decisions plus one DAgger
+iteration; leave-one-document-out (`analysis_v3/learn.py --model gbdt`, `results_v3/learn/gbdt_{dev,8b}/`; reference only, not
+a deployable policy):
+
+| | 0.6B B=96 | 0.6B B=128 | 8B B=96 | 8B B=128 |
+|---|---|---|---|---|
+| trees, behaviour cloning | 0.321 [0.315, 0.327] | 0.341 | 0.324 [0.316, 0.331] | 0.338 |
+| trees, DAgger | 0.315 [0.310, 0.322] | 0.337 | 0.321 [0.314, 0.327] | 0.335 |
+| normalised power law (C1) | 0.320 | 0.333 | 0.319 | 0.319 |
+| DAgger trees − power law, ΔG [CI] | −0.005 [−0.007, −0.003] | +0.005 [−0.002, 0.012] | +0.002 [−0.001, 0.005] | +0.015 [0.005, 0.024] |
+
+Permutation importance (B=96, mean over folds): the normalised power-law feature dominates (0.17–0.18), then layer (0.05–0.06),
+position in the decode (0.05), deficit and recency (0.02–0.04); every other feature ≤ 0.03.
+
+So within what the current and past scores, recency, frequency, neighbours, layer and position can tell, the single normalised
+power-law kernel is already at the learned bound at B=96 (the trees gain at most 0.015 at B=128 on 8B). The remaining 68 % of the
+gap is information these features do not carry: which pages just below the cut Quest will choose in the next few steps.
