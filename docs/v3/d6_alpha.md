@@ -14,7 +14,7 @@ whole decode (an online version would estimate it from the past).
 ## Best α against the budget
 | B/K | 1.25 | 1.5 | 2 | 4 |
 |---|---|---|---|---|
-| 0.6B dev, LODO α | 0.4 | 0.5 | 0.7 | 0.95 |
+| 0.6B dev, LODO α | 0.4 | 0.5 | 0.7 | 0.9 |
 | 8B dev, LODO α | 0.5 | 0.6 | 0.7 | 0.95 |
 | synthetic (fitted), best α | 0.0 | 0.0–0.1 | 0.5 | 0.5–0.8 |
 | G of α = 0.99 on 0.6B dev (S4) | < 0 | < 0 (z: −0.39) | | |

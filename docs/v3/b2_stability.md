@@ -57,7 +57,7 @@ ac lag 1 / 16 / 64 0.985 / 0.845 / 0.720 vs 0.963 / 0.876 / 0.827).
 | 1.25 | 0.0 (current score) | 0.339 | −0.205 / −0.625 | 0.4 | 0.274 |
 | 1.5 | 0.0–0.1 | 0.375 | 0.188 / −0.534 | 0.5 | 0.279 |
 | 2 | 0.5 | 0.397 | 0.285 / 0.186 | 0.7 | 0.267 |
-| 4 | 0.5–0.8 | 0.404 | 0.396 / 0.309 | 0.95 | 0.236 |
+| 4 | 0.5–0.8 | 0.404 | 0.396 / 0.309 | 0.9 | 0.236 |
 
 Reproduced: the best α increases with B/K, and a large α falls below LRU at small budgets (N5). Not reproduced: the level of G
 and the benefit of history at small budgets (in the model the current score is already optimal at B/K ≤ 1.5). Regimes with lower
