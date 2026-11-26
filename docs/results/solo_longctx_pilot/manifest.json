@@ -1,0 +1,10 @@
+{
+  "doc": "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259",
+  "sha256": "3659641d3c0263b4ae00d94fdb94268e36e30562942be51ba332d4a5877d61a2",
+  "prompt_tokens": 22395,
+  "steps": 613,
+  "layers": 28,
+  "K": 64,
+  "B": 96,
+  "matched_rows": 112
+}

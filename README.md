@@ -1,5 +1,7 @@
 # Can Selection Rank Improve KV Cache Replacement?
 
+独立项目的实验顺序、本地复现结果和下一步见 [项目大纲](docs/SOLO_PROJECT_PLAN.md)。
+
 A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2026, Project 10).
 
 We test whether a page's sparse-attention top-K selection rank predicts reuse beyond
