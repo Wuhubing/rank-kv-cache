@@ -1,4 +1,4 @@
-RUNNING: C/D/G CPU 队列；剩余结论页；E 待做
+RUNNING: E（等待空闲且非卡 2 的显卡）
 - 2026-11-25T21:00Z 开始。前提：rkv-arkvale DONE；wulab2 无 wb-rkv- 会话。
 - A 完成（replication-v2）：08db627、fb0a8fa、a8fb184、42c2b06、851d567、9058540（R10 更正：8B 的 1023 步包含思考结束和 180–627 步回答）、STATUS_fixes.md。已合并进 mechanism-v3。
 - F1 完成：2262 篇候选，取 21 篇（splits/longctx_v3.json）。
@@ -16,4 +16,6 @@ RUNNING: C/D/G CPU 队列；剩余结论页；E 待做
 - 完成的页：b1、b3（前瞻部分）、b4、b7、c1、c2、c4、c5、d3、d7、f1、f3。
 - 01:38–01:40Z：gbdt（scikit-learn）默认用满所有核，整机 load 冲到 50；已停掉并以 OMP_NUM_THREADS=1 重启（偏离记录）。
 - 队列（wulab2）：cd-cpu（c3/d5）→ more-cpu（instrument/lru_fine/b2 模型）→ g2-cpu → final-cpu（D1/G1/汇总）；learn（gbdt）并行；wb-rkv-fu-e 等所有队列结束后自动开始 E（每项检查空卡与 load < 4）。
-- 下一步：随结果写 B2/B3/B5/B6/C3/D1/D2/D4/D5/D6/E/G1/G2 页，然后 thesis_v3、pr_description、REPORT。
+- 2026-11-26T04:21Z 所有 CPU 队列完成。B1–B7、C1–C5、D1、D3–D7、F、G1、G2 页全部写完；thesis_v3 和 pr_description 只差 E/P5/N2。
+- 04:22Z E 第一次尝试在卡 2 上报 illegal memory access（卡 2 第三次故障），之后 E 不再使用卡 2；04:31Z 重新开始等待（全局上限 6 小时，到 10:31Z）。
+- 下一步：E 跑完后写 e_systems.md、d2_step_model.md，补 thesis/PR，写 REPORT.md，清理 wulab2，STATUS 改 DONE。
