@@ -8,4 +8,5 @@ RUNNING: B/C/D（CPU 回放队列）
 - G2 采集完成：data/8b_dev_long（14 篇全部 EOS，1503–2018 步，思考在 458–843 步结束）。
 - 正在跑（wulab2）：wb-rkv-fu-b-cpu → wb-rkv-fu-cd-cpu → wb-rkv-fu-more-cpu → wb-rkv-fu-g2-cpu（CPU，nice 10，16 进程）。GPU 当前未用。
 - 卡 2 两次报 "illegal instruction"，脚本优先避开卡 2。
+- 2026-11-26T00:02Z 按用户新决定：所有 CPU 计算放在 wulab2（上限 32 进程，nice 10，load > 44 不加进程）。mini 上只让已在跑的 C4（0.6B 已完成，8B 进行中）跑完，之后不在 mini 开计算。学习模型（C2/B3）改为 wulab2 队列 wb-rkv-fu-learn（与 B 队列并行）。
 - 下一步：C4 出结果后定 P4 → F2 预注册 → F3 采集；E 在 CPU 队列结束后、主机 load < 4 时做。
