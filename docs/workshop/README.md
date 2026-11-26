@@ -19,6 +19,8 @@
 | 修复 PR | [#6](https://github.com/Wuhubing/rank-kv-cache/pull/6)：S2 的 β 混淆。事后分析显示，单独加排名在 held-out 上少 213 次 repeat miss，占 0.14% | [#7](https://github.com/Wuhubing/rank-kv-cache/pull/7)：加入全 page 排名对照（`allrank`）和同分配 oracle，修复 F1–F9 |
 
 ### 1.2 尚未完成、投稿前必须补上的
+> **2026-11-26 followup-v3 更新**（分支 `mechanism-v3`，[`../v3/`](../v3/)）：第三组预注册 held-out 上 EMA、归一化幂律核（P2）和全局池（P4）三条假设全部通过；P1（可预测的机制定律）改弱；P3（显存节省）在 dev 和事后 held-out 回放上一致；P6 的三类负结果都有了可检验的解释。结论汇总见 [`../v3/thesis_v3.md`](../v3/thesis_v3.md)。
+>
 > **2026-11-25 replication-v2 更新**：下面四项都已在 `replication-v2` 分支完成（RTX 6000 Ada，详见 [`../rerun/`](../rerun/)）。原列表保留在后面作记录。
 >
 > | 项 | 结果 |
