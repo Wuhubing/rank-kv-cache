@@ -15,7 +15,7 @@ md(r"""
 
 Both are **GPU kernel times** summed with `torch.profiler` (launch gaps excluded), i.e. what an implementation without launch overhead (CUDA graphs / fused kernels) would see. Transfers are not overlapped with compute (worst case for the cache, best case for a better policy).
 
-**Run:** Runtime → Change runtime type → **L4** (A100/T4 also work). Then **Runtime → Run all**. The first code cell shows a **Choose Files** button: upload `miss_schedule.npz`. The rest runs by itself (≈ 10–20 min) and ends by downloading `batch_bench_<GPU>.zip` (`batch_bench.csv`, `batch_bench.png`, `meta.json`). Send that zip back.
+**Run:** Runtime → Change runtime type → **L4** (A100/T4 also work). Then **Runtime → Run all**. The first code cell shows a **Choose Files** button: upload `miss_schedule.npz`. The rest runs by itself (≈ 30–45 min: every timing is repeated 3 times) and ends by downloading `batch_bench_<GPU>.zip` (`batch_bench.csv`, `batch_bench.png`, `meta.json`). Send that zip back.
 """)
 
 code(r"""
@@ -161,43 +161,53 @@ def time_transfer(counts, seed=0):
     wall = (time.perf_counter() - t0) * 1e3 / STEPS
     return gpu, wall
 
-rows = []
-for B in BUDGETS:
-    for b in BATCHES:
-        for p in POLICIES:
-            c = batch_counts(p, B, b, STEPS + WARMUP)
-            mean, wall = time_transfer(c)
-            pages = c[WARMUP:].sum(1).mean()
-            rows.append(dict(B=B, batch=b, policy=p, pages_per_step=pages, transfer_ms_mean=mean,
-                             launch_wall_ms=wall, us_per_page=1e3 * mean / max(pages, 1)))
-            print(f"B={B:3d} b={b:2d} {p:9s} {pages:8.0f} pages/step  {mean:7.3f} ms/step  "
-                  f"{1e3 * mean / max(pages, 1):5.2f} us/page")
+# REPEATS rounds; each round times every configuration once, with the policy order rotated per round
+# (so no policy is always measured first) and fresh random host pages (seed = round).
+REPEATS = 3
+raw = []
+for rep in range(REPEATS):
+    order = POLICIES[rep % len(POLICIES):] + POLICIES[:rep % len(POLICIES)]
+    for B in BUDGETS:
+        for b in BATCHES:
+            for p in order:
+                c = batch_counts(p, B, b, STEPS + WARMUP)
+                ms, wall = time_transfer(c, seed=rep)
+                raw.append(dict(rep=rep, B=B, batch=b, policy=p, pages_per_step=float(c[WARMUP:].sum(1).mean()),
+                                transfer_ms=ms, launch_wall_ms=wall))
+    lru64 = next(r for r in raw if r["rep"] == rep and r["B"] == BUDGETS[0] and r["batch"] == BATCHES[-1] and r["policy"] == "lru")
+    print(f"round {rep + 1}/{REPEATS} done; B={BUDGETS[0]} b={BATCHES[-1]} LRU transfer {lru64['transfer_ms']:.3f} ms/step "
+          f"({1e3 * lru64['transfer_ms'] / lru64['pages_per_step']:.2f} us/page)")
 """)
 
 code(r"""
-# Compute side: Qwen3-0.6B decode step at batch b over 1,088 attended tokens, plus Quest scoring.
+# Compute side: Qwen3-0.6B decode step at batch b over 1,088 attended tokens, plus Quest scoring; REPEATS timings each.
+import gc, sys
 from transformers import AutoModelForCausalLM
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", revision="c1899de289a04d12100db370d81485cdf75e47ca",
-                                             torch_dtype=torch.bfloat16, attn_implementation="sdpa").cuda().eval()
+sys.last_traceback = sys.last_value = sys.last_type = None
+for _n in ("out", "cache", "ids", "lo", "hi", "q", "tok"):
+    globals().pop(_n, None)
+gc.collect(); torch.cuda.empty_cache()
+if "model" not in globals():
+    model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B", revision="c1899de289a04d12100db370d81485cdf75e47ca",
+                                                 torch_dtype=torch.bfloat16, attn_implementation="sdpa").cuda().eval()
 CTX, PAGES = 1088, 1600
-
-compute = globals().get("compute", {})
+compute = globals().get("compute", {})   # re-running the cell resumes
 with torch.inference_mode():
     for b in BATCHES:
-        if b in compute:      # already measured (re-running the cell resumes)
+        if b in compute:
             continue
         ids = torch.randint(0, 150000, (b, CTX), device="cuda")
         out = model(input_ids=ids, use_cache=True, logits_to_keep=1)   # full logits at b=64 would need ~20 GB
         cache, tok = out.past_key_values, out.logits[:, -1:].argmax(-1)
+        del out, ids
         def step():
             global cache
-            # crop back so every timed step attends to the same 1,088 + 1 tokens
-            n = cache.get_seq_length()
+            n = cache.get_seq_length()   # crop back so every timed step attends to the same 1,088 + 1 tokens
             if n > CTX:
-                cache.crop(CTX - n)   # negative = drop that many tokens; works in old and new transformers
-            model(input_ids=tok, past_key_values=cache, use_cache=True)
+                cache.crop(CTX - n)      # negative = drop that many tokens (old and new transformers)
+            model(input_ids=tok, past_key_values=cache, use_cache=True, logits_to_keep=1)
         for _ in range(3): step()
-        dec = kernel_ms(step, 10)
+        dec = [kernel_ms(step, 10) for _ in range(REPEATS)]
         q = torch.randn(b, KVH, 2, DIM, device="cuda")                  # 16 query heads = 8 KV heads x 2
         lo = torch.randn(b, KVH, PAGES, DIM, device="cuda"); hi = lo + 1
         def score():
@@ -206,31 +216,50 @@ with torch.inference_mode():
                      + torch.einsum("bhgd,bhpd->bhgp", q.clamp_max(0), lo)).mean((1, 2))
                 s.topk(K, dim=-1)
         for _ in range(3): score()
-        sc = kernel_ms(score, 10)
+        sc = [kernel_ms(score, 10) for _ in range(REPEATS)]
         compute[b] = dict(decode_ms=dec, scoring_ms=sc)
-        print(f"b={b:2d} decode {dec:7.3f} ms  scoring {sc:6.3f} ms (GPU kernel time per step)")
-        del cache, out, lo, hi
-        torch.cuda.empty_cache()
+        print(f"b={b:2d} decode {min(dec):7.3f}-{max(dec):7.3f} ms  scoring {min(sc):6.3f}-{max(sc):6.3f} ms (GPU kernel time per step)")
+        del cache, tok, q, lo, hi
+        gc.collect(); torch.cuda.empty_cache()
+print(sorted(compute))
 """)
+
 
 code(r"""
 import csv
 import matplotlib.pyplot as plt
-for r in rows:
+# per round: step = decode + scoring + transfer of that round; speedup is paired within the round
+for r in raw:
     c = compute[r["batch"]]
-    lru = next(x for x in rows if x["B"] == r["B"] and x["batch"] == r["batch"] and x["policy"] == "lru")
-    r.update(decode_ms=c["decode_ms"], scoring_ms=c["scoring_ms"])
-    r["step_ms"] = c["decode_ms"] + c["scoring_ms"] + r["transfer_ms_mean"]
-    r["transfer_share"] = r["transfer_ms_mean"] / r["step_ms"]
-    r["saved_vs_lru_ms"] = lru["transfer_ms_mean"] - r["transfer_ms_mean"]
-    lru_step = c["decode_ms"] + c["scoring_ms"] + lru["transfer_ms_mean"]
-    r["speedup_vs_lru"] = lru_step / r["step_ms"] - 1
+    lru = next(x for x in raw if x["rep"] == r["rep"] and x["B"] == r["B"] and x["batch"] == r["batch"] and x["policy"] == "lru")
+    dec, sc = c["decode_ms"][r["rep"]], c["scoring_ms"][r["rep"]]
+    r.update(decode_ms=dec, scoring_ms=sc, step_ms=dec + sc + r["transfer_ms"])
+    r["us_per_page"] = 1e3 * r["transfer_ms"] / max(r["pages_per_step"], 1)
+    r["transfer_share"] = r["transfer_ms"] / r["step_ms"]
+    r["saved_vs_lru_ms"] = lru["transfer_ms"] - r["transfer_ms"]
+    r["speedup_vs_lru"] = (dec + sc + lru["transfer_ms"]) / r["step_ms"] - 1
+with open(OUT / "batch_bench_rounds.csv", "w", newline="") as f:
+    w = csv.DictWriter(f, fieldnames=list(raw[0])); w.writeheader(); w.writerows(raw)
+# summary: mean over rounds, with min and max (same columns as the first run, plus *_min / *_max)
+rows = []
+for B in BUDGETS:
+    for b in BATCHES:
+        for p in POLICIES:
+            rr = [r for r in raw if r["B"] == B and r["batch"] == b and r["policy"] == p]
+            m = lambda k: float(np.mean([r[k] for r in rr]))
+            row = dict(B=B, batch=b, policy=p, pages_per_step=m("pages_per_step"), transfer_ms_mean=m("transfer_ms"),
+                       launch_wall_ms=m("launch_wall_ms"), us_per_page=m("us_per_page"), decode_ms=m("decode_ms"),
+                       scoring_ms=m("scoring_ms"), step_ms=m("step_ms"), transfer_share=m("transfer_share"),
+                       saved_vs_lru_ms=m("saved_vs_lru_ms"), speedup_vs_lru=m("speedup_vs_lru"))
+            for k in ("transfer_ms", "us_per_page", "transfer_share", "speedup_vs_lru"):
+                row[k + "_min"] = min(r[k] for r in rr); row[k + "_max"] = max(r[k] for r in rr)
+            rows.append(row)
 with open(OUT / "batch_bench.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
 meta = dict(gpu=GPU, torch=torch.__version__, triton=triton.__version__, cuda=torch.version.cuda,
             memcpy_GBps=MEMCPY_GBS, gather_us_per_page=GATHER_US_PER_PAGE, steps=STEPS, warmup=WARMUP,
             batches=BATCHES, budgets=BUDGETS, schedule=str(SCHED), docs=RIDS, ctx=CTX, scoring_pages=PAGES,
-            compute=compute)
+            repeats=REPEATS, compute=compute)
 (OUT / "meta.json").write_text(json.dumps(meta, indent=1))
 
 fig, ax = plt.subplots(1, 2, figsize=(11, 4))
@@ -243,10 +272,12 @@ for B, ls in zip(BUDGETS, ["-", "--"]):
 for a in ax: a.set_xscale("log", base=2); a.set_xlabel("batch size")
 ax[0].set_ylabel("transfer share of GPU step time"); ax[1].set_ylabel("step-time speedup vs LRU (%)")
 ax[1].legend(fontsize=7); fig.suptitle(GPU); fig.tight_layout(); fig.savefig(OUT / "batch_bench.png", dpi=150)
-print("\n B  batch  policy      pages/step  transfer ms  decode ms  share   saved ms  speedup")
+print(f"\nmean of {REPEATS} rounds [min, max]")
+print(" B  batch  policy      pages/step  transfer ms  decode ms  share   saved ms  speedup [min, max]")
 for r in rows:
     print(f"{r['B']:3d} {r['batch']:5d}  {r['policy']:9s} {r['pages_per_step']:10.0f} {r['transfer_ms_mean']:11.3f} "
-          f"{r['decode_ms']:10.3f} {r['transfer_share']:6.1%} {r['saved_vs_lru_ms']:9.3f} {r['speedup_vs_lru']:+7.2%}")
+          f"{r['decode_ms']:10.3f} {r['transfer_share']:6.1%} {r['saved_vs_lru_ms']:9.3f} {r['speedup_vs_lru']:+7.2%} "
+          f"[{r['speedup_vs_lru_min']:+.2%}, {r['speedup_vs_lru_max']:+.2%}]")
 import shutil
 zip_path = shutil.make_archive(f"/content/batch_bench_{GPU.replace(' ', '_')}", "zip", OUT)
 print("saved to", OUT, "and", zip_path, "(downloading; also in the Files panel on the left)")
