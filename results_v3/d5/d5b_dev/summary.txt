@@ -1,0 +1,17 @@
+d5b: 14 docs
+B= 96 belady                           G +1.0000 [+1.0000,+1.0000] wins 14/14
+B= 96 lru                              G +0.0000 [+0.0000,+0.0000] wins 0/14
+B= 96 prot_accum_rho0.0                G -0.7710 [-0.8193,-0.7192] wins 0/14
+B= 96 prot_accum_rho0.05               G -0.6271 [-0.6726,-0.5777] wins 0/14
+B= 96 prot_accum_rho0.1                G -0.5079 [-0.5503,-0.4620] wins 0/14
+B= 96 prot_accum_rho0.2                G -0.3940 [-0.4222,-0.3632] wins 0/14
+B= 96 prot_accum_rho0.3                G -0.3934 [-0.4114,-0.3743] wins 0/14
+B= 96 prot_accum_rho0.5                G -0.7014 [-0.7172,-0.6841] wins 0/14
+B=128 belady                           G +1.0000 [+1.0000,+1.0000] wins 14/14
+B=128 lru                              G +0.0000 [+0.0000,+0.0000] wins 0/14
+B=128 prot_accum_rho0.0                G -0.9921 [-1.0678,-0.9137] wins 0/14
+B=128 prot_accum_rho0.05               G -0.7202 [-0.7879,-0.6480] wins 0/14
+B=128 prot_accum_rho0.1                G -0.5600 [-0.6191,-0.4979] wins 0/14
+B=128 prot_accum_rho0.2                G -0.3942 [-0.4369,-0.3490] wins 0/14
+B=128 prot_accum_rho0.3                G -0.3615 [-0.3924,-0.3290] wins 0/14
+B=128 prot_accum_rho0.5                G -0.5302 [-0.5482,-0.5109] wins 0/14
