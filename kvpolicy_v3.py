@@ -123,14 +123,11 @@ class EMAAge(ScoreEMA):
     def dropped(self, p):
         super().dropped(p)
         del self.adm[p]
-        self.acc_mass.pop(p, None)
 
     def admit(self, hits, misses):
         super().admit(hits, misses)
         for p in misses:
             self.adm[p] = self.t
-            if self.base == "accum":
-                self.acc_mass[p] = self.share.get(p, 0.0)
 
 
 class EMADeficit(ScoreEMA):
