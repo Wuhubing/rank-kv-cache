@@ -17,19 +17,20 @@ pick() {  # free card without other processes; card 2 is never used (three CUDA 
     [ -z "$(nvidia-smi -i $g --query-compute-apps=pid --format=csv,noheader)" ] && { echo $g; return; }
   done
 }
-T0=$(date +%s)
-ready() {  # sets GPU; returns 1 once 6 h have passed since the first check of this script (task section 9)
+WAITED=0
+ready() {  # sets GPU; returns 1 after 6 h of accumulated WAITING (30-min checks); running time does not count (task section 9)
   while true; do
     [ -e $STOPF ] && exit 0
     GPU=$(pick); L=$(cut -d" " -f1 /proc/loadavg)
-    echo "[$(date -u -Is)] check: gpu='$GPU' load=$L"
+    echo "[$(date -u -Is)] check: gpu='$GPU' load=$L waited=${WAITED}s"
     if [ -n "$GPU" ] && awk "BEGIN{exit !($L < 4)}"; then return 0; fi
-    [ $(( $(date +%s) - T0 )) -ge 21600 ] && return 1
-    sleep 1800
+    [ $WAITED -ge 21600 ] && return 1
+    sleep 1800; WAITED=$((WAITED + 1800))
   done
 }
 run() {  # name, args...
   name=$1; shift
+  if ls out/v3/e/$name/batch*.json > /dev/null 2>&1; then echo "[$(date -u -Is)] $name already done, skipped"; return; fi
   if ready; then
     echo "[$(date -u -Is)] E $name on GPU $GPU $(nvidia-smi -i $GPU --query-gpu=uuid --format=csv,noheader)"
     CUDA_VISIBLE_DEVICES=$GPU $P -m analysis_v3.e_bench --out out/v3/e/$name "$@" > out/v3/e/$name.log 2>&1 || echo "FAILED $name"
