@@ -17,15 +17,16 @@ pick() {  # free card without other processes; card 2 is never used (three CUDA 
     [ -z "$(nvidia-smi -i $g --query-compute-apps=pid --format=csv,noheader)" ] && { echo $g; return; }
   done
 }
-ready() {  # sets GPU; returns 1 after 6 h of waiting
-  for i in $(seq 0 12); do
+T0=$(date +%s)
+ready() {  # sets GPU; returns 1 once 6 h have passed since the first check of this script (task section 9)
+  while true; do
     [ -e $STOPF ] && exit 0
     GPU=$(pick); L=$(cut -d" " -f1 /proc/loadavg)
-    echo "[$(date -u -Is)] check $i: gpu='$GPU' load=$L"
+    echo "[$(date -u -Is)] check: gpu='$GPU' load=$L"
     if [ -n "$GPU" ] && awk "BEGIN{exit !($L < 4)}"; then return 0; fi
+    [ $(( $(date +%s) - T0 )) -ge 21600 ] && return 1
     sleep 1800
   done
-  return 1
 }
 run() {  # name, args...
   name=$1; shift
