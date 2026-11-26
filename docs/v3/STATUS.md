@@ -13,4 +13,7 @@ RUNNING: C/D/G CPU 队列；剩余结论页；E 待做
 - F2 完成：docs/preregistration_v3.md + splits/heldout_frozen_v3.json，提交 087d53f，推送并用 ls-remote 确认于 2026-11-26T00:15:31Z。
 - F3 采集开始 2026-11-26T00:15:39Z，wulab2 卡 1（GPU-7ee1d08f-1ddf-05b7-9480-8047c2574e74），tmux wb-rkv-fu-f3-collect。
 - F3 完成：采集 00:15:39–00:48:23Z（21+21 篇），评估一次 01:31–01:37Z；H1/H2/H3 在 0.6B 和 8B 上全部通过（docs/v3/f3_heldout.md）。
-- 下一步：剩余 B/C/D 页；E 在 CPU 队列结束后、主机 load < 4 时做。
+- 完成的页：b1、b3（前瞻部分）、b4、b7、c1、c2、c4、c5、d3、d7、f1、f3。
+- 01:38–01:40Z：gbdt（scikit-learn）默认用满所有核，整机 load 冲到 50；已停掉并以 OMP_NUM_THREADS=1 重启（偏离记录）。
+- 队列（wulab2）：cd-cpu（c3/d5）→ more-cpu（instrument/lru_fine/b2 模型）→ g2-cpu → final-cpu（D1/G1/汇总）；learn（gbdt）并行；wb-rkv-fu-e 等所有队列结束后自动开始 E（每项检查空卡与 load < 4）。
+- 下一步：随结果写 B2/B3/B5/B6/C3/D1/D2/D4/D5/D6/E/G1/G2 页，然后 thesis_v3、pr_description、REPORT。
