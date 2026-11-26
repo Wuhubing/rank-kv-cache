@@ -11,7 +11,7 @@ allocation curves (+0.119 / +0.233 over uniform budgets; 96 % / 91 % of the offl
 the policy's job is to predict which pages *the selector* will pick in the next ~16 steps: true attention is a worse signal than
 the selector's own score (G −0.86), any mismatch between the two pushes eviction below random, the decisive information is the
 current score of the residents just below the cut (refreshing only 16 of them recovers 91 %), and richer learned models do not
-beat the power-law kernel. E: E_SUMMARY_PLACEHOLDER
+beat the power-law kernel. E (fixed batched path, 5 randomised rounds): on a PCIe 4 GPU transfer is ≤ 12 % of the decode step, so the EMA gains ≤ 1 % throughput and Bélády 2–4 %; with a simulated slower tier the gains grow in proportion to the miss reduction (up to +7 % / +34 %).
 
 External evidence integrated with attribution (`docs/v3/external_xiaoyang.md`): Xiaoyang Wu's M1 Max replication and new-task
 results (PR #9), his L4 batched transfer benchmark (PR #9; transfer share ~14 % caps speedups at a few percent) and his
@@ -25,7 +25,7 @@ data files are referenced, not copied.
 | P2 better simple policy | supported: normalised power law, ΔG +0.048 / +0.043 | **yes (H2)** |
 | P3 free memory saving | supported: 8–10 % more slots at B=96, 16–18 % at B=128 (allocation + EMA); held-out post-hoc consistent | dev + post hoc |
 | P4 allocation without offline curves | supported against uniform budgets; ≥ 80 % of the offline gain only at B=96 | **yes (H3)** |
-| P5 boundary of system gains | P5_PR_PLACEHOLDER | – |
+| P5 boundary of system gains | supported: upper bound holds, speedup ∝ transfer share × miss reduction; real-hardware gains ≤ 1 % (EMA), 2–4 % (Bélády); larger gains only in simulation | – |
 | P6 explanations of negative results | supported (staleness, classic-policy defaults, pins/protection and the accumulated-score flip) | – (dev) |
 
 ## What was done
@@ -38,7 +38,7 @@ data files are referenced, not copied.
 - **D**: capacity (D1), noise models incl. time-correlated, order-preserving, measured, counterfactual (D3), classic policies (D4),
   pins/protection incl. the CO2 flip (D5), α (D6), high budgets (D7); D2 is the step-time model of part E.
 - **E**: a fixed batched path `gpu_bench_batch2.py` (pinned host tier, fused batched policy kernel without host sync, zero-copy
-  fetch on a side stream, async write-back; CUDA tests) and a randomised, multi-round measurement driver. E_DONE_PLACEHOLDER
+  fetch, async write-back; CUDA tests) and a randomised, multi-round driver; E2 batch 1–32, E3 all-miss/no-fetch bound, E4 tail attribution, E5 page 32/64, K 128, 8B and a simulated slow tier, E6 policy kernel time, D2 step model (`e_systems.md`, `d2_step_model.md`). Transfer/compute overlap was not achieved (see deviations).
 - **F**: document pool survey (2 262 unused documents; `splits/longctx_v3.json`), preregistration (commit `087d53f`, pushed
   00:15:31Z) before collection (00:15:39Z), one evaluation; all hypotheses pass on both models (`f3_heldout.md`).
 - **G**: post-hoc capacity on the held-out sets (G1), 8B decoded to EOS (G2: G 0.278, unchanged).

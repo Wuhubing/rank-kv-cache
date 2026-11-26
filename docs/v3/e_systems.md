@@ -6,7 +6,10 @@ per request and layer costs nothing at batch 1–4). At batch 32 transfer is 12 
 fewer misses, gains +4.2 % [4.2, 4.3] throughput, the EMA +0.1 % [0.1, 0.1], allocation + EMA +0.6 % [0.6, 0.7], the current score
 +0.1 %. Bélády's gain equals the E3 upper bound (saved misses × 2.42 µs per missed page), the EMA's is below its bound (0.9 ms,
 1.2 %). Replication-v2's batch-32 "+3.4 %" is gone with the fixed path and the randomised order: LRU no longer has a long tail; the
-slow steps of every policy are the page-completion steps. E_MORE_PLACEHOLDER
+slow steps of every policy are the page-completion steps. Larger pages (32, 64 tokens), K = 128 and Qwen3-8B (16K / 12K
+prompts) keep transfer at 7–12 % of the step at batch 32, so Bélády gains +2.0 to +3.7 % and the EMA at most +0.8 % (8B: −0.2 %).
+Only in the simulated slow tier (E5) does transfer become a large share (23–75 %), and there every policy's speedup follows its miss
+reduction (EMA up to +7.2 %, allocation + EMA +11.3 %, Bélády +33.6 %).
 
 Setup: `gpu_bench_batch2.py` (E1) with `overlap=False` (see "E1 status"), driver `analysis_v3/e_bench.py`, summary
 `analysis_v3/e_summarize.py`. wulab2 card 0 (GPU-a74391df-5c27-152f-d0c0-6b86f8ea07d3), no other process on the card in any run
@@ -104,7 +107,32 @@ GPU time); at batch 1 the phase is inflated by launch gaps (the GPU waits for th
 ≈ 3·B operations per layer and request, `results_v2/gpu/flops.csv`: 10⁻⁵ of the model's), so the measured cost is kernel latency, not
 FLOPs. (Event timing adds overhead; these runs are separate from the throughput runs.)
 
-E5_MORE_PLACEHOLDER
+## E5 (measured): larger pages, larger K, the 8B model (5 rounds each, randomised order)
+`results_v3/e/{ps32_06b,ps64_06b,k128_06b,batch_8b,batch_8b_12k}/`, `results_v3/e/rest/summary/`. Throughput relative to LRU at
+the largest batch, with the D2 transfer share:
+
+| config (B = 96 pages unless stated) | batch | LRU median step | LRU transfer share | EMA | allocation + EMA | Bélády |
+|---|---|---|---|---|---|---|
+| 0.6B, page 16, K 64 (E2) | 32 | 76.8 ms | 12.5 % | 1.001 [1.001, 1.001] | 1.006 [1.006, 1.007] | 1.042 [1.042, 1.043] |
+| 0.6B, page 32 (α 0.5, no allocation) | 32 | 125.9 ms | 11.0 % | 1.005 [1.004, 1.005] | – | 1.037 [1.037, 1.037] |
+| 0.6B, page 64 | 32 | 223.7 ms | 7.1 % | 1.004 [1.004, 1.004] | – | 1.024 [1.023, 1.024] |
+| 0.6B, K 128, B 192 | 32 | 133.9 ms | 10.4 % | 1.008 [1.008, 1.008] | – | 1.037 [1.037, 1.037] |
+| 8B, 16K prompts (frozen 8B α and allocation) | 16 | 77.9 ms | 5.8 % | 0.995 [0.994, 0.996] | 1.000 [0.996, 1.003] | 1.015 [1.014, 1.016] |
+| 8B, 12K prompts | 32 | 134.7 ms | 6.9 % | 0.998 [0.998, 0.998] | 1.004 [1.003, 1.004] | 1.020 [1.020, 1.020] |
+
+At batch 1 every configuration is launch-bound (0.6B 33 ms, 8B 59 ms for every policy). Some rounds at batch 1 (K 128) and batch 4
+(8B) had one slow round that widens the CIs (e.g. 8B batch 4: all non-LRU policies 0.86–0.87 with CIs reaching 1.0); medians are
+unaffected (`throughput.csv`). Larger pages move more bytes per miss but also make attention more expensive, so the share does not
+rise; on 8B the larger compute dilutes transfer further.
+
+## Break-even and the P5 verdict
+- Upper bound: holds everywhere (no policy exceeds (saved misses) × (per-page cost); Bélády reaches it at batch 32).
+- Speedup rises monotonically with the transfer share (E5 simulated, every policy) and is proportional to the byte reduction
+  (D2 prediction within 0.5 points).
+- Break-even for the EMA (throughput CI lower bound > 0): already at the measured 12.5 % share at batch 32 (+0.1 %), but a gain of
+  ≥ 1 % needs a share of ~20 %, ≥ 5 % about 55 % — reached here only by simulation (≈ 3 GB/s effective bandwidth).
+- On this PCIe 4 single GPU, with 0.6B or 8B, pages 16–64 and K 64–128: transfer is not on the critical path at batch ≤ 8 and is
+  7–12 % of the step at batch 32, so the policies' byte savings (9–14 % for EMA and allocation + EMA) become ≤ 1 % throughput.
 
 ## Comparison with Xiaoyang Wu's L4 benchmark (PR #9; `external_xiaoyang.md`)
 His transfer-only decomposition on an L4 (5.3 µs per page, LRU transfer share ~14 % at B=96 from batch 8 on, ceilings EMA +1.5 %,
