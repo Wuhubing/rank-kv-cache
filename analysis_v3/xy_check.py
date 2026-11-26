@@ -4,7 +4,7 @@ refs/remotes/pr/9 and pr/10 into a scratch folder, not copied into this branch).
   python -m analysis_v3.xy_check --dir /data/weibing/tmp/xy --out results_v3/external_xiaoyang/check.json
 
 Recomputes: (a) MPS held-out G of the EMA (CI, wins) and allocation + EMA − EMA at B=96, plus the budget curve, from
-mps_heldout/misses.csv; (b) the same for the new documents in v2_ood/misses.csv, split by task (NarrativeQA vs truncated
+mps_heldout/misses.csv; (b) the same for the new documents: v2_ood/misses.csv (NarrativeQA) and v2_fresh/misses.csv (truncated
 GovReport); (c) the transfer share and step speedups of batch_bench.csv from its raw time columns; (d) the decision-change rate
 and the repeat-miss difference from solo_rank_dev/event_counts.csv. Bootstrap: documents, 2000 resamples, seed 0.
 """
@@ -85,7 +85,7 @@ def main():
     res = dict(
         a_mps_heldout=held(d / "mps_heldout_misses.csv"),
         b_narrativeqa=held(d / "v2_ood_misses.csv", lambda x: x.startswith("narrativeqa")),
-        b_govreport_truncated=held(d / "v2_ood_misses.csv", lambda x: not x.startswith("narrativeqa")),
+        b_govreport_truncated=held(d / "v2_fresh_misses.csv"),
         c_batch=batch(d / "batch_bench.csv"),
         d_rank=rank(d / "event_counts.csv"))
     a.out.parent.mkdir(parents=True, exist_ok=True)
