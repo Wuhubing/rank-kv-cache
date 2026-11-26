@@ -2,11 +2,13 @@
 
 **What kind of number this is.** A GPU-time model: decode, scoring and page transfer are each timed separately on the
 L4 and added. It excludes CPU launch gaps, the cost of the policy's own resolver kernel (measured separately at batch 1:
-+0.084 ms per token for EMA over LRU, docs/gpu_benchmark.md), and any overlap of transfer with compute. It is one run;
-run-to-run variance was not measured. Use it for the batch trend and the ceiling, not as an end-to-end token/s claim.
++0.084 ms per token for EMA over LRU, docs/gpu_benchmark.md), and any overlap of transfer with compute. It was run in two separate Colab L4 sessions (the second with three rounds per
+timing; see "Run-to-run variation"). Use it for the batch trend and the ceiling, not as an end-to-end token/s claim.
 
-Notebook [`notebooks/batch_transfer_bench.ipynb`](../notebooks/batch_transfer_bench.ipynb), run once on a Colab
-NVIDIA L4 (torch 2.14.1+cu130, Triton 3.8.0). Raw output: [`results/batch_bench_l4/`](results/batch_bench_l4/).
+Notebook [`notebooks/batch_transfer_bench.ipynb`](../notebooks/batch_transfer_bench.ipynb) on Colab NVIDIA L4
+(torch 2.14.1+cu130, Triton 3.8.0). Raw output: session 1 [`results/batch_bench_l4/`](results/batch_bench_l4/) (one
+round), session 2 [`results/batch_bench_l4_run2/`](results/batch_bench_l4_run2/) (three rounds, policy order rotated
+per round; `batch_bench_rounds.csv` has every round). The table below is session 1.
 
 **Setup.** Per-step, per-layer miss counts of the frozen held-out policies on the 21 MPS held-out documents
 (`miss_schedule.npz`, exported by `local/export_miss_schedule.py`, totals equal to `results/mps_heldout/misses.csv`).
@@ -55,3 +57,26 @@ Full table (batch 1, 4, 8, 16, 32, 64): `results/batch_bench_l4/batch_bench.csv`
 compute inputs of the right shape; transfers and compute are timed separately and added, not run as one fused decoder.
 The CPU launch cost of 28 gather launches per step (wall 3–43 ms) is excluded; at batch 1 it dominates, as the
 full-model batch-1 benchmark found (docs/gpu_benchmark.md).
+
+## Run-to-run variation (two sessions, 1 + 3 rounds)
+
+Every number above reproduces. Ranges over all four measurements (session 1, and the three rounds of session 2):
+
+| B | batch | LRU transfer share | step speedup: EMA | alloc + EMA | Bélády |
+|---|---|---|---|---|---|
+| 96 | 8 | 13.4–13.5% | +1.39–1.40% | +1.94–1.95% | +5.13–5.14% |
+| 96 | 16 | 13.6–13.8% | +1.43–1.45% | +2.03–2.07% | +5.22–5.32% |
+| 96 | 32 | 13.7–14.0% | +1.42–1.46% | +2.01–2.06% | +5.23–5.37% |
+| 96 | 64 | 13.8–14.2% | +1.41–1.46% | +2.02–2.08% | +5.23–5.40% |
+| 128 | 8 | 8.4% | +0.96% | +1.76–1.77% | +3.53–3.54% |
+| 128 | 16 | 8.5–8.6% | +0.96–0.98% | +1.87–1.90% | +3.61–3.67% |
+| 128 | 32 | 8.6–8.8% | +0.95–0.98% | +1.83–1.89% | +3.58–3.68% |
+| 128 | 64 | 8.7–8.9% | +0.93–0.96% | +1.81–1.87% | +3.52–3.64% |
+
+- **Transfer time is essentially deterministic**: within session 2 the three rounds differ by < 0.02%, and the two
+  sessions by < 0.1% (B=96, batch 64, LRU: 38.234 / 38.241 ms per step). Memcpy 12.35 GB/s and the gather reference
+  5.30 µs per page in both sessions.
+- **The variation is in the compute side.** Decode GPU time at batch 64 was 132.9 ms in session 1 and 139.0–140.9 ms in
+  session 2 (the first round slowest); scoring was within 0.2%. A slower decode lowers the transfer share and so the
+  speedups, by at most 0.15 percentage points (Bélády, B=96).
+- **Conclusion unchanged**: at B=96 and batch ≥ 16, EMA +1.4–1.5%, allocation + EMA +2.0–2.1%, Bélády +5.2–5.4%.
