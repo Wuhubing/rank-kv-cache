@@ -92,11 +92,11 @@ python -m pytest -q
 ## 7. GPU 测试结果的内部一致性（只读 CSV）
 
 1. `docs/results/mps_heldout/miss_schedule.npz`：键 `"<i>/<policy>@<B>"` 为 int16 `[T, 28]`，`rids` 给出文档。对每篇、每个 policy（lru、ema、alloc_ema、belady）、B∈{96,128}，数组总和必须等于 `docs/results/mps_heldout/misses.csv` 中同一 (config, doc, B) 的 miss 合计。
-2. `docs/results/batch_bench_l4/batch_bench.csv`：检查 `step_ms = decode_ms + scoring_ms + transfer_ms_mean`，`speedup_vs_lru = LRU 的 step_ms / 本行 step_ms − 1`，`us_per_page = 1000 × transfer_ms_mean / pages_per_step`。**期望**：batch ≥ 4 时 us_per_page 在 5.3–5.7；B=96、batch=64 的 speedup：ema +1.46%，alloc_ema +2.08%，belady +5.40%。
+2. `docs/results/batch_bench_l4/batch_bench.csv`：检查 `step_ms = decode_ms + scoring_ms + transfer_ms_mean`，`speedup_vs_lru = LRU 的 step_ms / 本行 step_ms − 1`，`us_per_page = 1000 × transfer_ms_mean / pages_per_step`。**期望**：batch ≥ 4 时 us_per_page 在 5.32–5.86（最高两行是 B=128、batch=4 的 alloc_ema 5.76 和 belady 5.85），batch ≥ 16 时在 5.32–5.48；B=96、batch=64 的 speedup：ema +1.46%，alloc_ema +2.08%，belady +5.40%。
 
 ## 8. 代码审查
 
-1. `git diff b6b75d5 -- '*.py'`：逐个说明本分支对已有文件的改动是否会改变任何策略或指标的结果。预期只有：`heldout.py` 加了按存储 rid 的检查和从冻结文件读 α；`kvpolicy.py` 加了可选参数 `per_step`；`checks.py` 从旁边的 json 读 prompt 长度；`recompute_heldout.py` 把 18/21 按文档数换算。
+1. `git diff b6b75d5 -- '*.py'`：逐个说明本分支对已有文件的改动是否会改变任何策略或指标的结果。预期只有：`heldout.py` 加了按存储 rid 的检查和从冻结文件读 α（冻结值与原默认值不同时会改变结果；现有两份冻结文件的 α 都等于默认值，所以已提交结果不变）；`kvpolicy.py` 加了可选参数 `per_step`；`checks.py` 从旁边的 json 读 prompt 长度；`recompute_heldout.py` 把 18/21 按文档数换算（只改变小样本组的通过标签，对 21 篇主检验无影响）。
 2. 比较 `local/capture.py` 中 `Quest.__call__` 与 `notebooks/long_trace_capture.py` 中 `QuestPages.__call__`：选择器的数学（page 上下界、打分、排序、拼接 attention 的 token）应完全相同。
 3. `local/make_split.py`：确认排除规则与第 3 节一致，抽样是确定性的。
 4. 列出你认为有问题的地方，并说明严重程度。

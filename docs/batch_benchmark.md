@@ -1,5 +1,10 @@
 # Batch scaling of the page-transfer cost (L4, Colab)
 
+**What kind of number this is.** A GPU-time model: decode, scoring and page transfer are each timed separately on the
+L4 and added. It excludes CPU launch gaps, the cost of the policy's own resolver kernel (measured separately at batch 1:
++0.084 ms per token for EMA over LRU, docs/gpu_benchmark.md), and any overlap of transfer with compute. It is one run;
+run-to-run variance was not measured. Use it for the batch trend and the ceiling, not as an end-to-end token/s claim.
+
 Notebook [`notebooks/batch_transfer_bench.ipynb`](../notebooks/batch_transfer_bench.ipynb), run once on a Colab
 NVIDIA L4 (torch 2.14.1+cu130, Triton 3.8.0). Raw output: [`results/batch_bench_l4/`](results/batch_bench_l4/).
 
@@ -12,7 +17,8 @@ gather of `gpu_bench.py`. Compute side at the same batch: one Qwen3-0.6B decode 
 with `torch.profiler` (launch gaps excluded); transfer is not overlapped with compute.
 
 **Transfer is bandwidth-bound and linear in misses.** Reference memcpy 12.35 GB/s; the gather moves a page in
-5.3 µs (12.3 GB/s) from batch 4 up (6.0–6.7 µs at batch 1). So every saved miss saves about 5.3 µs per step.
+5.32–5.48 µs from batch 16 up (about 12 GB/s), 5.32–5.86 µs from batch 4 up and 6.0–6.7 µs at batch 1. So every saved
+miss saves about 5.3 µs per step at large batch.
 
 ## Results (GPU time per decode step)
 
