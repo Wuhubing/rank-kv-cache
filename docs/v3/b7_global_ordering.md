@@ -43,8 +43,13 @@ selected, so its value reflects a moment when it was among the top K. A page tha
 indefinitely and is never chosen as a victim, while the pages just admitted (one sample, often lower) are evicted. The cache
 fills with stale "former favourites"; misses rise far above LRU's. Refreshing only the lowest-scoring residents is enough to
 correct exactly the pages that matter for the next eviction, which is why the bottom-M curve rises so fast and the top-M curve
-does not. [Read-out pending: mean steps since the last update of the eviction candidates and the Spearman correlation between
-their stored values and their current z, selected-only vs full, `results_v3/inst/dev/stale.csv`.]
+does not.
+
+Read-out (`analysis_v3/instrument.py`, `results_v3/inst/{dev,8b}/stale.csv`, B=96, α 0.5): at each eviction, over the unselected
+residents (the candidates), with selected-only updates the stored values are on average 53 steps old (median 10, 90th percentile
+173; 8B: 80 / 18 / 259) and their Spearman correlation with the candidates' *current* z is **−0.35** (8B −0.39): the stored order
+is the reverse of the current one. With full updates the correlation is +0.84 (8B +0.86). So the −1.63 is a frozen ranking that has turned upside down: each value reflects the moment the page was last selected, and
+the pages selected longest ago — the ones least likely to come back — carry values from when they were favourites.
 
 ## The same framework explains the earlier failures
 - **Rank policy of stages 1–2 (`kvpolicy.RankFull`, G 0.027).** Its signal is the page's last rank *among the selected pages*
