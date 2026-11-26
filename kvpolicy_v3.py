@@ -17,7 +17,8 @@ B7  ScopedEMA     EMA updated each step for the selected residents plus M unsele
                   highest ("top") or lowest ("bottom") current score; the rest keep their stale values.
     RefRankEMA    EMA of the rank among the R highest-scoring eligible pages: (R - r + 1)/R if r <= R else 0
                   (R = K: rank among the selected; R = None: all eligible pages).
-D5  Protect       LRU or EMA(z) with a FIFO protection zone (the floor(rho*B) most recently admitted residents) and
+D5  Protect       LRU, EMA(z) or an H2O-style accumulated attention share ("accum": the sum, without decay, of the page's
+                  softmax share over the selected pages, kvpolicy_v2.step_mass) with a FIFO protection zone (the floor(rho*B) most recently admitted residents) and
                   pinned pages (the first `sink` pages and the `recent` most recent completed pages): protected
                   residents are evicted only when no unprotected candidate is left (then in base-key order).
 C3  ShrinkEMA     EMA(z) whose newly admitted page starts at a shrunken value: (1 - c) * x + c * prior, prior = the
@@ -122,11 +123,14 @@ class EMAAge(ScoreEMA):
     def dropped(self, p):
         super().dropped(p)
         del self.adm[p]
+        self.acc_mass.pop(p, None)
 
     def admit(self, hits, misses):
         super().admit(hits, misses)
         for p in misses:
             self.adm[p] = self.t
+            if self.base == "accum":
+                self.acc_mass[p] = self.share.get(p, 0.0)
 
 
 class EMADeficit(ScoreEMA):
@@ -327,15 +331,27 @@ class Protect(ScoreEMA):
 
     def __init__(self, K, base="lru", alpha=0.5, rho=0.0, sink=0, recent=0, B=None, **kw):
         super().__init__(K, alpha=alpha, **kw)
-        if base not in ("lru", "ema"):
+        if base not in ("lru", "ema", "accum"):
             raise ValueError("bad base")
+        self.acc_mass = {}
         self.base, self.rho, self.sink, self.recent, self.cap = base, rho, sink, recent, B
         self.adm = {}
         self.needs_scores = True
 
+    def begin(self, t, ranked, srow):
+        super().begin(t, ranked, srow)
+        if self.base == "accum":
+            from kvpolicy_v2 import step_mass
+            self.tau = math.sqrt(128)
+            self.share = step_mass(self)
+            for p in self.acc_mass:
+                self.acc_mass[p] += self.share.get(p, 0.0)
+
     def bkey(self, p):
         if self.base == "lru":
             return self.last[p], self.hit[p], -p
+        if self.base == "accum":
+            return self.acc_mass[p], self.last[p], self.hit[p], -p
         return self.ema[p], self.last[p], self.hit[p], -p
 
     def evict(self, cands, n):
@@ -358,11 +374,14 @@ class Protect(ScoreEMA):
     def dropped(self, p):
         super().dropped(p)
         del self.adm[p]
+        self.acc_mass.pop(p, None)
 
     def admit(self, hits, misses):
         super().admit(hits, misses)
         for p in misses:
             self.adm[p] = self.t
+            if self.base == "accum":
+                self.acc_mass[p] = self.share.get(p, 0.0)
 
 
 V3_POLICIES = dict(kernel=Kernel, ema_age=EMAAge, ema_deficit=EMADeficit, ema_unsel=EMAUnsel, twoscale=TwoScale,

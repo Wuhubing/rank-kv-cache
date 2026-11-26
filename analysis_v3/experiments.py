@@ -152,7 +152,16 @@ def g1():
     return e
 
 
-REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine, base, g1)}
+def d5b():
+    e = Exp("d5b", budgets=[96, 128], doc="D5: protection zone on an H2O-style accumulated-share score (CO2's setting)")
+    for n in ("lru", "belady"):
+        e.add(n, n, n)
+    for rho in (0.0, 0.05, 0.1, 0.2, 0.3, 0.5):
+        e.add(f"prot_accum_rho{rho}", f"prot_accum_rho{rho}", "protect", base="accum", rho=rho)
+    return e
+
+
+REGISTRY = {f.__name__: f for f in (b1, b3, b4, b4_quest, b7, c3, d5, lru_fine, base, g1, d5b)}
 
 
 def get(name):

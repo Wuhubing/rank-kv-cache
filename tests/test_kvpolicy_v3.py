@@ -20,7 +20,8 @@ ALL = {"kernel": [dict(kernel="exp", a=0.5), dict(kernel="power", gamma=1.0, nor
        "ema_unsel": [dict(lam=0.5)], "twoscale": [dict(fast=0.2, slow=0.9, w=0.5)],
        "lookahead": [dict(H=4), dict(H=16, tie="ema")], "scoped_ema": [dict(M=2), dict(M=2, which="bottom")],
        "refrank_ema": [dict(R=16)], "shrink_ema": [dict(c=0.5), dict(c=0.5, prior="zero")],
-       "protect": [dict(rho=0.25), dict(base="ema", rho=0.25), dict(sink=2, recent=2), dict(base="ema", sink=1, recent=1)]}
+       "protect": [dict(rho=0.25), dict(base="ema", rho=0.25), dict(sink=2, recent=2), dict(base="ema", sink=1, recent=1),
+                   dict(base="accum", rho=0.25), dict(base="accum")]}
 
 
 @pytest.mark.parametrize("name", sorted(ALL))
