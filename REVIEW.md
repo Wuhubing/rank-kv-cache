@@ -5,6 +5,8 @@
 
 ## 0. 背景（一段话）
 
+完整的结论清单和每条结论对应的证据文件在 [`FINDINGS.md`](FINDINGS.md)；复核时以它为准，逐条判断是否被下面的检查支持。不需要 GPU、原始 trace 或 Git LFS。
+
 研究问题：HiSparse 式两级 KV cache（全部 KV page 在 host 内存，每层 GPU 上 B 个 slot），Quest 式选择器每步每层选 K=64 个 16-token page，替换策略决定驱逐哪些"驻留但本步未选中"的 page。指标 G = (LRU miss − 策略 miss) / (LRU miss − Bélády miss)。主要结论：
 1. proposal 的 rank 策略无效（B=128 时只比 LRU 少 0.39% repeat miss，目标 10%）；
 2. score EMA（每 page 一个浮点数）在 B=96 填上约 28% 的差距，加按层分配约 40%；在 L4 与 Apple M1 Max 两种硬件上各自预注册检验通过，在新文档和新任务上也成立；
@@ -94,6 +96,9 @@ python -m pytest -q
 1. `docs/results/mps_heldout/miss_schedule.npz`：键 `"<i>/<policy>@<B>"` 为 int16 `[T, 28]`，`rids` 给出文档。对每篇、每个 policy（lru、ema、alloc_ema、belady）、B∈{96,128}，数组总和必须等于 `docs/results/mps_heldout/misses.csv` 中同一 (config, doc, B) 的 miss 合计。
 2. `docs/results/batch_bench_l4/batch_bench.csv`：检查 `step_ms = decode_ms + scoring_ms + transfer_ms_mean`，`speedup_vs_lru = LRU 的 step_ms / 本行 step_ms − 1`，`us_per_page = 1000 × transfer_ms_mean / pages_per_step`。**期望**：batch ≥ 4 时 us_per_page 在 5.32–5.86（最高两行是 B=128、batch=4 的 alloc_ema 5.76 和 belady 5.85），batch ≥ 16 时在 5.32–5.48；B=96、batch=64 的 speedup：ema +1.46%，alloc_ema +2.08%，belady +5.40%。
 
+3. 第二次 L4 会话 `docs/results/batch_bench_l4_run2/`：`batch_bench_rounds.csv` 有 3 轮，每轮 2 个 B × 6 个 batch × 4 个策略 = 48 行，共 144 行；同一 (B, batch, policy) 的 `pages_per_step` 三轮相同且等于 `batch_bench_l4/batch_bench.csv` 中的值。`batch_bench.csv` 的均值、`*_min`、`*_max` 由 rounds 重算一致。把第一次会话的 1 次和第二次的 3 次合起来，**期望**：B=96、batch 64 时 speedup 范围 ema +1.41–1.46%，alloc_ema +2.02–2.08%，belady +5.23–5.40%；LRU transfer_ms 两次会话相差 < 0.1%。
+4. `FINDINGS.md` 第 4 节表格里的每个范围都能由这 4 次测量得到。
+
 ## 8. 代码审查
 
 1. `git diff b6b75d5 -- '*.py'`：逐个说明本分支对已有文件的改动是否会改变任何策略或指标的结果。预期只有：`heldout.py` 加了按存储 rid 的检查和从冻结文件读 α（冻结值与原默认值不同时会改变结果；现有两份冻结文件的 α 都等于默认值，所以已提交结果不变）；`kvpolicy.py` 加了可选参数 `per_step`；`checks.py` 从旁边的 json 读 prompt 长度；`recompute_heldout.py` 把 18/21 按文档数换算（只改变小样本组的通过标签，对 21 篇主检验无影响）。
@@ -104,7 +109,7 @@ python -m pytest -q
 ## 9. 可选：需要特定硬件
 
 - **Apple silicon Mac**：`pip install -r requirements-local.txt` 后运行 `python local/capture.py check`，应有三行 PASS（selector_bounds、stable_sort、rerun_identical）。
-- **Colab GPU**：上传运行 `notebooks/batch_transfer_bench.ipynb`（第一格上传 `docs/results/mps_heldout/miss_schedule.npz`）。L4 上应得到每 page 约 5.3 µs，B=96、batch 64 时 EMA / alloc_ema / Bélády 提速约 +1.5% / +2.1% / +5.4%（各 ±0.3 个百分点）。换用其他 GPU 时记录 GPU 型号与数字，不判定通过与否。
+- **Colab GPU**：上传运行 `notebooks/batch_transfer_bench.ipynb`（第一格上传 `docs/results/mps_heldout/miss_schedule.npz`，每项计时重复 3 轮，约 30–45 分钟）。L4 上应得到 batch ≥ 16 时每 page 5.3–5.5 µs，B=96、batch 64 时 EMA / alloc_ema / Bélády 提速约 +1.4% / +2.0% / +5.3%（各 ±0.3 个百分点）。换用其他 GPU 时记录 GPU 型号与数字，不判定通过与否。
 
 ## 报告模板
 
@@ -125,6 +130,8 @@ python -m pytest -q
 | 6 | 跨硬件一致性 | | |
 | 7.1 | miss 计划表总和 | | |
 | 7.2 | batch 结果内部一致 | | |
+| 7.3–7.4 | 第二次会话与运行间波动 | | |
+| — | FINDINGS.md 每条结论是否被支持 | | 逐条列出 |
 | 8 | 代码审查 | | 问题列表 |
 | 9 | 可选硬件检查 | | |
 ## 发现的问题（按严重程度）

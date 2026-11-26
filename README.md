@@ -1,5 +1,11 @@
 # Can Selection Rank Improve KV Cache Replacement?
 
+> **Branch `xiaoyang/score-ema-final` — start here.**
+> - [`FINDINGS.md`](FINDINGS.md): every conclusion, with the result file that backs it.
+> - [`REVIEW.md`](REVIEW.md): step-by-step verification for a reviewer or an agent (commands, expected numbers, pass criteria). Everything except the optional hardware checks runs on a CPU from the committed CSV/NPZ files; no traces, GPU or Git LFS needed.
+> - New on this branch: M1 Max (MPS) re-capture and preregistered held-out test ([`docs/heldout_results_mps.md`](docs/heldout_results_mps.md)), fresh documents and a new task, the batch-scaling GPU benchmark ([`docs/batch_benchmark.md`](docs/batch_benchmark.md)), local capture tools ([`local/README.md`](local/README.md)) and poster figures ([`poster/`](poster/)).
+> - The status line and walkthrough below are the team branch's (2026-11-23) and are kept unchanged.
+
 A single-GPU study of HiSparse-style hierarchical KV caching (MIT 6.5940, Fall 2026, Project 10).
 
 We test whether a page's sparse-attention top-K selection rank predicts reuse beyond
