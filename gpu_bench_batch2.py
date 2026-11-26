@@ -9,7 +9,9 @@ Differences from gpu_bench_batch.py (R5 of the followup-v3 task):
     and overlaps the rest of the layer's bookkeeping on the main stream; the main stream waits for it only right
     before attention;
   * a newly completed page is written to the host tier asynchronously on the same side stream (zero-copy store), so
-    it is ordered before any later fetch of that page;
+    it is ordered before any later fetch of that page; tensors the side stream reads are kept alive until the end of the
+    step (the main stream waits for the side stream in every layer), instead of Tensor.record_stream, which crashed the
+    caching allocator (segfault in empty_cache) after several runs in one process;
   * per-step miss counts are read after the step's timing ends (the token read-out already synchronises).
 Policies: lru, ema (alpha; alpha=0 is the current score), belady (next uses from an earlier run of the same batch),
 "nofetch" (LRU bookkeeping at the given budget but the fetch and the write-back are skipped: the same pipeline with
@@ -208,6 +210,7 @@ class BatchBench2:
         s.side = torch.cuda.Stream()
         s.delay = delay_ns_per_byte
         s.record_scores, s.scores = record_scores, None
+        s.keep = []   # tensors read by the side stream; released after each step instead of record_stream
 
     def ev(s, stream=None):
         if not s.timing:
@@ -241,8 +244,7 @@ class BatchBench2:
             s.side.wait_event(wb)
             with torch.cuda.stream(s.side):
                 _store_b[(R, n_el // 1024)](pk, pv, _HostPtr(T.kh), _HostPtr(T.vh), T.np, pmax, n_el, 1024)
-            pk.record_stream(s.side)
-            pv.record_stream(s.side)
+            s.keep += [pk, pv]       # alive until the step ends (the main stream waits for the side stream every layer)
             T.np += 1
             T.tk, T.tv = T.tk[:, :, PS:], T.tv[:, :, PS:]
         g = query.shape[1] // kvh
@@ -289,8 +291,7 @@ class BatchBench2:
             es2 = s.ev(s.side)
             done = torch.cuda.Event()
             done.record(s.side)
-        src.record_stream(s.side)
-        dst.record_stream(s.side)
+        s.keep += [src, dst]
         # main stream, overlapping the fetch: attention index of the K selected pages (ascending page id)
         ar = torch.arange(R, device=query.device)
         srt = ranked.sort(dim=1).values
@@ -378,6 +379,7 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
         peak_warm = None
         for step in range(steps):
             b.step, b.rec, b.evs = step, [None] * L, []
+            b.keep = []
             if record_scores:
                 b.scores = [None] * L
             torch.cuda.synchronize()
@@ -418,5 +420,7 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
                     host_bytes=sum(2 * T.kh.numel() * T.kh.element_size() for T in b.tiers.values()))
     finally:
         cfg._attn_implementation = orig
+        torch.cuda.synchronize()
+        b.keep = []
         b.tiers.clear()
         torch.cuda.empty_cache()
