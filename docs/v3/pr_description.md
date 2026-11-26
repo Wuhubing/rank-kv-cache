@@ -57,8 +57,11 @@ audited by `replay.py` (its per-layer curves are).
    and restarted with one thread per process.
 3. Briefly more than 16 processes (before the limit was raised to 32): a 2-process read-out (B4 signal) and the G2 collection
    process ran next to a 16-process queue.
-4. wulab2 card 2 produced CUDA faults three times ("illegal instruction" twice, "illegal memory access" once at the first E2
-   attempt); it is no longer used. The failed attempt's output is kept in `out/v3/e/failed/` on wulab2 and not used.
+4. The first E runs crashed: on card 2 ("illegal instruction" / "illegal memory access", three times) and then on card 0 (segfault in
+   `torch.cuda.empty_cache` after several runs in one process). The cause was in `gpu_bench_batch2.py` (tensors handed to the side
+   stream via `Tensor.record_stream`); they are now kept alive until the end of each step, and repeated multi-round runs pass.
+   Card 2 is still not used for E because it also faulted in plain model code during the ArkVale task. The failed attempts'
+   outputs are kept on wulab2 (`out/v3/e/failed/`) and not used.
 5. scikit-learn 1.6.1 was added to the project venv on wulab2 (and the mini's) for B3's trees.
 6. The F3 evaluation paused the C/D queue at a job boundary to stay within 32 processes; no effect on results.
 7. The R10 note written in part A first said the 8B steps were "all thinking"; G2's manifests showed thinking ends at step
