@@ -18,8 +18,8 @@ Source: `analysis_v3/instrument.py` (per-step misses from `kvpolicy_v3.simulate_
 | thinking | 122 584 | 4.15 | 0.276 [0.272, 0.280] | 0.236 | 323 352 | 2.84 | 0.270 [0.264, 0.275] | 0.219 |
 | answer | 179 116 | 3.67 | 0.280 [0.274, 0.287] | 0.244 | 192 240 | 3.08 | 0.274 [0.269, 0.278] | 0.224 |
 
-(Steps are summed over documents and layers' step counts as recorded per layer; 0.6B documents end thinking after 176–452
-steps, so most 0.6B steps are answer; 8B documents end thinking after 396–843 steps, so most 8B steps are thinking.)
+(Steps are layer-steps summed over documents. On 0.6B dev 41 % of the steps are thinking, on 8B dev 63 %; the 8B traces stop
+at the 1 024-token cap, 180–565 steps into the answer.)
 
 Error rates of the EMA's evictions against Bélády (B3) are also similar in both phases (0.6B 0.63 thinking vs 0.61 answer;
 8B 0.64 vs 0.59).
