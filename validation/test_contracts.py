@@ -53,7 +53,8 @@ def test_belady_matches_enumerated_optimum(budget):
         assert kp.simulate(rows, None, budget, "belady")["misses"] == exact_minimum(rows, budget)
 
 
-@pytest.mark.parametrize("policy", [p for p in kp.POLICIES if p != "belady"])
+@pytest.mark.parametrize("policy", [p for p in kp.POLICIES if p != "belady"
+                                    and not getattr(kp.POLICIES[p], "needs_future", False)])  # oracles (B3 lookahead)
 def test_online_policies_cannot_observe_future(policy):
     ranked, scores = trace()
     def decisions(r, s):
