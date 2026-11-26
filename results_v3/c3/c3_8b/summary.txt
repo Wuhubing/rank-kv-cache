@@ -1,0 +1,27 @@
+c3: 14 docs
+B= 96 belady                           G +1.0000 [+1.0000,+1.0000] wins 14/14
+B= 96 ema_allrank(lodo)                G +0.2627 [+0.2574,+0.2671] wins 14/14
+B= 96 ema_z(lodo)                      G +0.2720 [+0.2677,+0.2756] wins 14/14
+B= 96 lru                              G +0.0000 [+0.0000,+0.0000] wins 0/14
+B= 96 score                            G +0.2211 [+0.2147,+0.2266] wins 14/14
+B= 96 shrink_allrank_mean(lodo)        G +0.2603 [+0.2553,+0.2644] wins 14/14
+B= 96 shrink_allrank_zero(lodo)        G +0.1762 [+0.1578,+0.1932] wins 14/14
+B= 96 shrink_z_mean(lodo)              G +0.2703 [+0.2653,+0.2743] wins 14/14
+B= 96 shrink_z_zero(lodo)              G +0.2768 [+0.2729,+0.2800] wins 14/14
+B=128 belady                           G +1.0000 [+1.0000,+1.0000] wins 14/14
+B=128 ema_allrank(lodo)                G +0.2413 [+0.2353,+0.2476] wins 14/14
+B=128 ema_z(lodo)                      G +0.2563 [+0.2504,+0.2621] wins 14/14
+B=128 lru                              G +0.0000 [+0.0000,+0.0000] wins 0/14
+B=128 score                            G +0.1722 [+0.1666,+0.1794] wins 14/14
+B=128 shrink_allrank_mean(lodo)        G +0.2382 [+0.2318,+0.2448] wins 14/14
+B=128 shrink_allrank_zero(lodo)        G +0.1921 [+0.1848,+0.1997] wins 14/14
+B=128 shrink_z_mean(lodo)              G +0.2553 [+0.2495,+0.2611] wins 14/14
+B=128 shrink_z_zero(lodo)              G +0.2574 [+0.2515,+0.2632] wins 14/14
+B=96 shrink_z_mean(lodo) - ema_z(lodo): -0.0017 [-0.0028,-0.0006] 4/14
+B=96 shrink_z_zero(lodo) - ema_z(lodo): +0.0048 [+0.0037,+0.0059] 14/14
+B=96 shrink_allrank_mean(lodo) - ema_allrank(lodo): -0.0024 [-0.0035,-0.0014] 2/14
+B=96 shrink_allrank_zero(lodo) - ema_allrank(lodo): -0.0865 [-0.1017,-0.0717] 0/14
+B=128 shrink_z_mean(lodo) - ema_z(lodo): -0.0010 [-0.0013,-0.0006] 2/14
+B=128 shrink_z_zero(lodo) - ema_z(lodo): +0.0011 [+0.0007,+0.0016] 11/14
+B=128 shrink_allrank_mean(lodo) - ema_allrank(lodo): -0.0031 [-0.0046,-0.0017] 2/14
+B=128 shrink_allrank_zero(lodo) - ema_allrank(lodo): -0.0492 [-0.0533,-0.0450] 0/14
