@@ -189,3 +189,41 @@ def test_e_bench_wait_clean(monkeypatch):
     t = iter(range(0, 10000, 50))
     monkeypatch.setattr(e_bench.time, "time", lambda: next(t))
     assert e_bench.wait_clean(100, poll=1) >= 100
+
+
+def _fake_runs(folder, pols, rounds=3, steps=12, warm=2, timing=False):
+    """lat = base + 0.01 * round (so paired differences are exact); breakdown phase 2 = policy time."""
+    folder.mkdir(parents=True)
+    (folder / "meta.json").write_text(json.dumps({"args": {"warmup": warm}}))
+    runs = []
+    for rnd in range(rounds):
+        for pol, (base, m, pol_ms) in pols.items():
+            lat = [base + 0.01 * rnd] * steps
+            brk = [[0.5, 1.0, pol_ms, 0.2, 3.0, 0.0, 0.7]] * steps if timing else None
+            runs.append(dict(R=2, round=rnd, policy=pol, delay_ns_per_byte=0.0, lat_ms=lat,
+                             step_misses=[999] * warm + [m] * (steps - warm), page_step=[False] * steps,
+                             misses=m * steps, tokens_per_s=1.0, ranks_equal_prep=True, tokens_equal_prep=True,
+                             breakdown_ms=brk, mem_phases=dict(prefill_forward=2 ** 30, migration=2 ** 31,
+                                                               decode_start=2 ** 29, decode_warmup=2 ** 30,
+                                                               decode_steady=3 * 2 ** 30),
+                             before={"loadavg1": 1.0, "other_pids": []}, after={"loadavg1": 1.0, "other_pids": []}))
+    (folder / "batch2.json").write_text(json.dumps(dict(R=2, budget=96, page_bytes=65536, runs=runs)))
+
+
+def test_r11_netgain(tmp_path):
+    from analysis_v3 import r11_netgain
+    # per page = (60 - 45) / 64 ms; EMA saves 4 misses -> 0.9375 ms; overhead 1.4 - 0.9 = 0.5 ms; predicted 0.4375
+    _fake_runs(tmp_path / "tp", {"lru": (50.0, 10, 0), "ema": (49.5625, 6, 0), "allmiss": (60.0, 64, 0),
+                                 "nofetch": (45.0, 1, 0)})
+    _fake_runs(tmp_path / "tm", {"lru": (50.0, 10, 0.9), "ema": (50.0, 6, 1.4)}, timing=True)
+    r11_netgain.main(["--pair", "x", str(tmp_path / "tp"), "2", str(tmp_path / "tm"), "--out", str(tmp_path / "o")])
+    r = list(csv.DictReader(open(tmp_path / "o/netgain.csv")))[0]
+    assert float(r["saved_transfer_ms"]) == pytest.approx(4 * 15 / 64)
+    assert float(r["overhead_ms"]) == pytest.approx(0.5)
+    assert float(r["predicted_net_ms"]) == pytest.approx(4 * 15 / 64 - 0.5)
+    assert float(r["measured_ms"]) == pytest.approx(0.4375)
+    assert r["consistent"] == "True"
+    mem = {m["policy"]: m for m in csv.DictReader(open(tmp_path / "o/memory.csv"))}
+    assert float(mem["lru"]["migration"]) == pytest.approx(2.0) and float(mem["ema"]["decode_steady"]) == pytest.approx(3.0)
+    ph = list(csv.DictReader(open(tmp_path / "o/phases.csv")))
+    assert len(ph) == 6 and float(ph[0]["gather"]) == pytest.approx(0.7)
