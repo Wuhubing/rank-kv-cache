@@ -8,6 +8,11 @@ so they do not reduce to C1's closed form; the one feature the closed form lacks
 largest weight, and the weights on frequency and residency go the *opposite* way of a residency penalty (long-resident, often
 selected pages are kept).
 
+Status of the comparison (added 2026-11-27, review of PR #11, R11-5): the training is leave-one-document-out (the held-out
+document enters neither the initial fit nor the DAgger rollouts, and the standardisation uses the training documents only;
+hyperparameters fixed), but the feature set was designed after looking at dev, so this comparison is exploratory, not
+confirmatory.
+
 Source: `analysis_v3/learn.py` (features in its docstring; behaviour cloning on LRU's decisions, then two DAgger iterations;
 ridge regression of log(1 + next-use distance); leave-one-document-out), `analysis_v3/learn_summary.py`; results
 `results_v3/learn/linear_{dev,8b}/` (`learned.csv` per document, `models.json` per-fold coefficients, `summary.json`). Tests
