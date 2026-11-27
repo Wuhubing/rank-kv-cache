@@ -72,3 +72,36 @@ collected, and the sample size is stated.
 Any change of these commands or arguments, a re-run of an evaluation step, a document not collected or collected twice, an
 edit of a frozen file, or any use of held-out output for a decision. All are listed in `docs/v3/f3_heldout.md` and
 `docs/v3/pr_description.md`.
+
+## Appendix (2026-11-27): exact semantics of the global slot pool (P4 candidate)
+Supplementary clarification only; it does not change the frozen configuration (`splits/heldout_frozen_v3.json`) or the code.
+Added after Xiaoyang Wu's review of PR #11 (R11-4), which found that the P4 text above does not determine the implementation
+uniquely. Every rule below was checked against `analysis_v3/c4_alloc.py: pool_run` as frozen (commit 087d53f, unchanged at
+f58f6d8); an independent implementation written from this text alone reproduces `pool_run` miss for miss on synthetic traces
+(`tests/test_pool_spec.py`).
+
+0. Input per decode step t and layer l: the pages layer l selects (the selector's top-K, in descending score order; fewer
+   than K while the layer has fewer than K pages) and the score of every page of layer l (non-finite = not an eligible page).
+   The pool has L·B slots shared by all layers; a slot holds one (layer, page).
+1. Layers are served one at a time within a decode step, in order 0 … L−1; global time u = t·L + l. While layer l is served,
+   only layer l's current selection is protected; pages of other layers (including layers later in the same step) are eviction
+   candidates. If layer l's non-resident selected pages do not fit, n = (resident pages + those misses − L·B) victims are
+   evicted at once: the n candidates with the smallest key (rules 4 and 5). Every selected page then becomes resident with
+   last use u.
+2. The layer's running miss rate is m_l ← 0.99·m_l + 0.01·(misses of layer l at this step / number of pages layer l selects
+   at this step, which is K once the layer has at least K pages), updated after layer l is served; m_l starts at 0. A victim
+   key evaluated while layer l is served uses each layer's current m (for layer l: its value before this step's update).
+3. The signal is the mid-rank percentile of the page's current score among all pages of that layer with a finite score at that
+   step (`kvpolicy._allrank`): (#{q: s_q < s} + (#{q: s_q = s} − 1) / 2) / (N − 1); 1 if N = 1; 0 for a non-finite score.
+   At each service of layer l, before any eviction, every resident page of layer l (hits included) is updated
+   v ← α·v + (1−α)·signal; a newly admitted page starts at v = its current signal (no further update in that service).
+   (The non-frozen signal "z" of the dev grid replaces the percentile by (s − s_K) / (s_1 − s_K + 10⁻⁶), s_1 and s_K being the
+   scores of the first and the last selected page.)
+4. Victim = the candidate with the smallest key (v + β·m_l, last use u, layer, page id), where l is the candidate's layer;
+   i.e. ties go to the least recently used, then the lower layer, then the lower page id.
+5. The global-pool LRU baseline uses key (last use u, layer, page id), without the "was a miss" tie-break of the per-layer LRU,
+   and evicts the lower page id first (per-layer LRU evicts the higher id first). The G anchors are the per-layer LRU/Bélády and
+   are not affected. The global Bélády uses (−next use in global time, layer, page id); a page with no further use has next use
+   +∞ and leaves first.
+
+Frozen values (unchanged): signal = the percentile of rule 3, α = 0.5; β = 0.5 (0.6B, B=96), 2.0 (0.6B, B=128), 2.0 (8B).

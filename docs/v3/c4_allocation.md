@@ -55,3 +55,36 @@ B=128.
   at B=128 the offline curves' knowledge of the whole budget range is worth much more.
 - P4 is therefore "the global percentile pool reaches the offline allocation at tight budgets and beats uniform budgets at every
   budget, without offline statistics" (dev, both models), with the B=128 shortfall stated.
+
+## Exact pool semantics
+Added 2026-11-27 (review of PR #11, R11-4): the one-line description above does not determine the implementation; these are the
+rules of `analysis_v3/c4_alloc.py: pool_run`, the same text as the dated appendix of `docs/preregistration_v3.md` (clarification
+only; frozen configuration and code unchanged). `tests/test_pool_spec.py` re-implements the pool from this text alone and matches
+`pool_run` miss for miss on synthetic traces (LRU, Bélády, EMA with both signals, β ∈ {0, 0.5, 2}, α ∈ {0.3, 0.5}, incl. layers with
+fewer than K pages and tied scores). The reviewer notes that a "serve all layers of a step at once" variant would have given the
+frozen configurations 0.9–1.9 % fewer misses on the review slice, i.e. the implemented semantics is, if anything, conservative for
+the pool.
+
+0. Input per decode step t and layer l: the pages layer l selects (the selector's top-K, in descending score order; fewer
+   than K while the layer has fewer than K pages) and the score of every page of layer l (non-finite = not an eligible page).
+   The pool has L·B slots shared by all layers; a slot holds one (layer, page).
+1. Layers are served one at a time within a decode step, in order 0 … L−1; global time u = t·L + l. While layer l is served,
+   only layer l's current selection is protected; pages of other layers (including layers later in the same step) are eviction
+   candidates. If layer l's non-resident selected pages do not fit, n = (resident pages + those misses − L·B) victims are
+   evicted at once: the n candidates with the smallest key (rules 4 and 5). Every selected page then becomes resident with
+   last use u.
+2. The layer's running miss rate is m_l ← 0.99·m_l + 0.01·(misses of layer l at this step / number of pages layer l selects
+   at this step, which is K once the layer has at least K pages), updated after layer l is served; m_l starts at 0. A victim
+   key evaluated while layer l is served uses each layer's current m (for layer l: its value before this step's update).
+3. The signal is the mid-rank percentile of the page's current score among all pages of that layer with a finite score at that
+   step (`kvpolicy._allrank`): (#{q: s_q < s} + (#{q: s_q = s} − 1) / 2) / (N − 1); 1 if N = 1; 0 for a non-finite score.
+   At each service of layer l, before any eviction, every resident page of layer l (hits included) is updated
+   v ← α·v + (1−α)·signal; a newly admitted page starts at v = its current signal (no further update in that service).
+   (The non-frozen signal "z" of the dev grid replaces the percentile by (s − s_K) / (s_1 − s_K + 10⁻⁶), s_1 and s_K being the
+   scores of the first and the last selected page.)
+4. Victim = the candidate with the smallest key (v + β·m_l, last use u, layer, page id), where l is the candidate's layer;
+   i.e. ties go to the least recently used, then the lower layer, then the lower page id.
+5. The global-pool LRU baseline uses key (last use u, layer, page id), without the "was a miss" tie-break of the per-layer LRU,
+   and evicts the lower page id first (per-layer LRU evicts the higher id first). The G anchors are the per-layer LRU/Bélády and
+   are not affected. The global Bélády uses (−next use in global time, layer, page id); a page with no further use has next use
+   +∞ and leaves first.
