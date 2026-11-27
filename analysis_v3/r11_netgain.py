@@ -25,7 +25,7 @@ import numpy as np
 from analysis_v3.e_summarize import load_runs, mean_timed_misses
 
 POLS = ("lru", "score", "ema", "alloc_ema", "belady")
-PHASES = ("append", "selection", "policy", "index", "attention_wait", "spin", "gather")
+PHASES = ("append", "selection", "policy_kernels", "index", "attention_wait", "spin", "gather")
 MEM = ("prefill_forward", "migration", "decode_start", "decode_warmup", "decode_steady")
 
 
