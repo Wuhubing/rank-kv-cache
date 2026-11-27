@@ -2,6 +2,11 @@
 
   python -m analysis_v3.e_summarize DIR [DIR ...] --out results_v3/e/summary
 
+Misses per step everywhere = mean over the timed steps (step_misses[warmup:]) within a run, then mean over rounds.
+throughput.csv: other_procs_seen = runs with another process on the card (before or after); clean = none in the row;
+max_load = max of the 1-minute load before and after each run; ranks_equal / tokens_equal = n/a when not checked
+(nofetch); peak_decode_gib / host_tier_gib = max over rounds of the run's decode peak and host-tier size (GiB).
+
 Inputs: the batch<R>.json files written by analysis_v3.e_bench (one DIR per configuration: model, page size, K, delay).
 Per (configuration, R, delay):
   * per policy: median step (ms), mean throughput (tokens/s), misses/step; ratio to LRU's throughput, paired by round,
@@ -18,6 +23,7 @@ Speedup curve (E5): x = LRU's transfer share (D2), y = throughput ratio to LRU p
 """
 import argparse
 import csv
+import gzip
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -27,11 +33,43 @@ import numpy as np
 POLS = ("lru", "score", "ema", "alloc_ema", "belady")
 
 
+def _batch_files(d):
+    """batch<R>.json or batch<R>.json.gz (the committed raw files are gzipped); one file per R."""
+    files = {}
+    for f in sorted(Path(d).glob("batch*.json*")):
+        stem = f.name[:-3] if f.name.endswith(".gz") else f.name
+        if stem.endswith(".json"):
+            files.setdefault(stem, f)
+    return [files[k] for k in sorted(files)]
+
+
+def _read_json(f):
+    return json.load(gzip.open(f, "rt")) if f.name.endswith(".gz") else json.loads(f.read_text())
+
+
+def timed_misses_per_step(r, warm):
+    """Misses per step over the timed steps only (warm-up excluded from numerator and denominator). R11-1: the
+    previous code divided the total over all steps (warm-up included) by the number of timed steps."""
+    return float(np.mean(r["step_misses"][warm:]))
+
+
+def mean_timed_misses(runs, warm):
+    """Mean over rounds of the per-run timed mean."""
+    return float(np.mean([timed_misses_per_step(r, warm) for r in runs]))
+
+
+def _check(vals):
+    """True / False if every run was checked; 'n/a' if no run was checked (None), e.g. nofetch."""
+    if all(v is None for v in vals):
+        return "n/a"
+    return all(v is True for v in vals)
+
+
 def load_runs(d):
     meta = json.loads((Path(d) / "meta.json").read_text())
     out = []
-    for f in sorted(Path(d).glob("batch*.json")):
-        b = json.loads(f.read_text())
+    for f in _batch_files(d):
+        b = _read_json(f)
         for r in b["runs"]:
             r["page_bytes"] = b["page_bytes"]
             r["budget"] = b["budget"]
@@ -48,11 +86,11 @@ def boot_ratio(x, y, reps=2000, seed=0):
     return float(x.mean() / y.mean()), float(np.percentile(rs, 2.5)), float(np.percentile(rs, 97.5))
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("dirs", nargs="+", type=Path)
     ap.add_argument("--out", type=Path, required=True)
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     rows, tails, d2, curve = [], [], [], []
     for d in a.dirs:
         meta, runs = load_runs(d)
@@ -68,13 +106,12 @@ def main():
             for r in rs:
                 by[r["policy"]][r["round"]] = r
             rounds = sorted(by["lru"])
-            steps_n = len(rs[0]["lat_ms"]) - warm
             # E3 upper bound
             ub = {}
             if "allmiss" in by and "nofetch" in by:
                 am = np.median([np.median(by["allmiss"][k]["lat_ms"][warm:]) for k in by["allmiss"]])
                 nf = np.median([np.median(by["nofetch"][k]["lat_ms"][warm:]) for k in by["nofetch"]])
-                am_m = np.mean([by["allmiss"][k]["misses"] / steps_n for k in by["allmiss"]])
+                am_m = mean_timed_misses(by["allmiss"].values(), warm)
                 ub = dict(allmiss_ms=am, nofetch_ms=nf, transfer_max_ms=am - nf,
                           ms_per_missed_page=(am - nf) / am_m if am_m else float("nan"))
             # D2 fit over the policy runs
@@ -90,7 +127,7 @@ def main():
                 X, Y = np.vstack(X), np.concatenate(Y)
                 coef = np.linalg.lstsq(X, Y, rcond=None)[0]
                 page_bytes = rs[0]["page_bytes"]
-                lru_m = np.mean([by["lru"][k]["misses"] / steps_n for k in rounds])
+                lru_m = mean_timed_misses([by["lru"][k] for k in rounds], warm)
                 lru_step = np.mean([np.mean(by["lru"][k]["lat_ms"][warm:]) for k in rounds])
                 share = coef[1] * lru_m / lru_step
                 d2.append(dict(config=cfg, R=R, delay_ns_per_byte=delay, a_ms=coef[0], b_ms_per_miss=coef[1],
@@ -105,16 +142,23 @@ def main():
                 tl = [by["lru"][k]["tokens_per_s"] for k in ks]
                 ratio, lo, hi = boot_ratio(tp, tl)
                 med = float(np.median([np.median(by[p][k]["lat_ms"][warm:]) for k in ks]))
-                mps = float(np.mean([by[p][k]["misses"] / steps_n for k in ks]))
-                loads = [by[p][k]["before"]["loadavg1"] for k in ks]
-                others = sum(len(by[p][k]["before"]["other_pids"]) + len(by[p][k]["after"]["other_pids"]) for k in ks)
+                mps = mean_timed_misses([by[p][k] for k in ks], warm)
+                # R11-2: load = max of before/after; other_procs_seen = number of runs with another process on the
+                # card before or after the run; clean = no such run in this row
+                loads = [max(by[p][k]["before"]["loadavg1"], by[p][k]["after"]["loadavg1"]) for k in ks]
+                others = sum(bool(by[p][k]["before"]["other_pids"] or by[p][k]["after"]["other_pids"]) for k in ks)
+                peak = [by[p][k].get("peak_decode") for k in ks]
+                host = [by[p][k].get("host_bytes") for k in ks]
                 row = dict(config=cfg, R=R, delay_ns_per_byte=delay, simulated=delay > 0, policy=p, rounds=len(ks),
                            median_step_ms=med, tokens_per_s=float(np.mean(tp)), ratio_vs_lru=ratio, ratio_lo=lo,
                            ratio_hi=hi, misses_per_step=mps, max_load=max(loads), other_procs_seen=others,
-                           ranks_equal=all(by[p][k]["ranks_equal_prep"] in (True, None) for k in ks),
-                           tokens_equal=all(by[p][k]["tokens_equal_prep"] in (True, None) for k in ks))
+                           clean=others == 0,
+                           ranks_equal=_check([by[p][k]["ranks_equal_prep"] for k in ks]),
+                           tokens_equal=_check([by[p][k]["tokens_equal_prep"] for k in ks]),
+                           peak_decode_gib=max(peak) / 2**30 if None not in peak else "",
+                           host_tier_gib=max(host) / 2**30 if None not in host else "")
                 if ub and p in POLS:
-                    saved = (np.mean([by["lru"][k]["misses"] / steps_n for k in ks]) - mps)
+                    saved = mean_timed_misses([by["lru"][k] for k in ks], warm) - mps
                     row["upper_bound_gain_ms"] = saved * ub["ms_per_missed_page"]
                 rows.append(row)
                 if p in POLS and d2:

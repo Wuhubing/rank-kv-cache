@@ -126,3 +126,53 @@ def test_d1_iso_interpolation():
     grid, lru = [64, 72, 80], [300, 200, 100]
     assert iso(grid, lru, 200) == 72 and iso(grid, lru, 150) == 76
     assert np.isnan(iso(grid, lru, 400)) and iso(grid, lru, 50) == float("inf")
+
+
+def _fake_e_warm(folder, gz=True):
+    """Runs whose warm-up steps miss far more than the timed steps; 'misses' = total over all steps (as in e_bench)."""
+    folder.mkdir()
+    (folder / "meta.json").write_text(json.dumps({"args": {"warmup": 2}}))
+    runs = []
+    for rnd in range(2):
+        for pol, base, m in (("lru", 50.0, 10 + rnd), ("ema", 49.0, 8), ("allmiss", 60.0, 64), ("nofetch", 45.0, 1)):
+            sm = [500, 400] + [m] * 10
+            lat = [base] * 12
+            others = [123] if (pol == "ema" and rnd == 1) else []
+            runs.append(dict(R=2, round=rnd, policy=pol, delay_ns_per_byte=0.0, lat_ms=lat, step_misses=sm,
+                             page_step=[i % 4 == 0 for i in range(12)], misses=sum(sm), tokens_per_s=100.0,
+                             ranks_equal_prep=None if pol == "nofetch" else True,
+                             tokens_equal_prep=None if pol == "nofetch" else True,
+                             peak_decode=2 ** 30 * (3 + rnd), host_bytes=2 ** 31,
+                             before={"loadavg1": 1.0, "other_pids": []},
+                             after={"loadavg1": 2.5 if rnd else 1.0, "other_pids": others}))
+    b = dict(R=2, budget=96, page_bytes=65536, runs=runs)
+    if gz:
+        with gzip.open(folder / "batch2.json.gz", "wt") as f:
+            json.dump(b, f)
+    else:
+        (folder / "batch2.json").write_text(json.dumps(b))
+
+
+@pytest.mark.parametrize("gz", [True, False])
+def test_e_summarize_timed_steps_only(tmp_path, gz):
+    """R11-1: misses per step = mean of step_misses[warmup:] per run, then mean over rounds (warm-up excluded)."""
+    from analysis_v3 import e_summarize
+    _fake_e_warm(tmp_path / "cfg", gz=gz)
+    e_summarize.main([str(tmp_path / "cfg"), "--out", str(tmp_path / "o")])
+    rows = {r["policy"]: r for r in csv.DictReader(open(tmp_path / "o/throughput.csv"))}
+    assert float(rows["lru"]["misses_per_step"]) == pytest.approx(10.5)
+    assert float(rows["ema"]["misses_per_step"]) == pytest.approx(8.0)
+    assert float(rows["allmiss"]["misses_per_step"]) == pytest.approx(64.0)
+    d2 = list(csv.DictReader(open(tmp_path / "o/d2_model.csv")))[0]
+    assert float(d2["lru_misses_per_step"]) == pytest.approx(10.5)
+    assert float(d2["ms_per_missed_page"]) == pytest.approx(15.0 / 64)
+    assert float(rows["ema"]["upper_bound_gain_ms"]) == pytest.approx(2.5 * 15.0 / 64)
+    # R11-2: runs with another process, clean flag, load = max(before, after)
+    assert rows["ema"]["other_procs_seen"] == "1" and rows["ema"]["clean"] == "False"
+    assert rows["lru"]["other_procs_seen"] == "0" and rows["lru"]["clean"] == "True"
+    assert float(rows["lru"]["max_load"]) == pytest.approx(2.5)
+    # R11-5: unchecked -> n/a; memory columns in GiB (max over rounds)
+    assert rows["nofetch"]["ranks_equal"] == "n/a" and rows["nofetch"]["tokens_equal"] == "n/a"
+    assert rows["lru"]["ranks_equal"] == "True"
+    assert float(rows["lru"]["peak_decode_gib"]) == pytest.approx(4.0)
+    assert float(rows["lru"]["host_tier_gib"]) == pytest.approx(2.0)
