@@ -93,7 +93,8 @@ def pair_rows(name, tput_dir, R, timing_dir):
         dmed = float(np.mean([np.median(by["lru"][k]["lat_ms"][warm:]) - np.median(by[p][k]["lat_ms"][warm:]) for k in ks]))
         meas, lo, hi = boot_mean(d)
         pred = saved - ov
-        gap = 0.0 if lo <= pred <= hi else (pred - hi if pred > hi else pred - lo)
+        eps = 1e-9   # degenerate CIs (identical rounds) compare up to rounding
+        gap = 0.0 if lo - eps <= pred <= hi + eps else (pred - hi if pred > hi else pred - lo)
         lru_step = float(np.mean([np.mean(by["lru"][k]["lat_ms"][warm:]) for k in ks]))
         net.append(dict(config=name, R=R, policy=p, lru_misses_per_step=lru_m, misses_per_step=m,
                         ms_per_missed_page=per_page, saved_transfer_ms=saved, policy_ms=float(np.mean(pol)),
