@@ -1,7 +1,7 @@
 # S4.1 Existing baselines re-run on the new dev traces (section 6.1)
 
 **Conclusion.** On the 14 RTX 6000 Ada dev traces, every 6.1 baseline reproduces its L4 value, and the ranking is
-unchanged: linear DAgger (G 0.300) > score EMA (0.279) > InfLLM-style decayed sum over all residents (0.266) > hybrid
+unchanged: linear DAgger (LODO; G 0.300) > score EMA (0.279) > InfLLM-style decayed sum over all residents (0.266) > hybrid
 (0.250) > current score (0.240) ≫ decayed count (0.040), rank policy (0.029) ≈ LRU (0). FIFO, LFU, LRU-2 and ARC are
 worse than LRU at B=96. Note that the **existing `infllm` class**, which gives attention share only to the
 *selected* pages (the closest reading of InfLLM's Eq. 1 with a softmax proxy), reaches only G 0.026. The 0.269 "InfLLM-style"
@@ -27,8 +27,13 @@ Source: `results_v2/dev/efficient_dev/` (`efficient_dev.py` and `checks.py`, unc
 | **Score EMA (z, all residents; LODO α=0.5)** | **5.43** | **0.279 [0.274, 0.283]** | **11.6 %** | **14/14** |
 | Score EMA, raw score | 5.46 | 0.267 [0.262, 0.272] | 11.1 % | 14/14 |
 | Score EMA, selected pages only | 9.57 | −1.627 | −67.6 % | 0/14 |
-| Linear next-use regression (DAgger) | 5.39 | 0.300 [0.295, 0.304] | – | – |
+| Linear next-use regression (DAgger; LODO: leave-one-document-out, DAgger rollouts on the training documents only) | 5.39 | 0.300 [0.295, 0.304] | – | – |
 | Bélády | 3.87 | 1 | 41.5 % | 14/14 |
+
+Linear DAgger (`efficient_dev.py`, `learned.csv`): in each fold the held-out document is used neither for the initial ridge fit
+nor for the DAgger rollouts (two iterations on the 13 training documents); ridge settings are fixed, not tuned per document.
+The feature set (`kvpolicy.FEATURES`) was designed after looking at dev, so the comparison with the EMA is exploratory.
+(Annotation added 2026-11-27 after Xiaoyang Wu's review of PR #11, R11-5.)
 
 Other budgets (B = 72, 80, 128, 256) are in `summary.csv` and `checks_stats.csv`, and side by side with L4 in
 `docs/rerun/s3_dev_vs_l4.md`. At B=256 the score family's G shrinks (current score 0.116, EMA 0.236), as on L4.
