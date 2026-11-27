@@ -1,0 +1,29 @@
+{
+ "split": "splits/longctx_v1.json",
+ "subset": "dev",
+ "total": 14,
+ "done": [
+  "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259",
+  "gov_report/217e94f10e4c8ed084bf7e22681c4bbd75d5aa35d3480edd",
+  "gov_report/2ffa8e41905ff69637e32b478476fd68758395f1ac7d3dcd",
+  "gov_report/37467ea4bcf78ffd3bd34e630bc61477f73142fa0dce8cd5",
+  "gov_report/41203c9bcb9e82d6bfa289c0641ca1ef08073d52ceeec7f5",
+  "gov_report/5ff322b828f3adf54570798244cb178e360f53f0d6bbaf80",
+  "gov_report/6d5ca6fc8b8c5d3fedeec78b574fa9f418e57fec837cff3a",
+  "gov_report/8ea6dbec3f301d7d0fc538441e0a776832f777a928c44666",
+  "gov_report/cbdd4b937972c65f6d9de2ef403bbacbc169a5155ecef22a",
+  "gov_report/f205ea85a60f0353bd98268ae9f5f6ae702788629c9061be",
+  "qmsum/4629a555e4748fcf19fce224d09b3c75040d4c1fa89c0bfb",
+  "qmsum/975d4e997974135de214468ed968e79573563f68e352716a",
+  "qmsum/cb5b1672ca426597251b6def8cbab8ec5249c9662a0c9888",
+  "qmsum/fb7891826fb3f47e3750d45365e8c0c97e23613752335cc0"
+ ],
+ "started_at": "2026-11-25T06:44:52.674813+00:00",
+ "last": {
+  "rid": "qmsum/fb7891826fb3f47e3750d45365e8c0c97e23613752335cc0",
+  "steps": 768,
+  "stop": "eos",
+  "seconds": 21.52
+ },
+ "finished_at": "2026-11-25T06:55:48.039741+00:00"
+}

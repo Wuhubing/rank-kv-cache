@@ -1,0 +1,141 @@
+{
+  "status": "dev control (not part of the frozen held-out evaluation)",
+  "budgets": [
+    72,
+    80,
+    96,
+    128,
+    256
+  ],
+  "primary": 96,
+  "alphas": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9,
+    0.95
+  ],
+  "signals": [
+    "z",
+    "allrank",
+    "rank"
+  ],
+  "mode": "all",
+  "selection": "leave-one-document-out, min training misses, ties by config name",
+  "ties": "allrank uses mid-ranks over finite scores (kvpolicy._allrank)",
+  "smoke": false,
+  "archive_rows_matched": 23520,
+  "traces": [
+    {
+      "rid": "gov_report/0708332f2b27ef8843c261a207213212e80322ad79286259",
+      "sha256": "565623ade469d0e04c854e60cb3a1d676bebb28bc2c4e89a4335cbc00275b090"
+    },
+    {
+      "rid": "gov_report/217e94f10e4c8ed084bf7e22681c4bbd75d5aa35d3480edd",
+      "sha256": "debe7dbcd90a6a5d593da3f2ec1bb3ce70c8b8b59420b85e62f8ec5192a7caef"
+    },
+    {
+      "rid": "gov_report/2ffa8e41905ff69637e32b478476fd68758395f1ac7d3dcd",
+      "sha256": "b1ac61d9b1548193dfa2e5809b15433177b348dd49ffb6b0756e92a56f954a99"
+    },
+    {
+      "rid": "gov_report/37467ea4bcf78ffd3bd34e630bc61477f73142fa0dce8cd5",
+      "sha256": "b5f24d7ad74939ed147d55b7baefbf1e8fa05cdc3a68b15670bcdd697de1339e"
+    },
+    {
+      "rid": "gov_report/41203c9bcb9e82d6bfa289c0641ca1ef08073d52ceeec7f5",
+      "sha256": "5eda17e59af513f99ab7375d08fa3ec41e86ba590664937b346444802e9627bd"
+    },
+    {
+      "rid": "gov_report/5ff322b828f3adf54570798244cb178e360f53f0d6bbaf80",
+      "sha256": "c69040f07d88649b863d7ed418a41b86347ba296f4341bf0a8554cc52f053334"
+    },
+    {
+      "rid": "gov_report/6d5ca6fc8b8c5d3fedeec78b574fa9f418e57fec837cff3a",
+      "sha256": "6c919c097d390a71525bed56ed0619812231e2ab83c4ee1d33f0a1a4776cab7f"
+    },
+    {
+      "rid": "gov_report/8ea6dbec3f301d7d0fc538441e0a776832f777a928c44666",
+      "sha256": "b354b2cc968fa83543bb9de2d699c3ad6f821b4613a6c412a172cf0dad627e15"
+    },
+    {
+      "rid": "gov_report/cbdd4b937972c65f6d9de2ef403bbacbc169a5155ecef22a",
+      "sha256": "871ee3c3f35d6d21f9f2ea7a1a060a6b963a1577e796ada4ee9ea65e642038e4"
+    },
+    {
+      "rid": "gov_report/f205ea85a60f0353bd98268ae9f5f6ae702788629c9061be",
+      "sha256": "bbb8beba8a148935a283881bdc99c5d9774ae5df295b994a687e57ac2bbf797e"
+    },
+    {
+      "rid": "qmsum/4629a555e4748fcf19fce224d09b3c75040d4c1fa89c0bfb",
+      "sha256": "051471f234bd0ccad289d61451b55b10a8824f9af19b6ce9b2e20a96ffb9ffb9"
+    },
+    {
+      "rid": "qmsum/975d4e997974135de214468ed968e79573563f68e352716a",
+      "sha256": "6e1f08dcd412a6e82d0bc38d27e5969d38a9309fb9a7ccca0844267ddfb83820"
+    },
+    {
+      "rid": "qmsum/cb5b1672ca426597251b6def8cbab8ec5249c9662a0c9888",
+      "sha256": "11ed7b2b09d60834b1be76519a4406fcd357c329d1464e70aaae383c8b06bd26"
+    },
+    {
+      "rid": "qmsum/fb7891826fb3f47e3750d45365e8c0c97e23613752335cc0",
+      "sha256": "b687c093b515c289bd40a247ed30950a52533ce61549a8393332c19fe822105a"
+    }
+  ],
+  "headline_B96": {
+    "z": {
+      "signal": "z",
+      "B": 96,
+      "misses": 1049018,
+      "accesses": 19308800,
+      "miss_rate": 0.05432849270798807,
+      "G_uniform_anchors": 0.278520590579935,
+      "G_lo": 0.2740900170637114,
+      "G_hi": 0.2826770050047381,
+      "repeat_miss_drop_vs_lru": 0.11571493592712068,
+      "rd_lo": 0.11301445002736109,
+      "rd_hi": 0.11822245960132342,
+      "docs_better_than_lru": 14,
+      "n_docs": 14,
+      "lodo_picks": "ema:0.5x14"
+    },
+    "allrank": {
+      "signal": "allrank",
+      "B": 96,
+      "misses": 1052181,
+      "accesses": 19308800,
+      "miss_rate": 0.05449230402717932,
+      "G_uniform_anchors": 0.27097126818114553,
+      "G_lo": 0.26604683975043497,
+      "G_hi": 0.2758306722115107,
+      "repeat_miss_drop_vs_lru": 0.11257847353541683,
+      "rd_lo": 0.10981609706528583,
+      "rd_hi": 0.11528139768159049,
+      "docs_better_than_lru": 14,
+      "n_docs": 14,
+      "lodo_picks": "ema_allrank:0.6x14"
+    },
+    "rank": {
+      "signal": "rank",
+      "B": 96,
+      "misses": 1158642,
+      "accesses": 19308800,
+      "miss_rate": 0.06000590404375207,
+      "G_uniform_anchors": 0.01687439435960838,
+      "G_lo": 0.01478891651532146,
+      "G_hi": 0.01906204375228161,
+      "repeat_miss_drop_vs_lru": 0.0070106826143995216,
+      "rd_lo": 0.006093869175318914,
+      "rd_hi": 0.008009114822296215,
+      "docs_better_than_lru": 14,
+      "n_docs": 14,
+      "lodo_picks": "ema_rank:0.3x13 ema_rank:0.4x1"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+ "split": "splits/scbench_v1.json",
+ "subset": "dev",
+ "total": 14,
+ "done": [
+  "scbench_summary/9",
+  "scbench_summary/13",
+  "scbench_summary/35",
+  "scbench_summary/28",
+  "scbench_summary/14",
+  "scbench_summary/31",
+  "scbench_summary/32",
+  "scbench_qa_eng/8",
+  "scbench_qa_eng/29",
+  "scbench_qa_eng/46",
+  "scbench_qa_eng/63",
+  "scbench_qa_eng/15",
+  "scbench_qa_eng/48",
+  "scbench_qa_eng/36"
+ ],
+ "started_at": "2026-11-25T09:09:16.900259+00:00",
+ "last": {
+  "rid": "scbench_qa_eng/36",
+  "steps": 1701,
+  "stop": "loop",
+  "seconds": 250.63
+ },
+ "finished_at": "2026-11-25T10:12:28.286695+00:00"
+}

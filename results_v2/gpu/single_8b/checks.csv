@@ -1,0 +1,11 @@
+doc,B,policy,measured,simulated,equal,trace_prefix_equal
+gov_report/717196b201b32c40650297b1168ac3e629cdae29538b8cd4,96,lru,31884,31884,True,True
+gov_report/717196b201b32c40650297b1168ac3e629cdae29538b8cd4,96,score,29570,29570,True,True
+gov_report/717196b201b32c40650297b1168ac3e629cdae29538b8cd4,96,ema,29136,29144,False,True
+gov_report/717196b201b32c40650297b1168ac3e629cdae29538b8cd4,96,belady,21601,21601,True,True
+gov_report/717196b201b32c40650297b1168ac3e629cdae29538b8cd4,96,alloc_ema,26611,26612,False,True
+gov_report/b0913fe0502bb4d9c12dae570ca7cca66b027d35219aeaa2,96,lru,22498,22498,True,True
+gov_report/b0913fe0502bb4d9c12dae570ca7cca66b027d35219aeaa2,96,score,21041,21045,False,True
+gov_report/b0913fe0502bb4d9c12dae570ca7cca66b027d35219aeaa2,96,ema,20452,20463,False,True
+gov_report/b0913fe0502bb4d9c12dae570ca7cca66b027d35219aeaa2,96,belady,15359,15359,True,True
+gov_report/b0913fe0502bb4d9c12dae570ca7cca66b027d35219aeaa2,96,alloc_ema,18737,18733,False,True

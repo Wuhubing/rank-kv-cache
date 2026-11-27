@@ -171,8 +171,13 @@ def doc_meta(paths):
     for p in paths:
         z = np.load(p)
         rid = str(z["rid"])
+        if "prompt_tokens" in z.files:
+            tokens = int(z["prompt_tokens"])
+        else:  # replication-v2 traces (collect/long.py) keep it in the manifest next to the npz
+            import json
+            tokens = int(json.loads(Path(p).with_suffix(".json").read_text())["prompt_tokens"])
         meta[rid] = dict(task=rid.split("/")[0],
-                         band="24-32K" if int(z["prompt_tokens"]) >= 24000 else "16-24K",
+                         band="24-32K" if tokens >= 24000 else "16-24K",
                          steps=int(z["ranked"].shape[0]))
     return meta
 

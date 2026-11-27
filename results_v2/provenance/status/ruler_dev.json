@@ -1,0 +1,29 @@
+{
+ "split": "splits/ruler16k_v1.json",
+ "subset": "dev",
+ "total": 14,
+ "done": [
+  "ruler/cwe/3651",
+  "ruler/cwe/3664",
+  "ruler/cwe/3859",
+  "ruler/cwe/3715",
+  "ruler/niah_multivalue/5321",
+  "ruler/niah_multivalue/5113",
+  "ruler/niah_multivalue/5035",
+  "ruler/niah_multivalue/5174",
+  "ruler/niah_multiquery/6467",
+  "ruler/niah_multiquery/6276",
+  "ruler/niah_multiquery/6294",
+  "ruler/niah_multikey_3/5714",
+  "ruler/niah_multikey_3/5798",
+  "ruler/niah_multikey_3/5957"
+ ],
+ "started_at": "2026-11-25T08:53:42.686468+00:00",
+ "last": {
+  "rid": "ruler/niah_multikey_3/5957",
+  "steps": 293,
+  "stop": "loop",
+  "seconds": 37.02
+ },
+ "finished_at": "2026-11-25T09:06:33.071169+00:00"
+}

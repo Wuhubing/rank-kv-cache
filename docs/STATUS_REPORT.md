@@ -4,6 +4,14 @@
 
 **2026-11-25 补充（事后分析，非预注册）**：S2 的 β 混杂与干净 rank 增量（§4.7）、H1 `candidate` 口径的准确描述（§4.7）、逻辑回归标签的右删失（§6）。所有预注册结果和判定不变。
 
+**2026-11-25 replication-v2（分支 `replication-v2`，详见 [`docs/rerun/`](rerun/)）**：第二部分在 RTX 6000 Ada 上从头重采、重评：
+- 复现预注册（[`replication_v2.md`](replication_v2.md)，先提交再采集）三条判据全部通过：EMA G 0.279 [0.275, 0.282]（L4 0.281），21/21，ΔG(分配) 0.119（L4 0.120）。
+- Qwen3-8B 新 held-out（[`preregistration_8b.md`](preregistration_8b.md)，先提交再采集）四条判据全部通过：G 0.272，21/21，ΔG 0.252，同分配内 0.273。
+- 全 page 百分位排名对照：起作用的是未选中 page 之间的**全局排序**（allrank 0.271 对 z 0.279），不是分数大小。
+- 同分配 Bélády 锚点：相对同分配最优，分配 + EMA 补上 35%（0.6B）/ 43%（8B）的差距。
+- 64K（YaRN）、RULER、SCBench 多轮、page 8–64、K 32–128、采样解码上 EMA 都好于 LRU（dev，探索性）。用真实注意力质量后，InfLLM 的两种规则略差于 LRU。
+- 实测 batch 1–32：batch ≤ 24 时字节节省没有变成吞吐；batch 32（0.6B）观察到的差别来自 LRU 的长尾步，中位步长相同（92.7–93.0 ms），不能归因于策略（策略按固定顺序运行，每组只有 2 次重复）；8B 上没有。下文 §9 中"batch 32 每步约省 2.3 ms"的外推作废，以 [`rerun/s7_systems.md`](rerun/s7_systems.md) 的实测为准。下文 L4 的原始数字保留不改。
+
 本报告分两部分：
 
 - **第一部分（§1–§8）：selection rank 能否改进替换。** 按 proposal 完成正式检验：20 篇 dev 调参并预注册（`2f6a9bd`），40 篇 held-out 采集一次、评估一次。结论是负面的。
@@ -39,7 +47,7 @@
    - 第一版（未融合的 PyTorch）：LRU 86.6 ms/token，EMA 93.1 ms/token，EMA 反而慢 7.5%，因为多了很多小 kernel。
    - 免同步、zero-copy 版：延迟仍然不变，瓶颈是 CPU 派发。
    - **融合 Triton kernel 版（最终）**：LRU 62.3、EMA 62.3、分配 + EMA 61.6、Bélády 62.1 ms/token，四者在噪声以内。EMA 的策略 kernel 每 token 只比 LRU 多 0.084 ms，"几乎零开销"在实现层面也成立了。卸载相对"KV 全在 GPU"（57.3 ms）只多约 5 ms。
-   - 连 Bélády 也没变快，因为 batch 1 下传输只占 GPU 时间的约 1%。实测每个 page 的传输约 7.3 µs，可以估算：每步节省 ≈ 7.3 µs × 少掉的 miss × batch。EMA 在 batch 32 时约每步 2.3 ms（未实测）。
+   - 连 Bélády 也没变快，因为 batch 1 下传输只占 GPU 时间的约 1%。实测每个 page 的传输约 7.3 µs。（原先据此线性外推的"batch 32 时 EMA 每步约省 2.3 ms"已被 replication-v2 的实测取代：batch 4–16 时 EMA 少传 8% 字节，吞吐并没有提高，见 [`rerun/s7_systems.md`](rerun/s7_systems.md)。）
 
 ### 0.2 第一部分：selection rank（§1–§8）
 
@@ -676,7 +684,7 @@ B=96、总 slot 相同时 repeat miss 比 LRU 少：EMA 11.6%，分配 + EMA 16.
   - EMA 每步少约 10 次 miss（约 0.12 ms），但它没合并的几个逐元素 kernel 更贵，GPU 时间净多 0.7 ms。合并成每层一个 kernel 后大约能打平。
   - 即使没有启动开销，最好的策略（Bélády）也只值约 3% 的 GPU 时间，EMA 能拿到的不到 1%。
 - **"KV 全在 GPU"这组对照偏大。** HF 的 `DynamicCache` 每步拼接整个 KV（约 3.4 GB），所以它的 GPU 工作量反而比卸载版多；墙钟时间只有 57 ms，是因为它启动的 kernel 更少。公平的对照应该用 static cache，还没做。
-- **什么时候 miss 才重要。** 8-head GQA 下每个 page 每层的 KV 字节数不随模型宽度增长，所以关键是 **batch**：每条序列都带来自己的 miss。外推估算（未实测）：batch 32 时 LRU 每步传约 400 MB（12 GB/s 下约 33 ms），EMA 9–10% 的字节节省约合每步 3 ms。
+- **什么时候 miss 才重要。** 8-head GQA 下每个 page 每层的 KV 字节数不随模型宽度增长，所以关键是 **batch**：每条序列都带来自己的 miss。（原外推估算已作废；replication-v2 实测见 [`rerun/s7_systems.md`](rerun/s7_systems.md)：RTX 6000 Ada 上直到 batch 16，传输都只占每步的一小部分。）
 
 GPU 忙碌时间来自每个配置在一篇文档上的一次 profile，只作参考（±0.2 ms）。
 
@@ -719,7 +727,7 @@ p90 比中位数高 1.5–2.5 ms，重复运行之间最多差约 1.5 ms，**四
 - **batch 1 下的 GPU 净效果**：EMA ≈ LRU（传输 −0.07，策略 +0.08，误差 ±0.01 ms）；分配 + EMA +0.04 ms；Bélády −0.14 ms。都不到 14.9 ms GPU 步长的 1%。
 - 卸载版的 GPU 时间远少于"KV 全在 GPU"（14.9 对 36.3 ms），主要因为 HF 的 DynamicCache 每步复制整个 KV；墙钟时间却更高，因为两者都卡在 CPU 派发上。
 
-**结论**：用融合 kernel 后，score EMA 在 GPU 上和 LRU 一样便宜，传输字节少 9–10%（加分配少 13–19%）。batch 1、0.6B 模型下这只值每 token 约 0.07 ms，所以延迟是**持平**而不是变快。要变快，传输必须占每步的相当比例：大 batch 或更大的 K、更慢的 host 链路，或者没有预取重叠。用实测的单 page 代价可以直接估算：每步节省 ≈ 7.3 µs × 少掉的 miss × batch；EMA 在 batch 32 时约 2.3 ms/步，未实测。
+**结论**：用融合 kernel 后，score EMA 在 GPU 上和 LRU 一样便宜，传输字节少 9–10%（加分配少 13–19%）。batch 1、0.6B 模型下这只值每 token 约 0.07 ms，所以延迟是**持平**而不是变快。要变快，传输必须占每步的相当比例：大 batch 或更大的 K、更慢的 host 链路，或者没有预取重叠。（原先按单 page 代价做的 batch 32 外推已作废，实测见 [`rerun/s7_systems.md`](rerun/s7_systems.md)。）
 
 数据在 Drive 的 `MyDrive/rank-kv-cache/results_gpu_benchmark/`；汇总文件的本地副本在 [`results_gpu/`](../results_gpu/)（逐步数据的 pickle 只在 Drive 上）。
 
@@ -737,7 +745,7 @@ p90 比中位数高 1.5–2.5 ms，重复运行之间最多差约 1.5 ms，**四
 **待团队决定：**
 1. 报告里把策略写成"InfLLM 式衰减规则用在 Quest 分数上"（推荐），贡献是测量、消融和分配叠加。
 2. 按层分配（需要离线、和模型相关的曲线）是否算作报告里的"策略"。
-3. 延迟结论怎么写：只报"融合后开销与 LRU 相同、字节少约 9.3–9.8%（EMA 单独）或 13–19%（加按层分配）、batch 1 下延迟持平"，还是再投入去实测大 batch（按单序列线性外推（batch 未实现），batch 32 时 EMA 每步约省 2.3 ms），以及 static-cache 的公平对照。
+3. 延迟结论怎么写：只报"融合后开销与 LRU 相同、字节少约 9.3–9.8%（EMA 单独）或 13–19%（加按层分配）、batch 1 下延迟持平"，还是再投入去实测大 batch（replication-v2 已实测：字节节省没有变成吞吐，见 `rerun/s7_systems.md`），以及 static-cache 的公平对照。
 4. 是否需要用真实注意力质量重做 InfLLM 对比（要新的采集字段）。
 5. ~~成员名单~~：已确定为 Xihang Yu。
 

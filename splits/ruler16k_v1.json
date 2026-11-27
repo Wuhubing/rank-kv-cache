@@ -1,0 +1,171 @@
+{
+ "name": "ruler16k_v1",
+ "model": "Qwen/Qwen3-0.6B@c1899de289a04d12100db370d81485cdf75e47ca",
+ "data": "simonjegou/ruler@24adceac8a0e6532936e8d721cd9e9084d2e4686",
+ "source": "ruler",
+ "selector": {
+  "page_size": 16,
+  "top_k": 64
+ },
+ "decoding": {
+  "greedy": true,
+  "max_new_tokens": 1024,
+  "stop": "eos | max_new | newest 32-gram repeats"
+ },
+ "budgets": {
+  "primary_B": 96,
+  "curve_B": [
+   80,
+   96,
+   128,
+   256
+  ]
+ },
+ "rationale": [
+  "Exploratory RULER setting (dev only). Pre-generated RULER at the 16384-token configuration (simonjegou/ruler). RULER answers are short, so only the tasks with the longest reference outputs are used (cwe: 10 words, max 120 new tokens in RULER; niah_multivalue / niah_multiquery: 4 numbers; niah_multikey_3: a uuid; all 120-128 in RULER). Decoding is the standard one here (thinking on, up to 1024 tokens), so the thinking trace provides the decode steps.",
+  "Documents with fewer than 100 decode steps are listed separately and excluded from the main statistics (docs/workshop/rerun_plan.md S6).",
+  "Rows per task ordered by sha256('ruler16k_v1:ruler/<task>/<row>')."
+ ],
+ "prompts": [
+  {
+   "rid": "ruler/cwe/3651",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 3651,
+   "task": "cwe",
+   "ctx": "7f4941ca336c8c60",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 22365
+  },
+  {
+   "rid": "ruler/cwe/3664",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 3664,
+   "task": "cwe",
+   "ctx": "e067a8e27d16b40f",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 22202
+  },
+  {
+   "rid": "ruler/cwe/3859",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 3859,
+   "task": "cwe",
+   "ctx": "e39cd3c668efaaef",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 22398
+  },
+  {
+   "rid": "ruler/cwe/3715",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 3715,
+   "task": "cwe",
+   "ctx": "6fc5d5ccc49a2f39",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 22388
+  },
+  {
+   "rid": "ruler/niah_multivalue/5321",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5321,
+   "task": "niah_multivalue",
+   "ctx": "ccd89454a9f40bc3",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 16007
+  },
+  {
+   "rid": "ruler/niah_multivalue/5113",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5113,
+   "task": "niah_multivalue",
+   "ctx": "581566d34e002d02",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 15997
+  },
+  {
+   "rid": "ruler/niah_multivalue/5035",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5035,
+   "task": "niah_multivalue",
+   "ctx": "4c9a9beb4456dcf1",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 16002
+  },
+  {
+   "rid": "ruler/niah_multivalue/5174",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5174,
+   "task": "niah_multivalue",
+   "ctx": "ff3fccbaa41ee5f3",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 15996
+  },
+  {
+   "rid": "ruler/niah_multiquery/6467",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 6467,
+   "task": "niah_multiquery",
+   "ctx": "962e9897142b5cb1",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 16013
+  },
+  {
+   "rid": "ruler/niah_multiquery/6276",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 6276,
+   "task": "niah_multiquery",
+   "ctx": "7b589cf716f5a10d",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 16020
+  },
+  {
+   "rid": "ruler/niah_multiquery/6294",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 6294,
+   "task": "niah_multiquery",
+   "ctx": "12085ca31b73f90c",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 16014
+  },
+  {
+   "rid": "ruler/niah_multikey_3/5714",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5714,
+   "task": "niah_multikey_3",
+   "ctx": "86d68564d1d4cd10",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 21002
+  },
+  {
+   "rid": "ruler/niah_multikey_3/5798",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5798,
+   "task": "niah_multikey_3",
+   "ctx": "10803cfb2e537c3e",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 21095
+  },
+  {
+   "rid": "ruler/niah_multikey_3/5957",
+   "file": "16384/test-00000-of-00001.parquet",
+   "row": 5957,
+   "task": "niah_multikey_3",
+   "ctx": "bdea9998c99baf76",
+   "split": "dev",
+   "band": "16K",
+   "prompt_tokens": 21046
+  }
+ ]
+}

@@ -1,0 +1,6 @@
+digest top64_overlap_with_quest spearman_with_quest (mean over documents; every 8th step, all layers)
+cuboid_mean 0.794 0.964
+cuboid_center 0.815 0.972
+sphere_max 0.607 0.874
+sphere_center 0.722 0.934
+sphere_mean 0.753 0.944

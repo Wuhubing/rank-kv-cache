@@ -1,0 +1,5 @@
+R,per_request_misses_equal_simulator,policy
+24,True,lru
+24,True,belady
+32,True,lru
+32,True,belady

@@ -1,0 +1,29 @@
+{
+ "split": "splits/longctx64k_v1.json",
+ "subset": "dev",
+ "total": 14,
+ "done": [
+  "gov_report/505345771a2e5b438ea4bfa7c0f238f8787f45b0ca52ef7d",
+  "gov_report/6b904be52b37799ba0fe353800ac1a5246d263927387b6f1",
+  "gov_report/864c2b03ab84ceb4179238296a7e923b7b82da0708259071",
+  "multi_news_e/0e05cc18a8cb83168b2027b1734f77c9328fac1b3f6ff608",
+  "multi_news_e/5bb5eef35268996a15327046c09c0c83000af20ff094db34",
+  "multi_news_e/7e67283535da954db448324ee34bed1d96e5e3d3587f671e",
+  "multi_news_e/bdaddc2a7890f334604f25c851178459ca0eb40e386aff1d",
+  "narrativeqa/36232c9c63d19d282643657b3da5b688cb14e3b44009c494",
+  "narrativeqa/677af5490eddd9e1d2ecd66ab0d1e038d1f7e7c5e985accf",
+  "narrativeqa/67933dc11fce5ce5b80acc04541f0442117aca5eccc06b6f",
+  "narrativeqa/949abce7e7abc634fc08ff28f996a235ddd6041358bee155",
+  "narrativeqa/acc4bde34060bc451a73e0e1e0d0bc7e1ca93695bc8112a1",
+  "narrativeqa/b91ede2d2d08ea6f5f3b894c932b70e141665dd59d334dc8",
+  "narrativeqa/f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726"
+ ],
+ "started_at": "2026-11-25T08:27:14.727341+00:00",
+ "last": {
+  "rid": "narrativeqa/f9cfda8abcc78f9e2f492d4f58ee4996430e9a8911e29726",
+  "steps": 890,
+  "stop": "loop",
+  "seconds": 155.9
+ },
+ "finished_at": "2026-11-25T08:53:40.573656+00:00"
+}

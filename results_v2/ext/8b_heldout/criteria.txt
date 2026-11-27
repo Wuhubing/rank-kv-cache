@@ -1,0 +1,16 @@
+(i)   EMA G (uniform-budget anchors) = 0.272  CI [0.269, 0.276]   pass: True
+(ii)  EMA < LRU on 21/21 docs   pass: True
+(iii) Alloc+EMA - EMA: dG (uniform-budget anchors) = 0.252  CI [0.243, 0.260]   pass: True
+
+Repeat-miss drop vs uniform LRU at equal total slots (B=96, 28*96 slots per document):
+      EMA        10.9%  CI [10.7, 11.1]
+      Alloc+EMA  21.0%  CI [20.6, 21.4]
+      Alloc+EMA G is relative to uniform-budget anchors; an allocation-aware Belady is pending.
+
+G relative to uniform-budget anchors (LRU and Belady at B slots per layer)
+B    LRU%   Belady%        ema  alloc_ema       dsum      score     dcount     linear
+72    9.40    7.24       0.259      0.263      0.226      0.227      0.068          -
+80    7.09    5.01       0.270      0.373      0.250      0.234      0.031          -
+96    4.69    3.05       0.272      0.524      0.271      0.222      0.033      0.296
+128   2.70    1.66       0.261      0.653      0.260      0.182      0.044      0.305
+256   0.98    0.71       0.234      0.234      0.183      0.066      0.005      0.320

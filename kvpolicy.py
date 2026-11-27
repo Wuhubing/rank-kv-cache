@@ -458,6 +458,12 @@ class Belady(Policy):
 
 POLICIES = dict(lru=LRU, fifo=FIFO, lfu=LFU, lru2=LRU2, arc=ARC, rank=RankFull,
                 score=ScoreCurrent, ema=ScoreEMA, infllm=InfLLM, dsum=DecayedSum, hybrid=Hybrid, linear=Linear, belady=Belady)
+try:  # replication-v2 baselines (kvpolicy_v2.py); the classes above are unchanged
+    from kvpolicy_v2 import V2_POLICIES
+    POLICIES.update(V2_POLICIES)
+except ImportError as _e:  # pragma: no cover
+    if "kvpolicy_v2" not in str(_e):
+        raise
 
 
 def future_uses(ranked):
@@ -468,8 +474,9 @@ def future_uses(ranked):
     return fut
 
 
-def simulate(ranked, scores, B, name, *, on_evict=None, **params):
-    """Replay one layer stream. ranked: [T, K] ints; scores: [T, P] or None.
+def simulate(ranked, scores, B, name, *, on_evict=None, attn=None, **params):
+    """Replay one layer stream. ranked: [T, K] ints; scores: [T, P] or None; attn: optional [T, K]
+    attention mass aligned with ranked (policies read it as self.arow).
     Returns dict(accesses, misses, compulsory). on_evict(t, victims, policy) is optional."""
     R = check_ranked(ranked)
     if scores is not None:
@@ -482,7 +489,7 @@ def simulate(ranked, scores, B, name, *, on_evict=None, **params):
     cls = POLICIES[name]
     if name == "belady":
         params["future"] = future_uses(rows)
-    if name == "arc":
+    if name == "arc" or getattr(cls, "needs_budget", False):
         params["B"] = B
     pol = cls(K, **params)
     if cls.needs_scores and scores is None:
@@ -491,6 +498,8 @@ def simulate(ranked, scores, B, name, *, on_evict=None, **params):
     acc = miss = 0
     for t, row in enumerate(rows):
         srow = scores[t].tolist() if cls.needs_scores else None
+        if attn is not None:
+            pol.arow = [float(x) for x in attn[t][:len(row)]]
         pol.begin(t, row, srow)
         sel = set(row)
         hits = sel & res

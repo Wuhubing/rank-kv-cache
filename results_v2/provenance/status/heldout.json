@@ -1,0 +1,36 @@
+{
+ "split": "splits/longctx_v1.json",
+ "subset": "heldout",
+ "total": 21,
+ "done": [
+  "gov_report/00dfb31b36bf405150303a6ef755b72997e486d594da1a10",
+  "gov_report/21a88b8ac5c42a6f566eadadaeaf2f727d9d01024b2dcd3b",
+  "gov_report/4cb713e43fe0e8e6185cec6d49636297caf933ab15697ef8",
+  "gov_report/4ed664210e8729ef89226a2a1e92e6ec286054a05089b794",
+  "gov_report/642cbca15cea50e376cef6d3e81f3dc4e046cc649f6119f4",
+  "gov_report/8b518fb560a869de24be330b84a60e48e977392f6f9877b5",
+  "gov_report/8df98281be571d77d1b26cfe285fdc4072e43607dd793980",
+  "gov_report/9086b2ec6e1781a140d5062644f111e70fd4b738427c2250",
+  "gov_report/a6b66279eee0135505b08462e35738e68080a9214e36f710",
+  "gov_report/aa553d37bf5e68ec9f38976761e2c37ea3495ef11650ce0d",
+  "gov_report/ce19441feee1de58a5c147dc4e878d4cf00f1cce6b945e05",
+  "gov_report/e6030e255f6b8c70f7b3c9faf0320d4f7729b4eddacf727f",
+  "gov_report/ef16ccc98f78a77f8d3a6f3f9b737247600407ee898985a7",
+  "gov_report/f8a0313fccf5acb9eed57e3363eecb4d2b0b7f72639a82f4",
+  "gov_report/fb70e010d41eb638eb5a92f57ae858347858b41f986857fc",
+  "qmsum/03e102d88a0c17c0ee70ad09e848cd08354eff1db619c886",
+  "qmsum/10c03d597a3478f601be3286b2671d5f1c27f944488b74be",
+  "qmsum/3814c81130c13d1df955f1c6e235e30559ced35bda5f139e",
+  "qmsum/38ad273bc386eca003c3e3998e17a1afb56794f452852d6c",
+  "qmsum/94d06273bc4b8766ac8b9eef7ff2b8c2a31e32cf54896a93",
+  "qmsum/f28e420cf7496c7ee50b6ea61704bba189f95823fafc87eb"
+ ],
+ "started_at": "2026-11-25T06:58:21.284772+00:00",
+ "last": {
+  "rid": "qmsum/f28e420cf7496c7ee50b6ea61704bba189f95823fafc87eb",
+  "steps": 481,
+  "stop": "eos",
+  "seconds": 13.56
+ },
+ "finished_at": "2026-11-25T07:16:24.548839+00:00"
+}
