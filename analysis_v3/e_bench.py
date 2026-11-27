@@ -4,6 +4,7 @@
       [--split splits/longctx_v1.json --frozen splits/heldout_frozen_v1.json] [--batches 1 4 8 16 32] [--rounds 5]
       [--steps 264 --warmup 8] [--tokens 16384] [--budget 96] [--page-size 16 --top-k 64]
       [--policies lru score ema alloc_ema belady allmiss nofetch] [--delay-ns-per-byte 0 ...] [--timing]
+      [--wait-clean]
 
 Design (task section 9, E2): requests are the split's prompts with >= --tokens tokens in rid order, cut to exactly
 --tokens tokens (first and last halves), so the request set of a smaller batch is a prefix (subset) of a larger one.
@@ -13,6 +14,11 @@ order (numpy seed = round index + 1000 * batch, recorded). Every run records loa
 clocks, power and the compute processes on the card before and after. Per run: per-step wall latency, per-step miss
 counts and page-completion flags (for E4), misses, bytes. --delay-ns-per-byte repeats every round for each delay
 value (slow-tier simulation, E5; reported as simulated).
+--wait-clean (R11-6, added after PR #11): before every run, wait (60 s polls, at most --wait-max s) until no other
+process is on the card; a run with another process on the card before or after is repeated (at most --retries times)
+and the unclean attempt is kept in "discarded_runs" (the summary reads "runs" only). Per run also: GPU memory by phase
+(peak of the prefill forwards, peak of the migration to the host tier, allocated at decode start, decode warm-up peak,
+steady-state peak; bytes).
 """
 import argparse
 import json
@@ -39,6 +45,14 @@ def gpu_state():
                 time=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
 
+def wait_clean(wait_max, poll=60):
+    """Seconds waited until no other process is on the card (gives up after wait_max; the run is then unclean)."""
+    t0 = time.time()
+    while gpu_state()["other_pids"] and time.time() - t0 < wait_max:
+        time.sleep(poll)
+    return round(time.time() - t0, 1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, required=True)
@@ -58,6 +72,9 @@ def main():
     ap.add_argument("--alpha", type=float, help="EMA alpha (default: frozen value for --budget)")
     ap.add_argument("--timing", action="store_true", help="CUDA-event breakdown (E6; adds overhead, separate runs)")
     ap.add_argument("--overlap", action="store_true", help="side-stream fetch (faulted in long runs; off by default)")
+    ap.add_argument("--wait-clean", action="store_true", help="wait for a card without other processes before each run")
+    ap.add_argument("--wait-max", type=int, default=1800)
+    ap.add_argument("--retries", type=int, default=2)
     a = ap.parse_args()
     import torch
     import gpu_bench_batch as gbb
@@ -100,7 +117,7 @@ def main():
             for l in range(L):
                 sim = kp.simulate(prep["ranks"][:, r, l], None, a.budget, "lru")["misses"]
                 checks.append(int(prep["misses"][r, l]) == sim)
-        runs = []
+        runs, discarded = [], []
         for rnd in range(a.rounds):
             seed = rnd + 1000 * R
             rng = np.random.default_rng(seed)
@@ -108,30 +125,40 @@ def main():
             order = [todo[i] for i in rng.permutation(len(todo))]
             one("lru", steps=max(a.warmup + 8, 24))       # discarded warm-up run
             for pol, delay in order:
-                before = gpu_state()
-                res = one(pol, delay, timing=a.timing, nxt=nxt)
-                after = gpu_state()
-                ok_tokens = res["gen"] == prep["gen"] if pol != "nofetch" else None
-                ok_ranks = bool(np.array_equal(res["ranks"], prep["ranks"])) if pol != "nofetch" else None
-                lat = res["lat"]
-                n = len(lat) - a.warmup
-                runs.append(dict(R=R, round=rnd, seed=seed, policy=pol, delay_ns_per_byte=delay,
-                                 position=order.index((pol, delay)), lat_ms=(lat * 1e3).tolist(),
-                                 step_misses=res["step_misses"].tolist(), page_step=res["page_step"].tolist(),
-                                 misses=int(res["misses"].sum()), bytes=int(res["bytes"]),
-                                 tokens_per_s=R * n / float(lat[a.warmup:].sum()),
-                                 median_ms=float(np.median(lat[a.warmup:]) * 1e3),
-                                 ranks_equal_prep=ok_ranks, tokens_equal_prep=ok_tokens,
-                                 breakdown_ms=res["breakdown"].tolist() if res["breakdown"] is not None else None,
-                                 peak_decode=res["peak_decode_steady"], host_bytes=res["host_bytes"],
-                                 before=before, after=after))
-                print(f"R={R} round={rnd} {pol} delay={delay} median {runs[-1]['median_ms']:.1f} ms "
-                      f"{runs[-1]['tokens_per_s']:.1f} tok/s misses {runs[-1]['misses']} load {before['loadavg1']:.1f} "
-                      f"others {before['other_pids']}", flush=True)
-                del res
-                torch.cuda.empty_cache()
+                for attempt in range(a.retries + 1 if a.wait_clean else 1):
+                    waited = wait_clean(a.wait_max) if a.wait_clean else 0
+                    before = gpu_state()
+                    res = one(pol, delay, timing=a.timing, nxt=nxt)
+                    after = gpu_state()
+                    ok_tokens = res["gen"] == prep["gen"] if pol != "nofetch" else None
+                    ok_ranks = bool(np.array_equal(res["ranks"], prep["ranks"])) if pol != "nofetch" else None
+                    lat = res["lat"]
+                    n = len(lat) - a.warmup
+                    runs.append(dict(R=R, round=rnd, seed=seed, policy=pol, delay_ns_per_byte=delay,
+                                     position=order.index((pol, delay)), lat_ms=(lat * 1e3).tolist(),
+                                     step_misses=res["step_misses"].tolist(), page_step=res["page_step"].tolist(),
+                                     misses=int(res["misses"].sum()), bytes=int(res["bytes"]),
+                                     tokens_per_s=R * n / float(lat[a.warmup:].sum()),
+                                     median_ms=float(np.median(lat[a.warmup:]) * 1e3),
+                                     ranks_equal_prep=ok_ranks, tokens_equal_prep=ok_tokens,
+                                     breakdown_ms=res["breakdown"].tolist() if res["breakdown"] is not None else None,
+                                     peak_decode=res["peak_decode_steady"], host_bytes=res["host_bytes"],
+                                     mem_phases=dict(prefill_forward=res.get("peak_prefill_forward"),
+                                                     migration=res.get("peak_migration"), decode_start=res["mem_start"],
+                                                     decode_warmup=res["peak_decode_warmup"],
+                                                     decode_steady=res["peak_decode_steady"]),
+                                     waited_s=waited, attempt=attempt, before=before, after=after))
+                    print(f"R={R} round={rnd} {pol} delay={delay} median {runs[-1]['median_ms']:.1f} ms "
+                          f"{runs[-1]['tokens_per_s']:.1f} tok/s misses {runs[-1]['misses']} load {before['loadavg1']:.1f} "
+                          f"others {before['other_pids']} {after['other_pids']}", flush=True)
+                    del res
+                    torch.cuda.empty_cache()
+                    if not a.wait_clean or not (before["other_pids"] or after["other_pids"]):
+                        break
+                    if attempt < a.retries:
+                        discarded.append(runs.pop())
         out = dict(R=R, budget=a.budget, alpha=alpha, page_bytes=int(prep["page_bytes"]),
-                   lru_misses_equal_simulator=all(checks), checks=len(checks), runs=runs)
+                   lru_misses_equal_simulator=all(checks), checks=len(checks), runs=runs, discarded_runs=discarded)
         (a.out / f"batch{R}.json").write_text(json.dumps(out))
         del prep
         torch.cuda.empty_cache()

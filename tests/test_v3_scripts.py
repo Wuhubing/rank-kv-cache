@@ -176,3 +176,16 @@ def test_e_summarize_timed_steps_only(tmp_path, gz):
     assert rows["lru"]["ranks_equal"] == "True"
     assert float(rows["lru"]["peak_decode_gib"]) == pytest.approx(4.0)
     assert float(rows["lru"]["host_tier_gib"]) == pytest.approx(2.0)
+
+
+def test_e_bench_wait_clean(monkeypatch):
+    """R11-6: wait_clean polls until no other process is on the card, and gives up after wait_max."""
+    from analysis_v3 import e_bench
+    states = iter([[7], [7], []])
+    monkeypatch.setattr(e_bench, "gpu_state", lambda: {"other_pids": next(states)})
+    monkeypatch.setattr(e_bench.time, "sleep", lambda s: None)
+    assert e_bench.wait_clean(100, poll=1) >= 0
+    monkeypatch.setattr(e_bench, "gpu_state", lambda: {"other_pids": [7]})
+    t = iter(range(0, 10000, 50))
+    monkeypatch.setattr(e_bench.time, "time", lambda: next(t))
+    assert e_bench.wait_clean(100, poll=1) >= 100

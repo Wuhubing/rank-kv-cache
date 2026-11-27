@@ -337,9 +337,13 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
         torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
         first = []
+        peak_fwd = peak_mig = 0
         for r, prompt in enumerate(prompts):
             out = model(input_ids=torch.tensor([prompt], device="cuda"), use_cache=True, logits_to_keep=1)
             cache = out.past_key_values
+            # memory by phase (not timed): peak of this request's forward, then of its migration to the host tier
+            peak_fwd = max(peak_fwd, torch.cuda.max_memory_allocated())
+            torch.cuda.reset_peak_memory_stats()
             first.append(out.logits[:, -1].argmax(-1).item())
             del out
             for l in range(L):
@@ -362,8 +366,10 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
                 T.tk[r] = kf[:, n * PS:]
                 T.tv[r] = vf[:, n * PS:]
             del cache, kf, vf, kp, vp
+            peak_mig = max(peak_mig, torch.cuda.max_memory_allocated())
+            torch.cuda.reset_peak_memory_stats()
         torch.cuda.synchronize()
-        peak_prefill = torch.cuda.max_memory_allocated()
+        peak_prefill = max(peak_fwd, peak_mig, torch.cuda.max_memory_allocated())
         torch.cuda.empty_cache()
         b.src = torch.empty((R, K), dtype=torch.int32, device="cuda")
         b.dst = torch.empty((R, K), dtype=torch.int32, device="cuda")
@@ -419,7 +425,8 @@ def run(model, prompts, policy, steps, budgets, alpha=0.0, K=64, nxt=None, warmu
                     bytes=int(misses.sum()) * page_bytes, page_bytes=page_bytes,
                     step_misses=np.array(step_m), page_step=np.array(page_step),
                     breakdown=np.array(brk) if brk else None, scores=scores if record_scores else None,
-                    warmup=warmup, peak_prefill=peak_prefill, mem_start=mem_start,
+                    warmup=warmup, peak_prefill=peak_prefill, peak_prefill_forward=peak_fwd, peak_migration=peak_mig,
+                    mem_start=mem_start,
                     peak_decode_warmup=peak_warm, peak_decode_steady=peak_steady,
                     host_bytes=sum(2 * T.kh.numel() * T.kh.element_size() for T in b.tiers.values()))
     finally:
