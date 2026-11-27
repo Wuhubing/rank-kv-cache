@@ -95,7 +95,7 @@ def main(argv=None):
     for d in a.dirs:
         meta, runs = load_runs(d)
         args = meta["args"]
-        cfg = f"{Path(d).name}"
+        cfg = Path(d).parent.name if Path(d).name == "raw" else Path(d).name  # results_v3/e/<cfg>/raw
         warm = int(args["warmup"])
         groups = defaultdict(list)
         for r in runs:
