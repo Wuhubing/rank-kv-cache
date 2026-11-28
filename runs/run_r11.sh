@@ -3,6 +3,8 @@
 # 8B batch 16 / 12K batch 32 and 0.6B batch 32). Same preconditions as run_e.sh: one card, never card 2, no other process
 # on the card, 1-minute load < 4; checked every 30 min, an item is skipped after 6 h of accumulated waiting.
 # Every run additionally waits for a clean card (--wait-clean) and repeats an unclean run (kept as discarded_runs).
+# Attempt 1 (2026-11-27 23:42Z, card 0) was stopped at 00:01Z after another user's job started on card 0 (18 runs of batch 1
+# done, none written; log out/v3/r11/batch_8b_rerun.card0_aborted.log); restarted with at most 10 min waiting and 1 repeat per run.
 cd /data/weibing/projects/rkv-v3
 export TMPDIR=/data/weibing/tmp HF_HOME=/data/weibing/cache/huggingface OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
 P=".venv/bin/python"
@@ -36,7 +38,7 @@ run() {  # name, args...
       GPUTEST=1; echo "[$(date -u -Is)] GPU tests passed"
     fi
     mkdir -p out/v3/r11/$name
-    CUDA_VISIBLE_DEVICES=$GPU $P -m analysis_v3.e_bench --out out/v3/r11/$name --wait-clean "$@" > out/v3/r11/$name.log 2>&1 \
+    CUDA_VISIBLE_DEVICES=$GPU $P -m analysis_v3.e_bench --out out/v3/r11/$name --wait-clean --wait-max 600 --retries 1 "$@" > out/v3/r11/$name.log 2>&1 \
       || { echo "FAILED $name"; return; }
     mkdir -p results_v3/e/$name/raw
     for f in out/v3/r11/$name/batch*.json; do gzip -c "$f" > results_v3/e/$name/raw/$(basename $f).gz; done
