@@ -5,6 +5,9 @@
 # Every run additionally waits for a clean card (--wait-clean) and repeats an unclean run (kept as discarded_runs).
 # Attempt 1 (2026-11-27 23:42Z, card 0) was stopped at 00:01Z after another user's job started on card 0 (18 runs of batch 1
 # done, none written; log out/v3/r11/batch_8b_rerun.card0_aborted.log); restarted with at most 10 min waiting and 1 repeat per run.
+# Attempt 2 of timing_8b/b16_16k (00:44Z, card 0) was stopped at 00:56Z: another user's training job (~40 min) appeared on the card
+# during the preparation run. Timing items now wait up to 45 min per run (WMAX); waiting before and during an item together is
+# capped at 6 h (--wait-total), after which runs proceed and are recorded as unclean.
 cd /data/weibing/projects/rkv-v3
 export TMPDIR=/data/weibing/tmp HF_HOME=/data/weibing/cache/huggingface OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
 P=".venv/bin/python"
@@ -38,7 +41,8 @@ run() {  # name, args...
       GPUTEST=1; echo "[$(date -u -Is)] GPU tests passed"
     fi
     mkdir -p out/v3/r11/$name
-    CUDA_VISIBLE_DEVICES=$GPU $P -m analysis_v3.e_bench --out out/v3/r11/$name --wait-clean --wait-max 600 --retries 1 "$@" > out/v3/r11/$name.log 2>&1 \
+    CUDA_VISIBLE_DEVICES=$GPU $P -m analysis_v3.e_bench --out out/v3/r11/$name --wait-clean --wait-max ${WMAX:-600} --retries 1 \
+      --wait-total $((21600 - WAITED)) "$@" > out/v3/r11/$name.log 2>&1 \
       || { echo "FAILED $name"; return; }
     mkdir -p results_v3/e/$name/raw
     for f in out/v3/r11/$name/batch*.json; do gzip -c "$f" > results_v3/e/$name/raw/$(basename $f).gz; done
@@ -52,7 +56,7 @@ mkdir -p out/v3/r11
 S8="--split splits/longctx_8b_v1.json --frozen splits/heldout_frozen_8b.json"
 TP="--rounds 5 --steps 72 --policies lru score ema alloc_ema belady --timing"
 run batch_8b_rerun $S8 --batches 1 4 --rounds 5
-run timing_8b/b16_16k $S8 --batches 16 $TP
-run timing_8b/b32_12k $S8 --tokens 12288 --batches 32 $TP
-run timing_06b_b32 --batches 32 $TP
+WMAX=2700 run timing_8b/b16_16k $S8 --batches 16 $TP
+WMAX=2700 run timing_8b/b32_12k $S8 --tokens 12288 --batches 32 $TP
+WMAX=2700 run timing_06b_b32 --batches 32 $TP
 echo "[$(date -u -Is)] R11 GPU DONE"

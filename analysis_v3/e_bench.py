@@ -75,6 +75,8 @@ def main():
     ap.add_argument("--wait-clean", action="store_true", help="wait for a card without other processes before each run")
     ap.add_argument("--wait-max", type=int, default=1800)
     ap.add_argument("--retries", type=int, default=2)
+    ap.add_argument("--wait-total", type=float, default=float("inf"),
+                    help="cap on the accumulated --wait-clean waiting of this process (s); afterwards runs do not wait")
     a = ap.parse_args()
     import torch
     import gpu_bench_batch as gbb
@@ -92,6 +94,7 @@ def main():
                 alloc=alloc, requests=[rid for rid, _ in reqs_all], start=gpu_state())
     (a.out / "meta.json").write_text(json.dumps(meta, indent=1))
     pols = [p for p in a.policies if not (p == "alloc_ema" and (alloc is None or len(alloc) != L))]
+    waited_total = 0.0          # --wait-clean waiting accumulated over all batches of this process
     for R in a.batches:
         if R > len(reqs_all):
             print(f"batch {R}: only {len(reqs_all)} requests", flush=True)
@@ -126,7 +129,8 @@ def main():
             one("lru", steps=max(a.warmup + 8, 24))       # discarded warm-up run
             for pol, delay in order:
                 for attempt in range(a.retries + 1 if a.wait_clean else 1):
-                    waited = wait_clean(a.wait_max) if a.wait_clean else 0
+                    waited = wait_clean(min(a.wait_max, max(0.0, a.wait_total - waited_total))) if a.wait_clean else 0
+                    waited_total += waited
                     before = gpu_state()
                     res = one(pol, delay, timing=a.timing, nxt=nxt)
                     after = gpu_state()
