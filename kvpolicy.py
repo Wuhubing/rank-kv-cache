@@ -487,7 +487,7 @@ def simulate(ranked, scores, B, name, *, on_evict=None, attn=None, **params):
     if B < K:
         raise ValueError("budget below K")
     cls = POLICIES[name]
-    if name == "belady":
+    if name == "belady" or getattr(cls, "needs_future", False):  # needs_future: followup-v3 lookahead policies
         params["future"] = future_uses(rows)
     if name == "arc" or getattr(cls, "needs_budget", False):
         params["B"] = B

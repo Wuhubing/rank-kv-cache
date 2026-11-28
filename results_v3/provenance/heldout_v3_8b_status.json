@@ -1,0 +1,36 @@
+{
+ "split": "splits/longctx_v3_8b.json",
+ "subset": "heldout",
+ "total": 21,
+ "done": [
+  "govreport/test/ab4359b0086a2ec5",
+  "govreport/train/137b76f668965ad8",
+  "govreport/train/26053c42a4fa0e10",
+  "govreport/train/318d65c26a46368b",
+  "govreport/train/3dc02bfecc6e3289",
+  "govreport/train/475aef161ae98725",
+  "govreport/train/487f07dac7f852f9",
+  "govreport/train/4d98aa9bdb6e4568",
+  "govreport/train/4ddf76d4f25b872a",
+  "govreport/train/53f55df2e9037904",
+  "govreport/train/62001e156f220163",
+  "govreport/train/636a29d17439b179",
+  "govreport/train/7f612500ffef3670",
+  "govreport/train/8ddbae657fca02a1",
+  "govreport/train/97b8e9feae551021",
+  "govreport/train/c552bd1be3b2afad",
+  "govreport/train/eb3cd77e4ecc327c",
+  "govreport/train/f6b04152ead4b89d",
+  "govreport/validation/52d13b9cef2a09e7",
+  "govreport/validation/9f997695a748b600",
+  "govreport/validation/ddc1268ecb691a58"
+ ],
+ "started_at": "2026-11-26T00:27:02.051565+00:00",
+ "last": {
+  "rid": "govreport/validation/ddc1268ecb691a58",
+  "steps": 1023,
+  "stop": "length",
+  "seconds": 51.11
+ },
+ "finished_at": "2026-11-26T00:48:22.355412+00:00"
+}

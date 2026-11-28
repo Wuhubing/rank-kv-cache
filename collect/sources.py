@@ -3,6 +3,9 @@
 ruler    simonjegou/ruler (pre-generated RULER, 16384-token config, parquet). Prompt: the task's own
          context followed by its question, as one user turn in the Qwen3 chat template with
          thinking (the answer prefix is not forced; the model answers freely).
+parquet  followup-v3 held-out (splits/longctx_v3.json): one row of a pinned parquet file per prompt; the prompt entry
+         names the dataset (source_spec "repo@revision"), the file, the row and the text field. The prompt is built
+         exactly as for LongBench (collect.long USER template of the task, Qwen3 chat template with thinking).
 scbench  microsoft/SCBench multi-turn sessions (data/<file>.jsonl): one shared context and 5 queries.
          Turn 1 = context (middle-truncated to max_context_tokens) + query 1; turn i>1 = query i as a
          new user message appended to the same KV cache after the previous answer.
@@ -19,8 +22,18 @@ def _rev(spec):
 
 def load_rows(source, spec, wanted):
     from huggingface_hub import hf_hub_download
-    repo, rev = _rev(spec)
     rows = {}
+    if source == "parquet":   # the dataset is named per prompt (source_spec); spec is the split's data dict
+        import pandas as pd
+        frames = {}
+        for p in wanted:
+            sp, f = p["source_spec"], p["file"]
+            if (sp, f) not in frames:
+                r, _, v = sp.partition("@")
+                frames[sp, f] = pd.read_parquet(hf_hub_download(r, f, repo_type="dataset", revision=v or None))
+            rows[f, int(p["row"])] = {"context": frames[sp, f][p["field"]].iloc[int(p["row"])]}
+        return rows
+    repo, rev = _rev(spec)
     if source == "ruler":
         import pandas as pd
         files = {p["file"] for p in wanted}
@@ -57,7 +70,10 @@ def turns_of(row):
 
 
 def build_turns(tok, source, p, row):
-    from collect.long import middle_truncate
+    from collect.long import USER, middle_truncate
+    if source == "parquet":
+        msg = [{"role": "user", "content": USER[p["task"]].format(context=row["context"])}]
+        return [tok.apply_chat_template(msg, tokenize=True, add_generation_prompt=True, enable_thinking=True)]
     if source == "ruler":
         msg = [{"role": "user", "content": row["context"].rstrip() + "\n\n" + row["question"].strip()}]
         return [tok.apply_chat_template(msg, tokenize=True, add_generation_prompt=True, enable_thinking=True)]

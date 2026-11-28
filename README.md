@@ -7,6 +7,14 @@ recency and frequency, using Qwen3-0.6B traces on LongBench (MultiFieldQA-en, Go
 
 **Current status (2026-11-25):** the rank study ended negative (preregistered 40-document held-out test: the full rank policy cuts repeat misses by only 0.39% [0.20%, 0.57%] against LRU, S1 not met; S2 is met as preregistered but also changes β, and a post-hoc comparison with β held fixed puts the rank term alone at 0.14%). A follow-up line, a score-EMA replacement policy on long Quest traces, passed its preregistered 21-document held-out test but gives no latency gain on an L4. The Chinese walkthrough below explains it from the start; [docs/STATUS_REPORT.md](docs/STATUS_REPORT.md) has the full log, data and how each conclusion was reached.
 
+**Followup-v3 (2026-11-26, branch `mechanism-v3`, [docs/v3/](docs/v3/)):** a third preregistered held-out set (21 new
+GovReport documents, both models) confirms the EMA again (G 0.281 / 0.277) and two new policies chosen on dev: a normalised
+power-law kernel of the score (+0.048 / +0.043 G over the EMA, 21/21) and a global slot pool ranked by the score percentile that
+needs no offline allocation curves (+0.119 / +0.233 over uniform budgets). Mechanism: the policy must predict the selector's next
+~16 steps; true attention is a worse eviction signal than the selector's own score, and the remaining gap is not reachable with
+richer learned features. An independent replication on Apple M1 Max by Xiaoyang Wu (PR #9) passes the original held-out criteria as well (G 0.280; [docs/v3/external_xiaoyang.md](docs/v3/external_xiaoyang.md)). Summary: [docs/v3/thesis_v3.md](docs/v3/thesis_v3.md); fixes to replication-v2:
+[docs/rerun/STATUS_fixes.md](docs/rerun/STATUS_fixes.md).
+
 **Replication-v2 (2026-11-25, branch `replication-v2`):** everything was re-collected and re-evaluated from scratch on an RTX 6000 Ada ([docs/rerun/](docs/rerun/)). The preregistered held-out result replicates (EMA G 0.279 [0.275, 0.282], 21/21; L4: 0.281), and a new preregistered **Qwen3-8B** held-out set confirms it (G 0.272 [0.269, 0.276], 21/21; allocation + EMA 0.273 of the gap at the same allocation). An all-page percentile control shows that the signal is the **global ordering** of the unselected pages' scores, not score magnitude. It also holds at 64K (YaRN), on RULER and on SCBench multi-turn sessions. Measured batching (1–32) shows that the 8–10 % byte saving does not become latency or throughput (the batch-32 difference on 0.6B comes from LRU's long-tail steps with the same median step and is not attributed to the policy; none on 8B). Summary: [docs/replication_v2.md](docs/replication_v2.md) (preregistration), [docs/rerun/thesis.md](docs/rerun/thesis.md) (what the evidence supports).
 
 ## 高效替换策略：从问题到结果

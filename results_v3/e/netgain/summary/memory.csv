@@ -1,0 +1,4 @@
+config,R,policy,prefill_forward,migration,decode_start,decode_warmup,decode_steady
+06b_b16,16,lru,,,,,
+06b_b16,16,ema,,,,,
+06b_b16,16,belady,,,,,

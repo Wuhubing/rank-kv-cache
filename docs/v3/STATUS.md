@@ -1,0 +1,27 @@
+DONE
+- 2026-11-25T21:00Z 开始。前提：rkv-arkvale DONE；wulab2 无 wb-rkv- 会话。
+- A 完成（replication-v2）：08db627、fb0a8fa、a8fb184、42c2b06、851d567、9058540（R10 更正：8B 的 1023 步包含思考结束和 180–627 步回答）、STATUS_fixes.md。已合并进 mechanism-v3。
+- F1 完成：2262 篇候选，取 21 篇（splits/longctx_v3.json）。
+- B 完成的页：b1_powerlaw（0.6B + 8B）、b4_true_attention、b7_global_ordering（0.6B）；B3 lookahead（0.6B）已出数。
+- C/D 完成的页：c5_cost、d7_high_budget。
+- P2 候选（归一化幂律核 γ=1）过了 C 门槛：0.6B ΔG +0.042 [0.036, 0.048]，8B +0.047 [0.043, 0.051]（B=96）；B=128 +0.065 / +0.063。
+- G2 采集完成：data/8b_dev_long（14 篇全部 EOS，1503–2018 步，思考在 458–843 步结束）。
+- 正在跑（wulab2）：wb-rkv-fu-b-cpu → wb-rkv-fu-cd-cpu → wb-rkv-fu-more-cpu → wb-rkv-fu-g2-cpu（CPU，nice 10，16 进程）。GPU 当前未用。
+- 卡 2 两次报 "illegal instruction"，脚本优先避开卡 2。
+- 2026-11-26T00:02Z 按用户新决定：所有 CPU 计算放在 wulab2（上限 32 进程，nice 10，load > 44 不加进程）。mini 上只让已在跑的 C4（0.6B 已完成，8B 进行中）跑完，之后不在 mini 开计算。学习模型（C2/B3）改为 wulab2 队列 wb-rkv-fu-learn（与 B 队列并行）。
+- C4 完成（mini 上跑完，结果 results_v3/c4/）：全局池（百分位 EMA）过 C 门槛，作为 P4 候选；B=96 达到离线分配收益的 95%/93%。
+- F2 完成：docs/preregistration_v3.md + splits/heldout_frozen_v3.json，提交 087d53f，推送并用 ls-remote 确认于 2026-11-26T00:15:31Z。
+- F3 采集开始 2026-11-26T00:15:39Z，wulab2 卡 1（GPU-7ee1d08f-1ddf-05b7-9480-8047c2574e74），tmux wb-rkv-fu-f3-collect。
+- F3 完成：采集 00:15:39–00:48:23Z（21+21 篇），评估一次 01:31–01:37Z；H1/H2/H3 在 0.6B 和 8B 上全部通过（docs/v3/f3_heldout.md）。
+- 完成的页：b1、b3（前瞻部分）、b4、b7、c1、c2、c4、c5、d3、d7、f1、f3。
+- 01:38–01:40Z：gbdt（scikit-learn）默认用满所有核，整机 load 冲到 50；已停掉并以 OMP_NUM_THREADS=1 重启（偏离记录）。
+- 队列（wulab2）：cd-cpu（c3/d5）→ more-cpu（instrument/lru_fine/b2 模型）→ g2-cpu → final-cpu（D1/G1/汇总）；learn（gbdt）并行；wb-rkv-fu-e 等所有队列结束后自动开始 E（每项检查空卡与 load < 4）。
+- 2026-11-26T04:21Z 所有 CPU 队列完成。B1–B7、C1–C5、D1、D3–D7、F、G1、G2 页全部写完；thesis_v3 和 pr_description 只差 E/P5/N2。
+- 04:22Z E 第一次尝试在卡 2 上报 illegal memory access（卡 2 第三次故障），之后 E 不再使用卡 2；04:31Z 重新开始等待（全局上限 6 小时，到 10:31Z）。
+- 04:40Z 复测卡 2：两次都在 batch 4 报 illegal instruction（同样的运行在卡 1 上通过），卡 2 继续排除。04:31Z 起卡 0/1/3 都被他人占用（约 2.5 GB、50% 利用率）。全部测试在 wulab2 上通过（464 passed）。
+- 05:00Z E 在卡 0 上段错误：原因是 gpu_bench_batch2 的 record_stream（不是卡），已修复并在卡 0 上多轮复测通过；05:12Z 重启 E，等 load < 4。
+- 2026-11-26 用户新增：整合 Xiaoyang Wu 的 PR #9/#10 四项结果（docs/v3/external_xiaoyang.md，关键数字已从他提交的文件重算核对，未重跑、未复制原始数据）；最后自己试 gh pr create。
+- E 完成（2026-11-26 05:29–22:32Z，卡 0，无重叠模式）：e_systems.md、d2_step_model.md；thesis/PR 描述补全。
+- 全部测试在 wulab2 通过（480 passed，含 GPU 测试）；wulab2 无本任务 tmux 会话和 GPU 进程。
+- PR #11 已开：https://github.com/Wuhubing/rank-kv-cache/pull/11（mechanism-v3 → replication-v2，未合并）。
+- 报告：~/work/rkv-followup/REPORT.md。

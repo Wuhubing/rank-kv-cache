@@ -1,0 +1,103 @@
+# B1: why the power-law kernel beats the EMA
+
+**Conclusion: the advantage comes from the kernel's shape (a heavy tail) and from averaging (normalisation), not from an
+implicit residency penalty.** On 0.6B dev at B=96, the normalised power-law kernel (a power-law-weighted mean of z) reaches G
+0.320, the unnormalised one 0.310, the normalised exponential kernel 0.301 and the EMA 0.279. Every explicit residency-type term
+added to the EMA makes it worse (time since admission −0.247, unselected-step count −0.093, cumulative deficit −0.009, time since
+last selection −0.012; LRU + score bonus −0.055), and moving the zero point so that residency *adds* value collapses the
+unnormalised kernel (zero at the minimum score: −0.115). The unnormalised sum does carry an implicit penalty, but it only works
+when the zero point is the K-th score, and normalising it removes the penalty and improves G. The EMA's weakness is its weighting
+of young pages: it keeps a fixed weight α^n on the admission value, whereas a normalised kernel averages a young page's few
+samples equally (see "mechanism"). A two-time-scale EMA (2 floats per page) recovers about half of the power law's gain over the EMA.
+On Qwen3-8B dev every one of these findings repeats (section at the end).
+
+Source: `analysis_v3.run b1` (`analysis_v3/experiments.py: b1`), policies `kvpolicy_v3.Kernel`, `EMAAge`, `EMADeficit`,
+`EMAUnsel`, `TwoScale` and `kvpolicy.Hybrid`; tests `tests/test_kvpolicy_v3.py` (the power kernel equals
+`kvpolicy_v2.PowerLawDecay` for every normalisation / zero point; the exponential kernel equals the direct sum). Families tuned
+LODO (fewest misses on the other 13 documents); paired document bootstrap (2000, seed 0). Results `results_v3/b1/b1_dev/`; LRU and
+Bélády re-checked with `replay.py`: 3 136 streams, 0 mismatches.
+
+## Factorial: kernel shape × normalisation × zero point (0.6B dev, G; CI at B=96)
+| Kernel | Normalised | Zero point | B=80 | B=96 | B=128 | B=256 |
+|---|---|---|---|---|---|---|
+| EMA of z (reference; LODO α) | (yes) | K-th | 0.274 | 0.279 [0.274, 0.283] | 0.267 | 0.236 |
+| exponential (rate 0.3–0.9) | no | K-th | 0.279 | 0.281 [0.276, 0.285] | 0.269 | 0.236 |
+| exponential | **yes** | K-th | 0.298 | 0.301 [0.297, 0.304] | 0.299 | 0.241 |
+| exponential | no | median | 0.280 | 0.274 | 0.255 | 0.192 |
+| exponential | yes | median | 0.289 | 0.296 | 0.286 | 0.240 |
+| exponential | no | min | 0.211 | 0.198 | 0.227 | 0.142 |
+| exponential | yes | min | 0.274 | 0.280 | 0.264 | 0.221 |
+| power law (γ 0.5 / 1 / 2) | no | K-th | 0.292 | 0.310 [0.305, 0.315] | 0.295 | 0.244 |
+| power law | **yes** | **K-th** | **0.303** | **0.320 [0.315, 0.326]** | **0.333** | **0.298** |
+| power law | no | median | 0.170 | 0.203 | 0.258 | 0.171 |
+| power law | yes | median | 0.300 | 0.298 | 0.315 | 0.294 |
+| power law | no | min | −0.014 | −0.115 | −0.120 | 0.064 |
+| power law | yes | min | 0.272 | 0.284 | 0.266 | 0.232 |
+
+LODO choices: power law γ = 1 in every fold at every budget; exponential rate 0.7 (B=96) / 0.9 (B=128) normalised, 0.5 / 0.7 not.
+
+Main effects at B=96 (paired ΔG, 14/14 documents unless stated):
+- **shape** (power − exponential): normalised +0.020, unnormalised +0.029 (power − EMA +0.032 [0.027, 0.036]);
+- **normalisation**: exponential +0.020, power +0.010 [0.008, 0.012]; normalised power − EMA **+0.042 [0.036, 0.048]**
+  (B=128: +0.065 [0.061, 0.069]);
+- **zero point**: matters a lot for the unnormalised sum (K-th 0.310, median 0.203, min −0.115) and little once normalised
+  (0.320 / 0.298 / 0.284): it changes whether a resident page gains or loses value merely by staying.
+
+## Candidate explanations as explicit terms on the EMA (LODO over α and λ; 0.6B dev)
+| Policy (key) | B=80 | B=96 | B=128 | B=256 | ΔG vs EMA at B=96 [CI] |
+|---|---|---|---|---|---|
+| EMA(z) − λ log(1 + steps since admission) | −0.038 | 0.032 | 0.109 | 0.140 | −0.247 [−0.254, −0.240] |
+| EMA(z) − λ log(1 + steps since last selected) | 0.237 | 0.267 | 0.276 | 0.268 | −0.012 [−0.014, −0.010] (B=128 +0.008, B=256 +0.032) |
+| EMA(z) + λ Σ min(z, 0) (cumulative deficit) | 0.269 | 0.270 | 0.243 | 0.119 | −0.009 [−0.010, −0.008] |
+| EMA(z) − λ log(1 + unselected steps since admission) | 0.168 | 0.186 | 0.192 | 0.171 | −0.093 [−0.096, −0.089] |
+| last + w · EMA(z) (`kvpolicy.Hybrid`, linear recency; not the same as the log terms) | 0.214 | 0.224 | 0.217 | 0.142 | −0.055 [−0.058, −0.052] |
+| w · EMA_fast + (1 − w) · EMA_slow (two time scales, normalised) | 0.293 | 0.300 [0.296, 0.304] | 0.294 | 0.245 | +0.022 [0.019, 0.024] |
+| Normalised power law (for comparison) | 0.303 | 0.320 | 0.333 | 0.298 | +0.042 [0.036, 0.048] |
+
+λ grids start at a small positive value (0.05, 0.01 for the deficit), so these rows test whether *adding* the term helps; LODO
+chose the smallest λ in every fold, i.e. as little of the term as the grid allowed. `kvpolicy.Hybrid` is linear in the
+recency and adds the EMA to the LRU key, so it is not equivalent to the log-penalty variants; its results are reported as a
+separate row. The only term that helps anywhere is a recency term (time since last selected) at large budgets (B ≥ 128),
+where LRU itself is nearly optimal.
+
+## Mechanism
+- Most unselected pages have z < 0, so an unnormalised sum of z lowers a page's value every step it stays unselected: the
+  reviewer's "implicit residency penalty". But that penalty is not what helps: making it explicit hurts (table above), and
+  removing it by normalisation helps.
+- What the normalised kernels share and the EMA lacks is the weighting of a young page's few samples. The EMA starts at the
+  admission value x₀ and gives it weight α^n after n steps (0.5^n; with a long memory, e.g. α=0.9, x₀ dominates for tens of
+  steps); a normalised kernel weights the n + 1 samples by k(age)/Σk, i.e. close to an equal average while the page is young
+  and the kernel's long-memory weights once it is old. The admission value is the score at which the page was *selected*
+  (z ≥ 0 by definition), so the EMA protects newly admitted pages by a stale, optimistic value. The power law adds a heavier
+  tail than any single exponential, which is why it beats the normalised exponential (by 0.020) and the two-scale mixture.
+- Practical consequence: the best simple policy found is the normalised power-law kernel of z with γ=1 (16 floats per page with
+  the 8-term mixture, still O(1)); a two-scale normalised EMA (2 floats) gets about half of the gain over the EMA. C1 freezes
+  the candidate; C3 tests the initial value directly.
+
+## 8B dev (Qwen3-8B, 14 dev documents; `results_v3/b1/b1_8b/`, audit 4 032 streams, 0 mismatches)
+The same picture, with slightly larger differences:
+
+| Policy (LODO) | B=80 | B=96 | B=128 | B=256 | ΔG vs EMA at B=96 [CI], documents |
+|---|---|---|---|---|---|
+| EMA of z | 0.270 | 0.272 [0.268, 0.276] | 0.256 | 0.232 | – |
+| current score | 0.233 | 0.221 | 0.172 | 0.049 | |
+| exponential, unnormalised / normalised (K-th zero) | 0.278 / 0.293 | 0.276 / 0.299 | 0.257 / 0.291 | 0.217 / 0.213 | +0.004 / +0.027 [0.024, 0.029] 14/14 |
+| power law, unnormalised (K-th zero) | 0.288 | 0.311 | 0.285 | 0.226 | +0.039 [0.037, 0.041] 14/14 |
+| **power law, normalised (K-th zero)** | **0.297** | **0.319 [0.314, 0.324]** | **0.319** | **0.276** | **+0.047 [0.043, 0.051] 14/14** (B=128 +0.063 [0.055, 0.070]) |
+| power law, zero = median, unnormalised / normalised | 0.143 / 0.296 | 0.207 / 0.296 | 0.233 / 0.312 | 0.123 / 0.272 | −0.065 / +0.024 |
+| power law, zero = minimum, unnormalised / normalised | −0.055 / 0.274 | −0.107 / 0.280 | −0.097 / 0.233 | 0.029 / 0.224 | −0.379 / – |
+| EMA − λ log(1 + residency) | −0.100 | −0.021 | 0.057 | 0.109 | −0.293 [−0.301, −0.285] |
+| EMA − λ log(1 + since last selected) | 0.233 | 0.264 | 0.267 | 0.260 | −0.008 [−0.010, −0.007] (B=128 +0.011) |
+| EMA + λ Σ min(z, 0) | 0.266 | 0.260 | 0.216 | 0.034 | −0.012 [−0.013, −0.011] |
+| EMA − λ log(1 + unselected steps) | 0.148 | 0.160 | 0.160 | 0.144 | −0.112 [−0.116, −0.108] |
+| Hybrid (last + w EMA) | 0.205 | 0.214 | 0.201 | 0.120 | −0.058 [−0.061, −0.055] |
+| two-scale normalised EMA | 0.289 | 0.297 | 0.284 | 0.231 | +0.025 [0.024, 0.027] 14/14 |
+
+LODO choices on 8B: power law γ = 2 at B=80, 1 at B=96 and 128, 0.5 at B=256 (every fold); EMA α = 0.6 (B=96), 0.7 (B=128).
+Every conclusion above holds on 8B: shape (power > exponential), normalisation (+0.008 to +0.034), the zero point matters only
+for the unnormalised sum, every explicit residency-type term hurts at B=96 (the recency term helps a little at B ≥ 128, as on
+0.6B), and the normalised power law is the best simple policy at every budget.
+
+**C gate (task section 7) for P2:** normalised power law − EMA, B=96: 0.6B +0.042 [0.036, 0.048], 8B +0.047 [0.043, 0.051]
+(CI lower bounds > 0 on both); B=128: +0.065 and +0.063 (point estimates ≥ 0). It passes and is the P2 candidate for F
+(`docs/v3/c1_simple_policy.md`).

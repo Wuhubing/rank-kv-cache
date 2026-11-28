@@ -1,0 +1,9 @@
+traces: 14; independent replays: 2016; matched against kvpolicy rows: 2016
+mismatches: 0
+missing reference rows: 0
+layers with Belady > LRU: 0
+layer streams with zero LRU misses: 0
+belady B= 96: accesses 32997888, misses 982501, miss rate 2.977%
+   lru B= 96: accesses 32997888, misses 1511135, miss rate 4.579%
+belady B=128: accesses 32997888, misses 530480, miss rate 1.608%
+   lru B=128: accesses 32997888, misses 862612, miss rate 2.614%

@@ -4,6 +4,13 @@
 
 **2026-11-25 补充（事后分析，非预注册）**：S2 的 β 混杂与干净 rank 增量（§4.7）、H1 `candidate` 口径的准确描述（§4.7）、逻辑回归标签的右删失（§6）。所有预注册结果和判定不变。
 
+**2026-11-26 followup-v3（分支 `mechanism-v3`，详见 [`docs/v3/`](v3/)）**：
+- 第三组预注册 held-out（21 篇新 GovReport，两个模型，先推送再采集）：EMA G 0.281 / 0.277，21/21；归一化幂律核比 EMA 高 0.048 / 0.043（21/21）；不需要离线曲线的全局槽位池比均匀分配 + EMA 高 0.119 / 0.233，达到离线分配收益的 96% / 91%（B=96）。三条假设全部通过。
+- 机制：替换策略要预测的是选择器接下来约 16 步选哪些 page；用真实注意力做驱逐信号反而比随机还差（G −0.86）；剩下的差距用更多特征（线性、梯度提升树）也拿不到。
+- 负向结果的诊断：只更新被选中 page 时值冻结并倒序；经典策略的默认做法（压低新 page、保护高频 page）与这里的访问模式相反；保护区只在分数对新条目有偏（H₂O 式累加）时有用。
+- 另有 Xiaoyang Wu 在 M1 Max 上的独立复现（PR #9）：原 held-out 三条判据全部通过（G 0.280，21/21）；他的 L4 batch 传输实验（传输占每步约 14%，Bélády 上限 +5.4%）和 rank 改变驱逐决定的比例（2.93%，PR #10）也已注明出处整合，见 [`v3/external_xiaoyang.md`](v3/external_xiaoyang.md)。
+- replication-v2 的缺陷修正（R1–R13）见 [`rerun/STATUS_fixes.md`](rerun/STATUS_fixes.md)。
+
 **2026-11-25 replication-v2（分支 `replication-v2`，详见 [`docs/rerun/`](rerun/)）**：第二部分在 RTX 6000 Ada 上从头重采、重评：
 - 复现预注册（[`replication_v2.md`](replication_v2.md)，先提交再采集）三条判据全部通过：EMA G 0.279 [0.275, 0.282]（L4 0.281），21/21，ΔG(分配) 0.119（L4 0.120）。
 - Qwen3-8B 新 held-out（[`preregistration_8b.md`](preregistration_8b.md)，先提交再采集）四条判据全部通过：G 0.272，21/21，ΔG 0.252，同分配内 0.273。

@@ -1,0 +1,374 @@
+{
+ "primary_B": 96,
+ "secondary_B": 128,
+ "split": "splits/longctx_v3.json",
+ "split_sha256": "caf15a4804563c43fbed0ad286bbdeef435a069df653c3c8b4c5c7e58bb686e2",
+ "models": {
+  "06b": {
+   "frozen_source": "splits/heldout_frozen_v1.json",
+   "budgets": {
+    "96": {
+     "ema_alpha": 0.5,
+     "offline_alloc": [
+      80,
+      88,
+      88,
+      96,
+      80,
+      88,
+      104,
+      88,
+      88,
+      96,
+      80,
+      128,
+      88,
+      104,
+      104,
+      88,
+      104,
+      96,
+      96,
+      96,
+      96,
+      104,
+      96,
+      96,
+      112,
+      112,
+      112,
+      80
+     ],
+     "p2": {
+      "family": "pow_norm_kth",
+      "config": "pow_norm_kth:1.0",
+      "policy": "kernel",
+      "kw": {
+       "kernel": "power",
+       "gamma": 1.0,
+       "normalize": true,
+       "zero": "kth"
+      },
+      "lodo_choices": [
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0"
+      ]
+     },
+     "p4": {
+      "kind": "pool",
+      "config": "pool_ema:allrank:0.5",
+      "kw": {
+       "signal": "allrank",
+       "beta": 0.5,
+       "alpha": 0.5
+      },
+      "lodo_choices": [
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5",
+       "pool_ema:allrank:0.5"
+      ]
+     }
+    },
+    "128": {
+     "ema_alpha": 0.7,
+     "offline_alloc": [
+      96,
+      112,
+      104,
+      112,
+      96,
+      104,
+      128,
+      104,
+      104,
+      112,
+      96,
+      192,
+      112,
+      160,
+      128,
+      104,
+      160,
+      128,
+      128,
+      128,
+      160,
+      160,
+      128,
+      128,
+      160,
+      192,
+      160,
+      88
+     ],
+     "p2": {
+      "family": "pow_norm_kth",
+      "config": "pow_norm_kth:1.0",
+      "policy": "kernel",
+      "kw": {
+       "kernel": "power",
+       "gamma": 1.0,
+       "normalize": true,
+       "zero": "kth"
+      },
+      "lodo_choices": [
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0"
+      ]
+     },
+     "p4": {
+      "kind": "pool",
+      "config": "pool_ema:allrank:2.0",
+      "kw": {
+       "signal": "allrank",
+       "beta": 2.0,
+       "alpha": 0.5
+      },
+      "lodo_choices": [
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0"
+      ]
+     }
+    }
+   }
+  },
+  "8b": {
+   "frozen_source": "splits/heldout_frozen_8b.json",
+   "budgets": {
+    "96": {
+     "ema_alpha": 0.6,
+     "offline_alloc": [
+      88,
+      80,
+      80,
+      80,
+      72,
+      72,
+      80,
+      104,
+      96,
+      112,
+      80,
+      88,
+      96,
+      128,
+      96,
+      112,
+      104,
+      112,
+      112,
+      104,
+      112,
+      104,
+      96,
+      96,
+      104,
+      88,
+      104,
+      88,
+      88,
+      112,
+      88,
+      104,
+      88,
+      112,
+      88,
+      88
+     ],
+     "p2": {
+      "family": "pow_norm_kth",
+      "config": "pow_norm_kth:1.0",
+      "policy": "kernel",
+      "kw": {
+       "kernel": "power",
+       "gamma": 1.0,
+       "normalize": true,
+       "zero": "kth"
+      },
+      "lodo_choices": [
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0"
+      ]
+     },
+     "p4": {
+      "kind": "pool",
+      "config": "pool_ema:allrank:2.0",
+      "kw": {
+       "signal": "allrank",
+       "beta": 2.0,
+       "alpha": 0.5
+      },
+      "lodo_choices": [
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0"
+      ]
+     }
+    },
+    "128": {
+     "ema_alpha": 0.7,
+     "offline_alloc": [
+      96,
+      96,
+      96,
+      88,
+      80,
+      80,
+      88,
+      128,
+      128,
+      160,
+      96,
+      104,
+      128,
+      192,
+      128,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      112,
+      128,
+      160,
+      104,
+      160,
+      112,
+      112,
+      160,
+      104,
+      128,
+      112,
+      192,
+      112,
+      104
+     ],
+     "p2": {
+      "family": "pow_norm_kth",
+      "config": "pow_norm_kth:1.0",
+      "policy": "kernel",
+      "kw": {
+       "kernel": "power",
+       "gamma": 1.0,
+       "normalize": true,
+       "zero": "kth"
+      },
+      "lodo_choices": [
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0",
+       "pow_norm_kth:1.0"
+      ]
+     },
+     "p4": {
+      "kind": "pool",
+      "config": "pool_ema:allrank:2.0",
+      "kw": {
+       "signal": "allrank",
+       "beta": 2.0,
+       "alpha": 0.5
+      },
+      "lodo_choices": [
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0",
+       "pool_ema:allrank:2.0"
+      ]
+     }
+    }
+   }
+  }
+ }
+}
