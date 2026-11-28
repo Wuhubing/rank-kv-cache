@@ -152,8 +152,28 @@ the largest batch, with the D2 transfer share:
 At batch 1 every configuration is launch-bound (0.6B 33 ms, 8B 59 ms for every policy). K 128 at batch 1 had one slow round that
 widens the CIs; medians are unaffected (`throughput.csv`). The 8B batch 4 anomaly (all non-LRU policies 0.86–0.87 with CIs reaching
 1.0) is not a slow round of the policies: in every 8B batch-1 and batch-4 run other processes were on card 0 (`clean=False`), so
-these rows are interference and not used (clean re-run: "8B batch 1 and 4, re-run" below). Larger pages move more bytes per miss but also make attention more expensive, so the share does not
+these rows are interference and not used (clean re-run below: "8B batch 1 and 4, re-run on a clean card"). Larger pages move more bytes per miss but also make attention more expensive, so the share does not
 rise; on 8B the larger compute dilutes transfer further.
+
+## 8B batch 1 and 4, re-run on a clean card (R11-6)
+`results_v3/e/batch_8b_rerun/` (`summary/throughput.csv`); same settings as `batch_8b` (`heldout_frozen_8b.json`, 16K prompts,
+5 rounds, random order, `overlap=False`), 2026-11-28 00:01–00:44Z on card 3 (GPU-850490f2-9baf-0ef9-bf4e-a84a10d01f50; card 0 was
+taken by another user's job when the re-run started; same card model). Every run waited for a card without other processes
+(`--wait-clean`); one batch-4 LRU run had another process at its end and was repeated (kept as `discarded_runs`); all 70 kept runs
+are clean, and LRU's misses equal the simulator.
+
+| batch | LRU median step | LRU tokens/s | current score | EMA | allocation + EMA | Bélády | D2 transfer share |
+|---|---|---|---|---|---|---|---|
+| 1 (re-run) | 44.8 ms | 21.2 | 1.007 [0.977, 1.047] | 1.021 [0.998, 1.058] | 1.005 [0.968, 1.052] | 1.014 [0.989, 1.055] | ≈ 0 |
+| 4 (re-run) | 48.0 ms | 81.2 | 0.982 [0.946, 1.002] | 0.984 [0.943, 1.012] | 1.015 [0.989, 1.054] | 0.989 [0.980, 0.999] | ≈ 0 |
+| 1 (old, interfered) | 59.1 ms | 16.9 | 1.023 | 0.991 | 0.990 | 1.007 | – |
+| 4 (old, interfered) | 69.7 ms | 65.5 | 0.870 | 0.865 | 0.864 | 0.871 | – |
+
+The interference had slowed every step by 25–45 % (LRU 59.1 → 44.8 ms at batch 1, 69.7 → 48.0 ms at batch 4) and produced the
+batch-4 anomaly; on a clean card no policy is at 0.86–0.87. At batch 1 and 4 the 8B step is launch-bound like the 0.6B one (D2
+per-miss coefficient ≈ 0; fetching all K pages costs nothing at batch 1 and 11 ms at batch 4), so the ratios are noise around 1
+(CIs of ±2–5 %). The old `batch_8b` batch-1/4 rows stay in `results_v3/e/rest/summary/throughput.csv` with `clean=False` and are
+not used.
 
 ## Break-even and the P5 verdict
 - Upper bound: holds in every measured (unsimulated) configuration within noise — the median-step saving of no policy exceeds
