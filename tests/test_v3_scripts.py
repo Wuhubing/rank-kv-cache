@@ -227,3 +227,13 @@ def test_r11_netgain(tmp_path):
     assert float(mem["lru"]["migration"]) == pytest.approx(2.0) and float(mem["ema"]["decode_steady"]) == pytest.approx(3.0)
     ph = list(csv.DictReader(open(tmp_path / "o/phases.csv")))
     assert len(ph) == 6 and float(ph[0]["gather"]) == pytest.approx(0.7)
+
+
+def test_r11_netgain_without_timing(tmp_path):
+    from analysis_v3 import r11_netgain
+    _fake_runs(tmp_path / "tp", {"lru": (50.0, 10, 0), "ema": (49.5625, 6, 0), "allmiss": (60.0, 64, 0),
+                                 "nofetch": (45.0, 1, 0)})
+    r11_netgain.main(["--pair", "x", str(tmp_path / "tp"), "2", "-", "--out", str(tmp_path / "o")])
+    r = list(csv.DictReader(open(tmp_path / "o/netgain.csv")))[0]
+    assert float(r["implied_overhead_ms"]) == pytest.approx(4 * 15 / 64 - 0.4375)
+    assert r["overhead_ms"] == "nan" and r["consistent"] == ""
