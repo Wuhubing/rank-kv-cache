@@ -171,7 +171,8 @@ are clean, and LRU's misses equal the simulator.
 
 The interference had slowed every step by 25–45 % (LRU 59.1 → 44.8 ms at batch 1, 69.7 → 48.0 ms at batch 4) and produced the
 batch-4 anomaly; on a clean card no policy is at 0.86–0.87. At batch 1 and 4 the 8B step is launch-bound like the 0.6B one (D2
-per-miss coefficient ≈ 0; fetching all K pages costs nothing at batch 1 and 11 ms at batch 4), so the ratios are noise around 1
+per-miss coefficient ≈ 0; fetching all K pages every step costs 1.0 ms at batch 1 and 13.0 ms at batch 4, while LRU fetches
+4.6 % of that), so the ratios are noise around 1
 (CIs of ±2–5 %). The old `batch_8b` batch-1/4 rows stay in `results_v3/e/rest/summary/throughput.csv` with `clean=False` and are
 not used.
 
