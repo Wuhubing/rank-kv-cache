@@ -64,7 +64,8 @@ denominator was the all-step total / 256: 2.42 µs at batch 32.)
 Upper bound of a policy's gain at batch 32 = (LRU misses − its misses) × 2.50 µs: current score 0.80 ms (1.0 % of LRU's median
 step), EMA 0.92 ms (1.2 %), allocation + EMA 1.37 ms (1.8 %), Bélády 3.28 ms (4.3 %). Measured median-step saving −0.08, 0.06,
 0.48 and 3.17 ms (throughput +0.1 %, +0.1 %, +0.6 %, +4.2 %). Bélády reaches ≈ 97 % of its bound; the score-based policies reach
-much less (the policy's own cost explains part of the gap: "Net gain" below).
+much less: their implied overhead (saved − measured) is 0.7–0.9 ms per step, the size of an EMA-style kernel cost ("Net gain"
+below).
 
 ## E4: where the slow steps come from
 Per-step tags (page-completion step: a 16-token page is finished and written back; miss-count terciles), `tails.csv`:
@@ -93,7 +94,9 @@ LRU, max over rounds (GiB; the other policies differ by ≤ 0.25 GiB, Bélády's
 | 8B 12K | 32 | 29.88 | 55.20 |
 
 (`peak_decode_gib`, `host_tier_gib` in `throughput.csv`.) Memory by phase (prefill, migration, decode warm-up, steady state) was
-not recorded in these runs; it is measured with the R11-7 timing runs ("Net gain" below).
+not recorded in these runs. The recording now exists (`e_bench` stores `mem_phases`; `gpu_bench_batch2.run` separates the prefill
+forward and migration peaks), but the R11-7 runs that would have used it were not done: no card met the preconditions within
+6 h ("Net gain" below).
 
 ## E5 (simulated slow tier): speedup against the transfer share — **simulation, not a measurement of a real slower link**
 A GPU-side spin on the fetch path adds (missed bytes of the layer) × d ns per byte before each fetch, read on the GPU without a
@@ -175,6 +178,42 @@ per-miss coefficient ≈ 0; fetching all K pages every step costs 1.0 ms at batc
 4.6 % of that), so the ratios are noise around 1
 (CIs of ±2–5 %). The old `batch_8b` batch-1/4 rows stay in `results_v3/e/rest/summary/throughput.csv` with `clean=False` and are
 not used.
+
+## Net gain: saved transfer − the policy's own cost (R11-7, partial)
+`analysis_v3/r11_netgain.py`, `results_v3/e/netgain/summary/netgain.csv`. Saved transfer = (LRU − policy misses per timed step) ×
+per-page cost (E3), from the throughput runs; measured = LRU mean step − policy mean step over the timed steps, paired by round,
+bootstrap CI over the 5 rounds; implied overhead = saved − measured (what the policy's own cost, or anything else, must explain).
+The policy-kernel overhead (CUDA events, phase e2→e3, policy minus LRU) is measured only where an E6 timing run exists: 0.6B
+batch 16 (`timing_06b`, 2 rounds). **The planned 8B batch 16 / 12K batch 32 and 0.6B batch 32 timing runs (R11-7) were not done:
+from 00:56Z to 06:56Z on 2026-11-28 every card except the excluded card 2 had another user's process, so the 6-hour waiting limit
+was reached** (an earlier start on card 0 at 00:44Z was stopped when another user's job appeared during its preparation run;
+nothing was written).
+
+| config | policy | saved transfer (ms/step) | policy overhead vs LRU (ms/step) | predicted net gain | measured step difference [95 % CI] | implied overhead |
+|---|---|---|---|---|---|---|
+| 0.6B batch 16 | EMA | 0.47 | 0.45 [0.45, 0.45] | 0.02 | 0.07 [−0.07, 0.29] — consistent | 0.40 |
+| 0.6B batch 16 | Bélády | 1.67 | 0.12 [0.11, 0.12] | 1.55 | 1.23 [0.93, 1.41] — prediction 0.13 above the CI | 0.43 |
+| 0.6B batch 32 | current score | 0.80 | not measured | – | 0.10 [−0.06, 0.37] | 0.71 |
+| 0.6B batch 32 | EMA | 0.92 | not measured | – | 0.08 [0.05, 0.10] | 0.84 |
+| 0.6B batch 32 | allocation + EMA | 1.37 | not measured | – | 0.48 [0.44, 0.52] | 0.89 |
+| 0.6B batch 32 | Bélády | 3.28 | not measured | – | 3.15 [3.13, 3.17] | 0.13 |
+| 8B 16K batch 16 | current score | 0.32 | not measured | – | −0.36 [−0.51, −0.09] | 0.67 |
+| 8B 16K batch 16 | EMA | 0.41 | not measured | – | −0.42 [−0.51, −0.34] | 0.83 |
+| 8B 16K batch 16 | allocation + EMA | 0.83 | not measured | – | −0.00 [−0.29, 0.25] | 0.83 |
+| 8B 16K batch 16 | Bélády | 1.51 | not measured | – | 1.16 [1.09, 1.21] | 0.35 |
+| 8B 12K batch 32 | current score | 0.64 | not measured | – | −0.48 [−0.56, −0.39] | 1.12 |
+| 8B 12K batch 32 | EMA | 0.81 | not measured | – | −0.25 [−0.29, −0.21] | 1.05 |
+| 8B 12K batch 32 | allocation + EMA | 1.53 | not measured | – | 0.48 [0.43, 0.52] | 1.06 |
+| 8B 12K batch 32 | Bélády | 2.94 | not measured | – | 2.69 [2.68, 2.70] | 0.25 |
+
+Where both terms are measured (0.6B batch 16) the account closes for the EMA: its extra kernel time (+16 µs per layer, 0.45 ms
+per step) cancels its 0.47 ms of saved transfer, and the measured difference (0.07 ms) is inside the CI. For Bélády the prediction
+is 0.13 ms above the CI (8 % of the predicted gain). Elsewhere only the implied overhead is known: 0.7–1.1 ms per step for the
+score-based policies on both models, 0.1–0.35 ms for Bélády, i.e. the score policies' gap between bound and measurement is of the
+size of an EMA-style kernel cost, while Bélády (which only reads a next-use table) loses little. Whether the EMA's kernel cost
+alone accounts for 0.83 ms on 8B batch 16 (36 layers) and 1.05 ms at 12K batch 32 is not measured; the 0.6B batch-16 per-layer
+cost (16 µs) times 36 layers would give ≈ 0.58 ms, so up to ≈ 0.25 ms (8B batch 16) would remain unexplained if the per-layer
+cost did not grow with the batch. This is an extrapolation, not a measurement.
 
 ## Break-even and the P5 verdict
 - Upper bound: holds in every measured (unsimulated) configuration within noise — the median-step saving of no policy exceeds
