@@ -8,3 +8,4 @@ RUNNING: R11-6
 - GPU：tmux wb-rkv-r11-gpu（runs/run_r11.sh）23:12Z 开始等卡（每 30 分钟查一次，每项最多等 6 小时）。
 
 - R11-4 完成（ffc37cf）：5 条规则逐条对照 pool_run 核实；第 2 条 REVIEW 写 /K，代码是 /本步选中页数（层内页数 ≥ K 时等于 K），附录按代码写。preregistration_v3.md 只在末尾追加附录（前缀 MD5 82f2606… 未变，0 行删除）；tests/test_pool_spec.py 127 组逐位一致。
+- R11-6 第一次尝试 23:42Z 卡 0：00:01Z 他人（joshhan）训练任务出现在卡 0，停掉自己的 e_bench（18 个 run 未写盘，日志保留为 batch_8b_rerun.card0_aborted.log）；00:01:35Z 在卡 3（GPU-850490f2-9baf-0ef9-bf4e-a84a10d01f50）重启，每个 run 最多等 10 分钟、重跑 1 次。
